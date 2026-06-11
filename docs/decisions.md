@@ -336,3 +336,17 @@ The pattern is proven at far larger scale than ours (Linear: LWW for all structu
 - **CI (GitHub Actions):** PRs → Biome + typecheck + unit/integration + Playwright (sharded). Tags `v*` → multi-arch Buildx (amd64+arm64) → GHCR (`latest` + semver tags) with Docker Hub mirror. **release-please** manages versioning + CHANGELOG from conventional commits.
 - A nightly job boots the published container from scratch (empty volume → migrate → healthcheck → smoke test) — the self-host first-run experience is itself under test.
 - **DCO check** on PRs (TD-8). CONTRIBUTING.md documents the one-command dev setup (`pnpm i && pnpm dev`).
+
+### TD-10: Instance theming — semantic token contract, themes as data
+
+**Status:** ✅ ACCEPTED (owner directed 2026-06-11, in-session)
+
+**Decision:**
+- **The token contract comes first, the default look is an instance of it.** Every UI surface consumes only semantic CSS custom properties (`--primary`, `--accent`, `--muted`, `--warning`, `--danger`, radius, …) — never raw palette values. E.1's "design language" deliverable is therefore two artifacts: the token contract itself, and Caravan's warm default expressed inside it. Defined before the itinerary UI (1.7/1.8) so the app's biggest surface is born compliant, not retrofitted.
+- **Themes are data, not CSS.** An admin "theme" is a small set of `instance_settings` values (≈2–3 base hues + light/dark preference) injected as CSS variables at the shell. No custom CSS upload, no arbitrary overrides (XSS surface, support burden).
+- **Derived ramps, not free pickers.** Hover/foreground/border/muted tones derive from the chosen hues via OKLCH math with contrast floors — admins pick a personality, the system keeps it legible. Curated presets up front; a custom-hue picker behind them.
+- **Status colors are tokens too** — warning/danger/success states (archived banners, connection dots) theme along with everything else instead of hardcoding amber/red.
+- **Identity marks centralize now, customize later:** logo/wordmark/favicon render through one `<BrandMark/>` indirection; actual logo/icon upload stays in `docs/enhancements.md` until promoted.
+- **Surfaces:** admin picker UI lands with D.3's panel (Track D); custom instance name (already D.3 scope) joins the theme as part of "instance identity."
+
+**Rejected:** full custom CSS (unbounded support/security surface); per-user themes (it's the *group's* instance — one identity per deployment, v1); swappable icon sets (low payoff, asset-pipeline cost).

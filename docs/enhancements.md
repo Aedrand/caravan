@@ -9,6 +9,11 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ## 2026-06-11 — Admin console & instance identity (owner)
 
+> **Partially promoted (2026-06-11):** per-instance theming is now **TD-10**
+> (semantic token contract; themes as data) — E.1 defines the contract +
+> default theme, D.3 ships the admin picker. Still living here: instance
+> icon/logo upload, login-page welcome copy.
+
 Make a self-hosted instance feel like *the group's own*: this isn't a SaaS,
 so the admin should be able to brand and shape it.
 

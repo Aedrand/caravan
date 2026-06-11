@@ -208,7 +208,7 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 |---|---|---|
 | D.1 | SMTP email: nodemailer + react-email; invite + membership emails; graceful unconfigured path (PD-7) | M |
 | D.2 | Daily digest: job via the 0.9 registry, per-trip batching, opt-out prefs | M |
-| D.3 | Admin panel — scope: writable (registration toggle, instance name), read-only (members/trips/disk usage), backup button (`VACUUM INTO` → snapshot download), admin-role route guard | M |
+| D.3 | Admin panel — scope: writable (registration toggle, instance name, **theme picker per TD-10**: presets + custom hues, light/dark), read-only (members/trips/disk usage), backup button (`VACUUM INTO` → snapshot download), admin-role route guard | M |
 | D.4 | Litestream opt-in (entrypoint co-process), backup/restore + upgrade/rollback docs incl. when-to-enable guidance and S3/B2 cost note (TD-4) | S |
 | D.5 | Docs: install guide (compose + `docker run`), Caddy/Traefik examples, config reference (generated from env module), CONTRIBUTING + DCO, demo seed script | M |
 | D.6 | release-please + version surfacing in UI footer; security headers, rate limiting middleware | S |
@@ -217,7 +217,7 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 
 | # | Task | Size |
 |---|---|---|
-| E.1 | Design language: warm palette, type scale, card system, motion guidelines — applied to shell + itinerary first | M |
+| E.1 | Design language **as the default theme of the TD-10 token contract**: define the semantic token set (incl. status colors, radius) + the warm default expressed in it; `<BrandMark/>` indirection for identity marks; type scale, card system, motion guidelines — applied to shell + itinerary first. **Run alongside 1.7/1.8 so the itinerary is born compliant** | M |
 | E.2 | Empty/loading/error states for every feature surface (work with A–D as they land) | M |
 | E.3 | Responsive pass: in-trip mobile ergonomics (today view, thumb reach, bottom nav) | M |
 | E.4 | Accessibility: keyboard paths (incl. dnd), focus management, contrast audit | M |
