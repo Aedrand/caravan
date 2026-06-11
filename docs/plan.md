@@ -224,7 +224,7 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 
 ### M6 — v1.0 hardening & release `[S]`
 
-Integration QA across tracks · full E2E suite green · perf budget (snapshot < 100 ms at 500-activity trip; bundle audit) · security pass (invite token entropy, session fixation, rate limits, headers) · load sanity (10 concurrent editors) · README screenshots + demo instance · tag v1.0.0 → GHCR → awesome-selfhosted submission.
+Integration QA across tracks · **full design sweep** (the stage-2 visual pass: consistency audit across every surface, layout/positioning/density refinements, E.3/E.4 finishing — E.1 established the language, this conforms the whole app to it) · full E2E suite green · perf budget (snapshot < 100 ms at 500-activity trip; bundle audit) · security pass (invite token entropy, session fixation, rate limits, headers) · load sanity (10 concurrent editors) · README screenshots + demo instance · tag v1.0.0 → GHCR → awesome-selfhosted submission.
 
 ### M7 — House AI (v1.1) `[P with M8]`
 
