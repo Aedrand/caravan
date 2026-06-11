@@ -52,7 +52,10 @@ export function joinTrip(
     let memberId: string;
     let outcome: "joined" | "rejoined";
     if (existing) {
-      // Ghost reattach: same row, the invite's role, original joinedAt.
+      // Ghost reattach: same row + original joinedAt (history), but the role
+      // comes from the link — invite links are role-carrying grants (PD-10),
+      // and a ghost holding one gets exactly what a stranger holding it
+      // would. Owner-role can never ride a link (InviteRoleSchema).
       db.update(schema.tripMembers)
         .set({ status: "active", role: invite.role, updatedAt: now })
         .where(eq(schema.tripMembers.id, existing.id))

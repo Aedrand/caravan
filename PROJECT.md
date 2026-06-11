@@ -122,6 +122,6 @@ The old project carried open questions that the new positioning answers:
 - [x] End-to-end implementation plan — drafted 2026-06-10, **pending review** (`docs/plan.md`; parallel-track build)
 - [x] Owner review & decision ratification — completed 2026-06-11 (all decisions ACCEPTED; TD-7 modified: OAuth 2.1 in v1.3; name confirmed)
 - [x] Build started 2026-06-11 — repo public at [github.com/Aedrand/caravan](https://github.com/Aedrand/caravan); **M0 walking skeleton complete** (auth, SQLite+migrations, Docker, CI+E2E)
-- [ ] M1 — collaborative itinerary core (the two-browser bar; `docs/plan.md` §6) — **serial foundation complete 2026-06-11** (1.1 trips CRUD+UI · 1.2 mutation pipeline · 1.3 WS rooms/presence/catch-up · 1.4 client sync lib · 1.6 itinerary data layer; live two-browser rename/archive E2E green); fan-out next: 1.5 invites, 1.7–1.10 UI, 1.11 gate
+- [ ] M1 — collaborative itinerary core (the two-browser bar; `docs/plan.md` §6) — foundation **and membership done 2026-06-11**: 1.1–1.6 complete (trips, pipeline, WS sync, client lib, invites/ghosts/transfer); two-user invite-loop E2E green (register via link → collaborate live). Remaining: 1.7 itinerary UI, 1.8 dnd, 1.9 presence UI, 1.10 feed UI, 1.11 full gate
 
 See [`docs/product-brief.md`](docs/product-brief.md) for the fuller market landscape and feature detail behind this summary.

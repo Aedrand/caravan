@@ -153,12 +153,17 @@ export function createTripsRoutes(deps: { db: Db; logger: Logger }) {
             403,
           );
         }
+        const now = Date.now();
         const invites = db
           .select()
           .from(schema.inviteLinks)
           .where(eq(schema.inviteLinks.tripId, tripId))
           .all()
-          .filter((row) => row.revokedAt === null)
+          // Same liveness rule as findValidInvite — expired links are as dead
+          // as revoked ones and must not look shareable in the panel.
+          .filter(
+            (row) => row.revokedAt === null && (row.expiresAt === null || row.expiresAt > now),
+          )
           .map(serializeInvite);
         return c.json({ invites });
       })
