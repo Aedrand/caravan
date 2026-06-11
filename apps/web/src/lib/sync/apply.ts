@@ -83,7 +83,15 @@ export function applyEvent(
     }
     case "member": {
       const trip = { ...snap.trip, version: event.version };
-      const members = entity ? upsertById(snap.members, entity as TripMember) : snap.members;
+      let members = entity ? upsertById(snap.members, entity as TripMember) : snap.members;
+      // Ownership transfer is one event with the NEW owner's post-image; the
+      // server demoted the old owner to editor in the same transaction —
+      // mirror that here so the cache never shows two owners.
+      if (event.type === "trip.transferOwnership" && entity) {
+        members = members.map((m) =>
+          m.id !== entity.id && m.role === "owner" ? { ...m, role: "editor" } : m,
+        );
+      }
       return { ...snap, trip, members };
     }
     case "invite":

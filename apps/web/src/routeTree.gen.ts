@@ -17,6 +17,7 @@ import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TripsTripIdRouteImport } from './routes/trips.$tripId'
+import { Route as JoinTokenRouteImport } from './routes/join.$token'
 
 const RegisterRoute = RegisterRouteImport.update({
   id: '/register',
@@ -38,17 +39,24 @@ const TripsTripIdRoute = TripsTripIdRouteImport.update({
   path: '/trips/$tripId',
   getParentRoute: () => rootRouteImport,
 } as any)
+const JoinTokenRoute = JoinTokenRouteImport.update({
+  id: '/join/$token',
+  path: '/join/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/join/$token': typeof JoinTokenRoute
   '/trips/$tripId': typeof TripsTripIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/join/$token': typeof JoinTokenRoute
   '/trips/$tripId': typeof TripsTripIdRoute
 }
 export interface FileRoutesById {
@@ -56,20 +64,28 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
+  '/join/$token': typeof JoinTokenRoute
   '/trips/$tripId': typeof TripsTripIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/register' | '/trips/$tripId'
+  fullPaths: '/' | '/login' | '/register' | '/join/$token' | '/trips/$tripId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/register' | '/trips/$tripId'
-  id: '__root__' | '/' | '/login' | '/register' | '/trips/$tripId'
+  to: '/' | '/login' | '/register' | '/join/$token' | '/trips/$tripId'
+  id:
+    | '__root__'
+    | '/'
+    | '/login'
+    | '/register'
+    | '/join/$token'
+    | '/trips/$tripId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
+  JoinTokenRoute: typeof JoinTokenRoute
   TripsTripIdRoute: typeof TripsTripIdRoute
 }
 
@@ -103,6 +119,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TripsTripIdRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/join/$token': {
+      id: '/join/$token'
+      path: '/join/$token'
+      fullPath: '/join/$token'
+      preLoaderRoute: typeof JoinTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -110,6 +133,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
+  JoinTokenRoute: JoinTokenRoute,
   TripsTripIdRoute: TripsTripIdRoute,
 }
 export const routeTree = rootRouteImport

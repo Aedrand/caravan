@@ -13,6 +13,7 @@ import {
 import { useRef, useState } from "react";
 import { DeleteTripDialog } from "@/components/trips/delete-trip-dialog";
 import { formatTripDates } from "@/components/trips/format";
+import { MembersPanel } from "@/components/trips/members-panel";
 import { useDeleteTrip, useDuplicateTrip } from "@/components/trips/use-trip-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -201,6 +202,8 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
           )}
         </CardContent>
       </Card>
+
+      <MembersPanel />
 
       <DeleteTripDialog
         open={deleteOpen}

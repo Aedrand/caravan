@@ -196,6 +196,29 @@ describe("applyEvent", () => {
     expect(after.trip.version).toBe(7);
   });
 
+  it("trip.transferOwnership: upserts the new owner and demotes the old one", () => {
+    const oldOwner = makeMember(); // MEMBER_ID, role owner
+    const coTraveler = makeMember({ id: OTHER_MEMBER_ID, userId: "user-2", name: "Basha" });
+    const snap = frozenSnapshot({ members: [oldOwner, { ...coTraveler, role: "editor" }] });
+
+    const newOwner = { ...coTraveler, role: "owner" as const };
+    const next = applyEvent(
+      snap,
+      makeEvent({
+        version: 6,
+        type: "trip.transferOwnership",
+        entityType: "member",
+        entityId: OTHER_MEMBER_ID,
+      }),
+      newOwner,
+    );
+
+    expect(next.members.find((m) => m.id === OTHER_MEMBER_ID)?.role).toBe("owner");
+    expect(next.members.find((m) => m.id === MEMBER_ID)?.role).toBe("editor");
+    expect(next.members.filter((m) => m.role === "owner")).toHaveLength(1);
+    expect(next.trip.version).toBe(6);
+  });
+
   it("advances only the version watermark for invite events", () => {
     const snap = frozenSnapshot();
     const next = applyEvent(
