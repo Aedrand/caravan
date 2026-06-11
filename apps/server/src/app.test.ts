@@ -1,8 +1,36 @@
-import { expect, test } from "vitest";
-import { app } from "./app";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import pino from "pino";
+import { afterAll, expect, test } from "vitest";
+import { createApp } from "./app";
+import { loadConfig } from "./config";
+import { createDb } from "./db";
+import { runMigrations } from "./db/migrate";
 
-test("GET /health returns ok", async () => {
-  const res = await app.request("/health");
+const dataDir = mkdtempSync(path.join(tmpdir(), "caravan-app-"));
+const config = loadConfig({
+  DATA_DIR: dataDir,
+  NODE_ENV: "test",
+  WEB_DIST: path.join(dataDir, "no-web-build"),
+});
+const { db, sqlite } = createDb(config.dbPath);
+runMigrations(db);
+const app = createApp({ config, db, logger: pino({ level: "silent" }) });
+
+afterAll(() => {
+  sqlite.close();
+  rmSync(dataDir, { recursive: true, force: true });
+});
+
+test("GET /api/health returns ok", async () => {
+  const res = await app.request("/api/health");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ status: "ok", service: "caravan" });
+});
+
+test("unknown API routes return a JSON 404 envelope, not the SPA", async () => {
+  const res = await app.request("/api/nope");
+  expect(res.status).toBe(404);
+  expect(await res.json()).toEqual({ error: { code: "not_found", message: "Not found" } });
 });

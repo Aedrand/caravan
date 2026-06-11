@@ -1,9 +1,43 @@
 import { serve } from "@hono/node-server";
-import { app } from "./app";
+import { createApp } from "./app";
+import { loadConfig } from "./config";
+import { createJobRegistry } from "./core/jobs";
+import { createDb } from "./db";
+import { runMigrations } from "./db/migrate";
+import { createLogger } from "./logger";
 
-const port = Number(process.env.PORT ?? 3000);
+/** Boot order (TD-4): config → logger → DB + migrations (fail-fast) → serve. */
+function main() {
+  const config = loadConfig();
+  const logger = createLogger(config);
 
-serve({ fetch: app.fetch, port }, (info) => {
-  // pino structured logging arrives with the server shell (M0.5)
-  console.log(`caravan server listening on http://localhost:${info.port}`);
-});
+  let db: ReturnType<typeof createDb>;
+  try {
+    db = createDb(config.dbPath);
+    runMigrations(db.db);
+    logger.info({ dbPath: config.dbPath }, "database ready");
+  } catch (err) {
+    logger.fatal({ err }, "database migration failed — refusing to start");
+    process.exit(1);
+  }
+
+  const jobs = createJobRegistry(logger);
+  const app = createApp({ config, db: db.db, logger });
+
+  const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
+    logger.info({ port: info.port, baseUrl: config.baseUrl }, "caravan server listening");
+  });
+
+  const shutdown = (signal: string) => {
+    logger.info({ signal }, "shutting down");
+    jobs.stop();
+    server.close(() => {
+      db.sqlite.close();
+      process.exit(0);
+    });
+  };
+  process.on("SIGTERM", () => shutdown("SIGTERM"));
+  process.on("SIGINT", () => shutdown("SIGINT"));
+}
+
+main();
