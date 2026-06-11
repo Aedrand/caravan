@@ -10,6 +10,7 @@ import { createDb } from "./db";
 import { runMigrations } from "./db/migrate";
 // Side-effect: register every feature's mutation handlers with the pipeline.
 import "./features";
+import { findValidInvite } from "./features/trips/invites";
 import { createLogger } from "./logger";
 
 /** Boot order (TD-4): config → logger → DB + migrations (fail-fast) → auth → serve. */
@@ -27,7 +28,11 @@ async function main() {
     process.exit(1);
   }
 
-  const auth = createAuth({ db: db.db, config });
+  const auth = createAuth({
+    db: db.db,
+    config,
+    isInviteTokenValid: (token) => findValidInvite(db.db, token, Date.now()) !== undefined,
+  });
   await ensureAdminUser({ auth, db: db.db, config, logger });
 
   const jobs = createJobRegistry(logger);

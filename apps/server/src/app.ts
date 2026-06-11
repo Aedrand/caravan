@@ -10,6 +10,7 @@ import type { Config } from "./config";
 import { createSyncRoutes } from "./core/sync";
 import type { TripRooms } from "./core/ws";
 import type { Db } from "./db";
+import { createInviteRoutes } from "./features/trips/invite-routes";
 import { createTripsRoutes } from "./features/trips/routes";
 import type { Logger } from "./logger";
 
@@ -36,7 +37,9 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
 
   const api = new Hono()
     .get("/health", (c) => c.json({ status: "ok", service: "caravan" }))
-    .route("/trips", trips);
+    .route("/trips", trips)
+    // Invite door: GET info is public; accept gates itself on a session.
+    .route("/invites", createInviteRoutes({ db, rooms, logger, requireUser: requireUser(auth) }));
 
   const app = new Hono()
     .use("*", async (c, next) => {

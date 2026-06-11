@@ -15,7 +15,10 @@ import { createAuth } from "./index";
 const silentLogger = pino({ level: "silent" });
 const tempDirs: string[] = [];
 
-function testHarness(env: Record<string, string> = {}) {
+function testHarness(
+  env: Record<string, string> = {},
+  opts: { isInviteTokenValid?: (token: string) => boolean } = {},
+) {
   const dataDir = mkdtempSync(path.join(tmpdir(), "caravan-auth-"));
   tempDirs.push(dataDir);
   const config = loadConfig({
@@ -26,7 +29,7 @@ function testHarness(env: Record<string, string> = {}) {
   });
   const { db, sqlite } = createDb(config.dbPath);
   runMigrations(db);
-  const auth = createAuth({ db, config });
+  const auth = createAuth({ db, config, isInviteTokenValid: opts.isInviteTokenValid });
   const app = createApp({
     config,
     db,
@@ -37,10 +40,15 @@ function testHarness(env: Record<string, string> = {}) {
   return { app, db, sqlite, auth, config };
 }
 
-function signUp(app: ReturnType<typeof testHarness>["app"], name: string, email: string) {
+function signUp(
+  app: ReturnType<typeof testHarness>["app"],
+  name: string,
+  email: string,
+  headers: Record<string, string> = {},
+) {
   return app.request("/api/auth/sign-up/email", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify({ name, email, password: "correct-horse-battery" }),
   });
 }
@@ -68,6 +76,23 @@ test("second sign-up is blocked while registration is closed (default)", async (
 
   const res = await signUp(app, "Second", "second@example.com");
   expect(res.status).toBe(403);
+});
+
+test("a valid trip-invite header opens the closed gate; an invalid one does not (PD-10)", async () => {
+  const { app, sqlite } = testHarness({}, { isInviteTokenValid: (t) => t === "good-token" });
+  await signUp(app, "First", "first@example.com");
+
+  const bad = await signUp(app, "Crasher", "crasher@example.com", {
+    "x-caravan-invite": "forged-token",
+  });
+  expect(bad.status).toBe(403);
+
+  const good = await signUp(app, "Invitee", "invitee@example.com", {
+    "x-caravan-invite": "good-token",
+  });
+  expect(good.status).toBe(200);
+  const row = sqlite.prepare("select role from user where email = ?").get("invitee@example.com");
+  expect(row).toEqual({ role: "member" }); // invited ≠ admin
 });
 
 test("admin can open registration; later users are plain members", async () => {

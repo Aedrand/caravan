@@ -10,6 +10,12 @@ import { schema } from "../db";
 export interface AuthDeps {
   db: Db;
   config: Pick<Config, "baseUrl" | "secretKey">;
+  /**
+   * Lets a valid trip-invite token open the sign-up gate on invite-only
+   * instances (PD-10: registration only via trip invite links). Injected to
+   * keep auth/ free of feature imports.
+   */
+  isInviteTokenValid?: (token: string) => boolean;
 }
 
 function countUsers(db: Db): number {
@@ -23,7 +29,7 @@ function countUsers(db: Db): number {
  *    the admin has opened registration — invite links are the normal door (PD-10)
  *  - first user becomes the instance admin
  */
-export function createAuth({ db, config }: AuthDeps) {
+export function createAuth({ db, config, isInviteTokenValid }: AuthDeps) {
   return betterAuth({
     baseURL: config.baseUrl,
     secret: config.secretKey,
@@ -53,11 +59,15 @@ export function createAuth({ db, config }: AuthDeps) {
       before: createAuthMiddleware(async (ctx) => {
         if (ctx.path !== "/sign-up/email") return;
         if (countUsers(db) === 0) return; // instance bootstrap
-        if (!isRegistrationOpen(db)) {
-          throw new APIError("FORBIDDEN", {
-            message: "Registration is invite-only on this instance.",
-          });
-        }
+        if (isRegistrationOpen(db)) return;
+        // Invite links are the normal door (PD-10): a valid trip invite in
+        // the header opens the gate; the membership itself is attached by
+        // POST /api/invites/:token/accept after sign-in.
+        const inviteToken = ctx.headers?.get("x-caravan-invite");
+        if (inviteToken && isInviteTokenValid?.(inviteToken)) return;
+        throw new APIError("FORBIDDEN", {
+          message: "Registration is invite-only on this instance.",
+        });
       }),
     },
   });
