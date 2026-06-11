@@ -33,3 +33,18 @@ jobs:
       - uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: high
+
+  # M0 walking skeleton: register → dashboard → sign out/in against the built stack
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e

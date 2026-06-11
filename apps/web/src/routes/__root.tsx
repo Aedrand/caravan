@@ -1,4 +1,5 @@
 import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
+import { UserMenu } from "@/components/user-menu";
 
 export const Route = createRootRoute({
   component: RootLayout,
@@ -16,8 +17,7 @@ function RootLayout() {
             <span aria-hidden>🚐</span>
             <span>Caravan</span>
           </Link>
-          {/* Reserved for the user menu */}
-          <div className="size-8" aria-hidden />
+          <UserMenu />
         </div>
       </header>
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-10 sm:px-6 lg:px-8">

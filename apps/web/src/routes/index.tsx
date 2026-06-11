@@ -1,8 +1,13 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { Compass } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { fetchSession } from "@/lib/auth-client";
 
 export const Route = createFileRoute("/")({
+  beforeLoad: async () => {
+    // The dashboard is members-only; guests start at the door.
+    if (!(await fetchSession())) throw redirect({ to: "/login" });
+  },
   component: Dashboard,
 });
 
