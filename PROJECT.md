@@ -121,6 +121,7 @@ The old project carried open questions that the new positioning answers:
 - [x] Architecture and stack decisions — drafted 2026-06-10, **pending review** (`docs/decisions.md` TD-1…TD-9; research under `docs/research/`)
 - [x] End-to-end implementation plan — drafted 2026-06-10, **pending review** (`docs/plan.md`; parallel-track build)
 - [x] Owner review & decision ratification — completed 2026-06-11 (all decisions ACCEPTED; TD-7 modified: OAuth 2.1 in v1.3; name confirmed)
-- [ ] Build — **on hold pending owner go signal** (then: git init → public GitHub repo → M0 walking skeleton)
+- [x] Build started 2026-06-11 — repo public at [github.com/Aedrand/caravan](https://github.com/Aedrand/caravan); **M0 walking skeleton complete** (auth, SQLite+migrations, Docker, CI+E2E)
+- [ ] M1 — collaborative itinerary core (the two-browser bar; `docs/plan.md` §6)
 
 See [`docs/product-brief.md`](docs/product-brief.md) for the fuller market landscape and feature detail behind this summary.
