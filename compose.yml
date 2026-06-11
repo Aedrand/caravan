@@ -1,0 +1,23 @@
+# Caravan reference deployment (TD-4): one service, one volume.
+#
+#   docker compose up -d        → http://localhost:3000
+#
+# Pin the image tag (e.g. :v1.2.3) for stability; `latest` floats.
+services:
+  caravan:
+    image: ghcr.io/aedrand/caravan:latest
+    build: .
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - caravan-data:/app/data
+    environment:
+      # Full public URL — set when serving behind a reverse proxy / domain.
+      BASE_URL: "http://localhost:3000"
+      # Optional: pre-seed the admin account on first boot.
+      # ADMIN_EMAIL: ""
+      # ADMIN_PASSWORD: ""
+
+volumes:
+  caravan-data:

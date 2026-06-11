@@ -49,7 +49,7 @@ function loadOrCreateSecretKey(dataDir: string): string {
   }
   const key = randomBytes(32).toString("base64url");
   writeFileSync(secretPath, `${key}\n`, { mode: 0o600 });
-  // biome-ignore lint/suspicious/noConsole: logger isn't constructed until config exists
+  // logger isn't constructed until config exists, so plain console here
   console.warn(`SECRET_KEY not set — generated one and saved it to ${secretPath}`);
   return key;
 }

@@ -1,0 +1,38 @@
+# The self-host first-run experience is itself under test (TD-9):
+# build the image from main, boot it against an empty volume, and require
+# a healthy /api/health — nightly and on any Dockerfile change.
+name: Docker smoke
+
+on:
+  schedule:
+    - cron: "0 4 * * *"
+  workflow_dispatch:
+  pull_request:
+    paths: ["Dockerfile", "compose.yml", ".dockerignore"]
+
+jobs:
+  cold-boot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: caravan:smoke
+          cache-from: type=gha
+      - name: Cold boot against an empty volume
+        run: |
+          docker volume create caravan-smoke
+          docker run -d --name caravan-smoke -v caravan-smoke:/app/data -p 3000:3000 caravan:smoke
+          for i in $(seq 1 20); do
+            if curl -fsS http://localhost:3000/api/health; then echo " — healthy"; exit 0; fi
+            sleep 2
+          done
+          echo "container never became healthy" >&2
+          docker logs caravan-smoke >&2
+          exit 1
+      - name: Cleanup
+        if: always()
+        run: docker rm -f caravan-smoke && docker volume rm caravan-smoke
