@@ -1,0 +1,28 @@
+# dependencies
+node_modules/
+
+# builds
+dist/
+build/
+*.tsbuildinfo
+
+# runtime data (SQLite lives in the data volume)
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# env & secrets
+.env
+.env.*
+!.env.example
+
+# test artifacts
+coverage/
+playwright-report/
+test-results/
+
+# tooling & OS
+.DS_Store
+*.log
+.claude/settings.local.json
