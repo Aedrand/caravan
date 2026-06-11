@@ -9,7 +9,7 @@ import { schema } from "../db";
 
 export interface AuthDeps {
   db: Db;
-  config: Pick<Config, "baseUrl" | "secretKey">;
+  config: Pick<Config, "baseUrl" | "secretKey" | "nodeEnv">;
   /**
    * Lets a valid trip-invite token open the sign-up gate on invite-only
    * instances (PD-10: registration only via trip invite links). Injected to
@@ -33,6 +33,13 @@ export function createAuth({ db, config, isInviteTokenValid }: AuthDeps) {
   return betterAuth({
     baseURL: config.baseUrl,
     secret: config.secretKey,
+    // Dev/test run the SPA on Vite's origin while the API sits on baseURL —
+    // Better Auth rejects cross-origin POSTs unless it's told to trust it.
+    // Production serves SPA + API from one origin, so only baseURL is trusted.
+    trustedOrigins:
+      config.nodeEnv === "production"
+        ? undefined
+        : ["http://localhost:5173", "http://127.0.0.1:5173"],
     database: drizzleAdapter(db, { provider: "sqlite", schema }),
     emailAndPassword: {
       enabled: true,

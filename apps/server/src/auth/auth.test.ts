@@ -78,6 +78,11 @@ test("second sign-up is blocked while registration is closed (default)", async (
   expect(res.status).toBe(403);
 });
 
+// NOTE: trustedOrigins (the Vite-dev-origin fix in auth/index.ts) has no unit
+// test on purpose — Better Auth skips origin/CSRF enforcement entirely under
+// test runners, so any assertion here passes vacuously. Verified manually
+// against a development-mode server (where enforcement is active).
+
 test("a valid trip-invite header opens the closed gate; an invalid one does not (PD-10)", async () => {
   const { app, sqlite } = testHarness({}, { isInviteTokenValid: (t) => t === "good-token" });
   await signUp(app, "First", "first@example.com");

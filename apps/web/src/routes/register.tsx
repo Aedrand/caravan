@@ -50,8 +50,10 @@ function RegisterPage() {
     if (signUpError) {
       setPending(false);
       // The instance only opens registration for the very first user (or when
-      // an admin opens it) — everyone else arrives via invite links.
-      if (signUpError.status === 403) {
+      // an admin opens it) — everyone else arrives via invite links. Other
+      // 403s (e.g. an origin rejection) must show their real message, not
+      // masquerade as the invite gate.
+      if (signUpError.status === 403 && /invite-only/i.test(signUpError.message ?? "")) {
         setInviteOnly(true);
         return;
       }
