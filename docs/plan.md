@@ -1,6 +1,6 @@
 # Caravan — End-to-End Implementation Plan
 
-Drafted 2026-06-10; **ratified by the owner 2026-06-11** (all decisions ACCEPTED — see `decisions.md`; TD-7 modified: OAuth 2.1 ships with v1.3). **Build status: HOLD — M0 begins on the owner's explicit go signal.** When it does: git init → public GitHub repo (personal account, AGPL-3.0) → walking skeleton. Companion reading order: `../PROJECT.md` → `decisions.md` → this file.
+Drafted 2026-06-10; **ratified by the owner 2026-06-11** (all decisions ACCEPTED — see `decisions.md`; TD-7 modified: OAuth 2.1 ships with v1.3). **Build status: UNDERWAY since 2026-06-11** — M0 complete; M1 serial foundation (1.1–1.4, 1.6) complete, fan-out in progress. Companion reading order: `../PROJECT.md` → `decisions.md` → this file.
 
 **This plan is built for parallel execution.** After a deliberately serial foundation (M0–M1) establishes the contracts, the work fans out into independent tracks with disjoint file ownership, designed so multiple implementation agents (or people) can run concurrently without colliding. §5 defines the execution model; every task is tagged `[P]` (parallel-safe) or `[S]` (serial/foundation).
 
@@ -158,16 +158,16 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 
 | # | Task | Size | Notes / acceptance |
 |---|---|---|---|
-| 1.1 | Trips + members + roles: CRUD, dashboard, create flow (name/dates/currency), archive + duplicate-as-template + delete-with-confirm (PD-9) | M | |
-| 1.2 | **Mutation pipeline** (§3.3): registry, idempotency, permission middleware, `feed_events` + version, broadcast hook | L | Contract artifact — supervisor-owned |
-| 1.3 | WS rooms + presence channel + catch-up endpoints | M | Reconnect replays missed events |
-| 1.4 | **Client sync lib** (§3.4): optimistic apply/rollback, event application, presence hook | L | Contract artifact |
-| 1.5 | Membership flows: invite links (create/revoke/expiry, role-carrying), join flow (signup→membership), leave trip + owner-removes-member with ghost semantics, ghost-rejoin reattach, ownership transfer (PD-9/10) | M | Link in incognito → join as editor; removed member's expenses stay intact |
-| 1.6 | Itinerary data layer: activity mutations (create/update/delete/move/reorder), fractional indexing util (property-tested) | M | Concurrent same-item moves converge |
+| 1.1 | ✅ Trips + members + roles: CRUD, dashboard, create flow (name/dates/currency), archive + duplicate-as-template + delete-with-confirm (PD-9) | M | Done 2026-06-11 |
+| 1.2 | ✅ **Mutation pipeline** (§3.3): registry, idempotency, permission middleware, `feed_events` + version, broadcast hook | L | Contract artifact — supervisor-owned. Done 2026-06-11; events/responses carry an entity post-image |
+| 1.3 | ✅ WS rooms + presence channel + catch-up endpoints | M | Done 2026-06-11. Reconnect catch-up = hello-version check → snapshot refetch |
+| 1.4 | ✅ **Client sync lib** (§3.4): optimistic apply/rollback, event application, presence hook | L | Contract artifact. Done 2026-06-11 |
+| 1.5 | Membership flows: invite links (create/revoke/expiry, role-carrying), join flow (signup→membership), leave trip + owner-removes-member with ghost semantics, ghost-rejoin reattach, ownership transfer (PD-9/10) | M | Link in incognito → join as editor; removed member's expenses stay intact. ⚑ review debt: once non-owner members exist, revisit trip.update being editor-gated (incl. currency — PD-8/10) and duplicate having no role gate |
+| 1.6 | ✅ Itinerary data layer: activity mutations (create/update/delete/move/reorder), fractional indexing util (property-tested) | M | Done 2026-06-11. Concurrent same-item moves converge (LWW on date+position) |
 | 1.7 | Itinerary UI: day timeline + ideas pool, activity cards, create/edit (no map yet — freeform location), category chips, `link_url` field + **link-out buttons** (open in Google Maps / booking site — PD-12: link-outs are the only booking story) | L | |
 | 1.8 | dnd-kit: reorder within day, drag across days, drag idea→day (touch + keyboard) | M | |
-| 1.9 | Presence UI: member avatars, "editing now" hints, recently-edited flash (PD-5) | S | |
-| 1.10 | Activity feed UI: per-trip feed, catch-up divider + unread count from `last_seen_version` (PD-7) | M | |
+| 1.9 | Presence UI: member avatars, "editing now" hints, recently-edited flash (PD-5) | S | ⚑ review debt: add WS heartbeat/reaping first — half-open sockets currently linger in rosters |
+| 1.10 | Activity feed UI: per-trip feed, catch-up divider + unread count from `last_seen_version` (PD-7) | M | ⚑ review debt: `events?since` caps at 500 with no `hasMore` — add an indicator or paging before the feed consumes it |
 | 1.11 | **Two-browser Playwright test** (TD-9) + sync unit/integration suite | M | The M1 gate. Scenarios: ① concurrent different-field edits → both persist ② same-field conflict → LWW, both clients identical ③ concurrent same-activity move → single converged winner ④ presence avatars + editing hints visible both sides ⑤ feed attributes both actors correctly ⑥ B offline during A's edits → reconnect catch-up replays ⑦ rejected mutation rolls back optimistic state |
 
 **Exit:** the product's core promise is demo-able and CI-tested. Contracts freeze; fan-out begins.
@@ -273,7 +273,7 @@ Percentage splits · multi-currency · guest (non-account) expense participants 
 
 ## 10. Owner review checklist (the ⚑ items)
 
-> **All items resolved 2026-06-11.** Remaining decisions ratified wholesale. **Build: HOLD** — M0 starts on the owner's explicit go. Repo: GitHub personal account, **public from day one** when created.
+> **All items resolved 2026-06-11.** Remaining decisions ratified wholesale. **Build: UNDERWAY** (owner go signal 2026-06-11). Repo: [github.com/Aedrand/caravan](https://github.com/Aedrand/caravan), public, AGPL-3.0.
 
 1. **Positioning vs TREK** — ✅ **RESOLVED (owner, 2026-06-11): proceed & differentiate** — group-decision-first, settlement-complete, design-led, house AI + AI-trust UX. Comparison table recorded in PROJECT.md.
 2. **TD-1** — ✅ RESOLVED (owner, 2026-06-11): server-authoritative sync ACCEPTED.
