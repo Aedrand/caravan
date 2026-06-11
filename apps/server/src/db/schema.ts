@@ -1,4 +1,12 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import {
+  ACTIVITY_CATEGORIES,
+  ACTOR_TYPES,
+  ENTITY_TYPES,
+  MEMBER_STATUSES,
+  TRIP_ROLES,
+} from "@caravan/shared";
+import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { user } from "./auth-schema";
 
 /**
  * Schema contract (plan §3.2). Tables land additively, feature by feature;
@@ -29,3 +37,97 @@ export const trips = sqliteTable("trips", {
   createdAt: integer("created_at").notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
+
+export const tripMembers = sqliteTable(
+  "trip_members",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id),
+    role: text("role", { enum: TRIP_ROLES }).notNull(),
+    /** Ghosts: left/removed members whose history must survive (PD-9). */
+    status: text("status", { enum: MEMBER_STATUSES }).notNull().default("active"),
+    /** Per-trip personal-AI write opt-in (PD-11). */
+    aiWriteEnabled: integer("ai_write_enabled", { mode: "boolean" }).notNull().default(false),
+    /** Feed catch-up cursor for unread markers (PD-7). */
+    lastSeenVersion: integer("last_seen_version").notNull().default(0),
+    joinedAt: integer("joined_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("trip_members_trip_user").on(t.tripId, t.userId)],
+);
+
+export const inviteLinks = sqliteTable("invite_links", {
+  id: text("id").primaryKey(),
+  tripId: text("trip_id")
+    .notNull()
+    .references(() => trips.id, { onDelete: "cascade" }),
+  /** sha256 of the raw token — the token itself is returned once, never stored. */
+  tokenHash: text("token_hash").notNull().unique(),
+  role: text("role", { enum: ["editor", "viewer"] }).notNull().default("editor"),
+  expiresAt: integer("expires_at"),
+  revokedAt: integer("revoked_at"),
+  /** Membership id of the creator (no FK by design — history outlives roles). */
+  createdBy: text("created_by").notNull(),
+  createdAt: integer("created_at").notNull(),
+});
+
+export const activities = sqliteTable(
+  "activities",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    /** null = the Ideas pool (PD-2). */
+    date: text("date"),
+    /** Fractional ordering key within (trip, date|ideas) — LWW on conflict (TD-1). */
+    position: text("position").notNull(),
+    title: text("title").notNull(),
+    startTime: text("start_time"),
+    endTime: text("end_time"),
+    placeName: text("place_name"),
+    address: text("address"),
+    lat: real("lat"),
+    lng: real("lng"),
+    placeProvider: text("place_provider"),
+    placeRef: text("place_ref"),
+    category: text("category", { enum: ACTIVITY_CATEGORIES }).notNull().default("other"),
+    notes: text("notes").notNull().default(""),
+    linkUrl: text("link_url"),
+    /** Membership id of the creator. */
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("activities_trip_date").on(t.tripId, t.date)],
+);
+
+/**
+ * One row per mutation (TD-1): the activity feed, the sync catch-up log, and
+ * the attribution record are the same table. The PK is the client-generated
+ * mutation id — the INSERT itself is the idempotency check.
+ */
+export const feedEvents = sqliteTable(
+  "feed_events",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    actorType: text("actor_type", { enum: ACTOR_TYPES }).notNull().default("user"),
+    actorMemberId: text("actor_member_id"),
+    type: text("type").notNull(),
+    entityType: text("entity_type", { enum: ENTITY_TYPES }).notNull(),
+    entityId: text("entity_id").notNull(),
+    /** JSON FeedPayloadMap[type] — the render snapshot. */
+    payload: text("payload").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [uniqueIndex("feed_events_trip_version").on(t.tripId, t.version)],
+);

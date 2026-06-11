@@ -5,12 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsup src/index.ts --format esm --target node22 --clean",
+    "build": "tsup",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
+    "@caravan/shared": "workspace:*",
     "@hono/node-server": "^2.0.4",
     "better-auth": "^1.6.14",
     "better-sqlite3": "^12.10.0",
