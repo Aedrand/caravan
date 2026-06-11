@@ -2,6 +2,7 @@ export * from "./id";
 export * from "./mutations";
 export * from "./position";
 export * from "./schemas/activity";
+export * from "./schemas/api";
 export * from "./schemas/common";
 export * from "./schemas/feed";
 export * from "./schemas/trip";

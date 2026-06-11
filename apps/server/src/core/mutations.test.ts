@@ -337,7 +337,8 @@ test("broadcast fires after success with the recorded event — and not on failu
     { db: h.db, broadcast },
     { tripId, actor: { userId: owner, type: "user" }, mutation: createActivityMutation() },
   );
-  expect(broadcast).toHaveBeenCalledExactlyOnceWith(tripId, res.event);
+  expect(broadcast).toHaveBeenCalledExactlyOnceWith(tripId, res.event, res.entity);
+  expect(res.entity).toMatchObject({ id: res.event.entityId, title: "Sunrise hike" });
 
   expect(() =>
     executeMutation(

@@ -6,6 +6,7 @@ import { afterAll, expect, test } from "vitest";
 import { createApp } from "../app";
 import { loadConfig } from "../config";
 import { setSetting } from "../core/settings";
+import { createTripRooms } from "../core/ws";
 import { createDb } from "../db";
 import { runMigrations } from "../db/migrate";
 import { ensureAdminUser } from "./bootstrap";
@@ -26,7 +27,13 @@ function testHarness(env: Record<string, string> = {}) {
   const { db, sqlite } = createDb(config.dbPath);
   runMigrations(db);
   const auth = createAuth({ db, config });
-  const app = createApp({ config, db, logger: silentLogger, auth });
+  const app = createApp({
+    config,
+    db,
+    logger: silentLogger,
+    auth,
+    rooms: createTripRooms(silentLogger),
+  });
   return { app, db, sqlite, auth, config };
 }
 

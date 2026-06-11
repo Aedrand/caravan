@@ -6,6 +6,7 @@ import { afterAll, expect, test } from "vitest";
 import { createApp } from "./app";
 import { createAuth } from "./auth";
 import { loadConfig } from "./config";
+import { createTripRooms } from "./core/ws";
 import { createDb } from "./db";
 import { runMigrations } from "./db/migrate";
 
@@ -18,7 +19,14 @@ const config = loadConfig({
 const { db, sqlite } = createDb(config.dbPath);
 runMigrations(db);
 const auth = createAuth({ db, config });
-const app = createApp({ config, db, logger: pino({ level: "silent" }), auth });
+const silentLogger = pino({ level: "silent" });
+const app = createApp({
+  config,
+  db,
+  logger: silentLogger,
+  auth,
+  rooms: createTripRooms(silentLogger),
+});
 
 afterAll(() => {
   sqlite.close();

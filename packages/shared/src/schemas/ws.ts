@@ -34,7 +34,12 @@ export type ClientWsMessage = z.infer<typeof ClientWsMessageSchema>;
 /** server → client */
 export const ServerWsMessageSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("hello"), version: z.number().int().nonnegative() }),
-  z.object({ kind: z.literal("event"), event: FeedEventSchema }),
+  z.object({
+    kind: z.literal("event"),
+    event: FeedEventSchema,
+    /** EntityPostImage | null — refine with entityPostImageSchemas[event.entityType]. */
+    entity: z.unknown(),
+  }),
   z.object({ kind: z.literal("presence"), members: z.array(PresenceStateSchema) }),
 ]);
 export type ServerWsMessage = z.infer<typeof ServerWsMessageSchema>;

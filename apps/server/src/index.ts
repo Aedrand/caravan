@@ -1,11 +1,15 @@
 import { serve } from "@hono/node-server";
+import { WebSocketServer } from "ws";
 import { createApp } from "./app";
 import { createAuth } from "./auth";
 import { ensureAdminUser } from "./auth/bootstrap";
 import { loadConfig } from "./config";
 import { createJobRegistry } from "./core/jobs";
+import { createTripRooms } from "./core/ws";
 import { createDb } from "./db";
 import { runMigrations } from "./db/migrate";
+// Side-effect: register every feature's mutation handlers with the pipeline.
+import "./features";
 import { createLogger } from "./logger";
 
 /** Boot order (TD-4): config → logger → DB + migrations (fail-fast) → auth → serve. */
@@ -27,15 +31,22 @@ async function main() {
   await ensureAdminUser({ auth, db: db.db, config, logger });
 
   const jobs = createJobRegistry(logger);
-  const app = createApp({ config, db: db.db, logger, auth });
+  const rooms = createTripRooms(logger);
+  const app = createApp({ config, db: db.db, logger, auth, rooms });
 
-  const server = serve({ fetch: app.fetch, port: config.port }, (info) => {
-    logger.info({ port: info.port, baseUrl: config.baseUrl }, "caravan server listening");
-  });
+  // noServer is required — the Hono adapter handles the HTTP upgrade itself.
+  const wss = new WebSocketServer({ noServer: true });
+  const server = serve(
+    { fetch: app.fetch, port: config.port, websocket: { server: wss } },
+    (info) => {
+      logger.info({ port: info.port, baseUrl: config.baseUrl }, "caravan server listening");
+    },
+  );
 
   const shutdown = (signal: string) => {
     logger.info({ signal }, "shutting down");
     jobs.stop();
+    rooms.shutdown();
     server.close(() => {
       db.sqlite.close();
       process.exit(0);

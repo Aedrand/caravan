@@ -8,7 +8,7 @@ import {
   IsoDateSchema,
   PositionSchema,
 } from "./schemas/common";
-import type { FeedEvent } from "./schemas/feed";
+import type { EntityPostImage, FeedEvent } from "./schemas/feed";
 import { InviteRoleSchema } from "./schemas/trip";
 
 /**
@@ -30,6 +30,13 @@ const timePairRefinement = {
     !val.startTime || !val.endTime || val.startTime <= val.endTime,
   message: "endTime must not be before startTime",
 };
+
+/**
+ * http(s) only: bare z.url() passes any WHATWG-parseable URL, including
+ * javascript: and data: — a stored-XSS primitive once link-out buttons render
+ * these as hrefs (1.7).
+ */
+const LinkUrlSchema = z.url({ protocol: /^https?$/ }).max(2048);
 
 export const mutationPayloads = {
   "trip.update": z
@@ -68,7 +75,7 @@ export const mutationPayloads = {
       startTime: HhMmSchema.nullable().default(null),
       endTime: HhMmSchema.nullable().default(null),
       notes: z.string().max(5000).default(""),
-      linkUrl: z.url().max(2048).nullable().default(null),
+      linkUrl: LinkUrlSchema.nullable().default(null),
       place: PlaceSchema.nullable().default(null),
     })
     .refine(timePairRefinement.check, { message: timePairRefinement.message }),
@@ -81,7 +88,7 @@ export const mutationPayloads = {
         startTime: HhMmSchema.nullable().optional(),
         endTime: HhMmSchema.nullable().optional(),
         notes: z.string().max(5000).optional(),
-        linkUrl: z.url().max(2048).nullable().optional(),
+        linkUrl: LinkUrlSchema.nullable().optional(),
         place: PlaceSchema.nullable().optional(),
       })
       .refine((p) => Object.keys(p).length > 0, { message: "empty patch" }),
@@ -122,6 +129,8 @@ export function parseMutation(input: unknown): Mutation {
 export interface MutationResponse {
   version: number;
   event: FeedEvent;
+  /** Post-image of the event's entity — null when it no longer exists (deletes). */
+  entity: EntityPostImage | null;
   /** Private extras for the caller only (e.g. invite.create returns the raw token once). */
   result?: unknown;
 }

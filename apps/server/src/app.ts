@@ -1,11 +1,16 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
+import { upgradeWebSocket } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Auth } from "./auth";
+import { type AuthedEnv, requireUser } from "./auth/session";
 import type { Config } from "./config";
+import { createSyncRoutes } from "./core/sync";
+import type { TripRooms } from "./core/ws";
 import type { Db } from "./db";
+import { createTripsRoutes } from "./features/trips/routes";
 import type { Logger } from "./logger";
 
 export interface AppDeps {
@@ -13,6 +18,7 @@ export interface AppDeps {
   db: Db;
   logger: Logger;
   auth: Auth;
+  rooms: TripRooms;
 }
 
 /**
@@ -20,8 +26,17 @@ export interface AppDeps {
  * else. Separated from the listener so tests call `app.request()` directly
  * and the typed `hc` client can be derived from `AppType`.
  */
-export function createApp({ config, logger, auth }: AppDeps) {
-  const api = new Hono().get("/health", (c) => c.json({ status: "ok", service: "caravan" }));
+export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
+  // Trip workspace: CRUD (M1.1) + the sync contract surface (M1.3) behind one
+  // session gate — sub-apps assume c.get("user") and do their own membership checks.
+  const trips = new Hono<AuthedEnv>()
+    .use("*", requireUser(auth))
+    .route("/", createTripsRoutes({ db, logger }))
+    .route("/", createSyncRoutes({ db, rooms, logger, upgradeWebSocket }));
+
+  const api = new Hono()
+    .get("/health", (c) => c.json({ status: "ok", service: "caravan" }))
+    .route("/trips", trips);
 
   const app = new Hono()
     .use("*", async (c, next) => {

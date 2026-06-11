@@ -1,5 +1,6 @@
 import type {
   ActorType,
+  EntityPostImage,
   EntityType,
   FeedEvent,
   FeedPayloadMap,
@@ -13,6 +14,7 @@ import { and, asc, eq, gt } from "drizzle-orm";
 import type { Db } from "../db";
 import { schema } from "../db";
 import { hasRole } from "./permissions";
+import { serializeActivity, serializeInvite, serializeMember, serializeTrip } from "./serialize";
 
 /**
  * The mutation pipeline (TD-1, plan §3.3): validate → authorize → apply +
@@ -82,8 +84,46 @@ export function registerMutation<T extends MutationType>(
 
 export interface ExecuteDeps {
   db: Db;
-  /** Called after commit with the recorded event (WS fan-out — M1.3). */
-  broadcast?: (tripId: string, event: FeedEvent) => void;
+  /** Called after commit with the recorded event + post-image (WS fan-out — M1.3). */
+  broadcast?: (tripId: string, event: FeedEvent, entity: EntityPostImage | null) => void;
+}
+
+/**
+ * Post-image of the event's entity, read inside the same transaction so it is
+ * consistent with the version bump. Null = the entity no longer exists.
+ */
+function readPostImage(tx: Tx, entityType: EntityType, entityId: string): EntityPostImage | null {
+  switch (entityType) {
+    case "trip": {
+      const row = tx.select().from(schema.trips).where(eq(schema.trips.id, entityId)).get();
+      return row ? serializeTrip(row) : null;
+    }
+    case "activity": {
+      const row = tx
+        .select()
+        .from(schema.activities)
+        .where(eq(schema.activities.id, entityId))
+        .get();
+      return row ? serializeActivity(row) : null;
+    }
+    case "member": {
+      const row = tx
+        .select({ member: schema.tripMembers, userName: schema.user.name })
+        .from(schema.tripMembers)
+        .innerJoin(schema.user, eq(schema.user.id, schema.tripMembers.userId))
+        .where(eq(schema.tripMembers.id, entityId))
+        .get();
+      return row ? serializeMember(row.member, row.userName) : null;
+    }
+    case "invite": {
+      const row = tx
+        .select()
+        .from(schema.inviteLinks)
+        .where(eq(schema.inviteLinks.id, entityId))
+        .get();
+      return row ? serializeInvite(row) : null;
+    }
+  }
 }
 
 export function executeMutation(
@@ -108,7 +148,11 @@ export function executeMutation(
       if (existing.tripId !== tripId) {
         throw new MutationError(409, "mutation_id_reused", "mutation id used on another trip");
       }
-      return { version: existing.version, event: rowToEvent(existing) };
+      return {
+        version: existing.version,
+        event: rowToEvent(existing),
+        entity: readPostImage(tx, existing.entityType, existing.entityId),
+      };
     }
 
     const trip = tx.select().from(schema.trips).where(eq(schema.trips.id, tripId)).get();
@@ -158,10 +202,11 @@ export function executeMutation(
       .values({ ...event, payload: JSON.stringify(outcome.feedPayload) })
       .run();
 
-    return { version, event, result: outcome.result };
+    const entity = readPostImage(tx, outcome.entityType, outcome.entityId);
+    return { version, event, entity, result: outcome.result };
   });
 
-  deps.broadcast?.(tripId, response.event);
+  deps.broadcast?.(tripId, response.event, response.entity);
   return response;
 }
 
