@@ -54,8 +54,10 @@ export function createTrip(
 }
 
 /**
- * Duplicate-as-template (PD-2): copies the trip shell and every activity,
- * but none of the people — the caller starts as the sole owner of the copy.
+ * Duplicate-as-template (PD-9): copies the trip shell and every activity —
+ * but activities land UNDATED in the Ideas pool (structure, not schedule),
+ * trip dates are cleared, and none of the people come along: the caller
+ * starts as the sole owner of the copy.
  */
 export function duplicateTrip(
   db: Db,
@@ -79,8 +81,9 @@ export function duplicateTrip(
         id: createId(),
         name: `${source.name} (copy)`,
         destination: source.destination,
-        startDate: source.startDate,
-        endDate: source.endDate,
+        // A template has no schedule — the new group picks fresh dates (PD-9).
+        startDate: null,
+        endDate: null,
         currency: source.currency,
         version: 0,
         archivedAt: null,
@@ -109,7 +112,8 @@ export function duplicateTrip(
         .values({
           id: createId(),
           tripId: trip.id,
-          date: activity.date,
+          // Ideas pool, undated — duplicate copies structure, not the schedule (PD-9).
+          date: null,
           position: activity.position,
           title: activity.title,
           startTime: activity.startTime,

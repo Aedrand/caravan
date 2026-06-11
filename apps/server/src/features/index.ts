@@ -4,4 +4,5 @@
  * before executing mutations.
  */
 import "./itinerary/mutations";
+import "./trips/membership";
 import "./trips/mutations";

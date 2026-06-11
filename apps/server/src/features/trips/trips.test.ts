@@ -307,7 +307,7 @@ test("createTrip: trip + owner membership created together with the given clock"
   expect(members[0]?.id).toBe(member.id);
 });
 
-test("duplicateTrip: copies trip fields + activities; caller is the sole (new) owner", () => {
+test("duplicateTrip: copies structure as a template; caller is the sole (new) owner", () => {
   const h = harness();
   const alice = h.insertUser("Alice");
   const bob = h.insertUser("Bob");
@@ -341,8 +341,9 @@ test("duplicateTrip: copies trip fields + activities; caller is the sole (new) o
   expect(copy).toMatchObject({
     name: "Test Trip (copy)",
     destination: "Kyoto",
-    startDate: "2026-10-01",
-    endDate: "2026-10-08",
+    // a template carries no schedule (PD-9)
+    startDate: null,
+    endDate: null,
     currency: "JPY",
     version: 0,
     archivedAt: null,
@@ -381,6 +382,8 @@ test("duplicateTrip: copies trip fields + activities; caller is the sole (new) o
   for (const a of copied) {
     expect([a1, a2]).not.toContain(a.id);
     expect(a.createdBy).toBe(members[0]?.id);
+    // every copied activity lands undated in the Ideas pool (PD-9)
+    expect(a.date).toBeNull();
   }
   // the source is untouched
   expect(
