@@ -1,3 +1,14 @@
 packages:
   - apps/*
   - packages/*
+
+# Supply-chain gate: refuse to resolve package versions published less than
+# 3 days ago (compromised releases are typically yanked within 24–72h).
+minimumReleaseAge: 4320
+minimumReleaseAgeExclude:
+  # exact-pinned by @rolldown/binding-wasm32-wasi (vite 8 toolchain); the
+  # wasi binding never installs on dev/CI/Docker platforms — metadata only
+  - "@napi-rs/wasm-runtime"
+  # DefinitelyTyped publishes many times daily and ships zero runtime code;
+  # gating it buys nothing and breaks resolution constantly
+  - "@types/*"
