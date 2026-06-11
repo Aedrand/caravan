@@ -146,10 +146,7 @@
       "indexes": {
         "activities_trip_date": {
           "name": "activities_trip_date",
-          "columns": [
-            "trip_id",
-            "date"
-          ],
+          "columns": ["trip_id", "date"],
           "isUnique": false
         }
       },
@@ -158,12 +155,8 @@
           "name": "activities_trip_id_trips_id_fk",
           "tableFrom": "activities",
           "tableTo": "trips",
-          "columnsFrom": [
-            "trip_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trip_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -250,10 +243,7 @@
       "indexes": {
         "feed_events_trip_version": {
           "name": "feed_events_trip_version",
-          "columns": [
-            "trip_id",
-            "version"
-          ],
+          "columns": ["trip_id", "version"],
           "isUnique": true
         }
       },
@@ -262,12 +252,8 @@
           "name": "feed_events_trip_id_trips_id_fk",
           "tableFrom": "feed_events",
           "tableTo": "trips",
-          "columnsFrom": [
-            "trip_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trip_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -371,9 +357,7 @@
       "indexes": {
         "invite_links_token_hash_unique": {
           "name": "invite_links_token_hash_unique",
-          "columns": [
-            "token_hash"
-          ],
+          "columns": ["token_hash"],
           "isUnique": true
         }
       },
@@ -382,12 +366,8 @@
           "name": "invite_links_trip_id_trips_id_fk",
           "tableFrom": "invite_links",
           "tableTo": "trips",
-          "columnsFrom": [
-            "trip_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trip_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -469,10 +449,7 @@
       "indexes": {
         "trip_members_trip_user": {
           "name": "trip_members_trip_user",
-          "columns": [
-            "trip_id",
-            "user_id"
-          ],
+          "columns": ["trip_id", "user_id"],
           "isUnique": true
         }
       },
@@ -481,12 +458,8 @@
           "name": "trip_members_trip_id_trips_id_fk",
           "tableFrom": "trip_members",
           "tableTo": "trips",
-          "columnsFrom": [
-            "trip_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["trip_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -494,12 +467,8 @@
           "name": "trip_members_user_id_user_id_fk",
           "tableFrom": "trip_members",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -698,12 +667,8 @@
           "name": "account_user_id_user_id_fk",
           "tableFrom": "account",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -775,9 +740,7 @@
       "indexes": {
         "session_token_unique": {
           "name": "session_token_unique",
-          "columns": [
-            "token"
-          ],
+          "columns": ["token"],
           "isUnique": true
         }
       },
@@ -786,12 +749,8 @@
           "name": "session_user_id_user_id_fk",
           "tableFrom": "session",
           "tableTo": "user",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -865,9 +824,7 @@
       "indexes": {
         "user_email_unique": {
           "name": "user_email_unique",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         }
       },

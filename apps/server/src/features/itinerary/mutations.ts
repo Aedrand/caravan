@@ -91,11 +91,7 @@ registerMutation("activity.update", {
       throw new MutationError(400, "invalid_times", "endTime must not be before startTime");
     }
 
-    ctx.tx
-      .update(schema.activities)
-      .set(update)
-      .where(eq(schema.activities.id, activity.id))
-      .run();
+    ctx.tx.update(schema.activities).set(update).where(eq(schema.activities.id, activity.id)).run();
 
     return {
       entityType: "activity",

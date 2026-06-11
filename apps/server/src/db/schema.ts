@@ -68,7 +68,9 @@ export const inviteLinks = sqliteTable("invite_links", {
     .references(() => trips.id, { onDelete: "cascade" }),
   /** sha256 of the raw token — the token itself is returned once, never stored. */
   tokenHash: text("token_hash").notNull().unique(),
-  role: text("role", { enum: ["editor", "viewer"] }).notNull().default("editor"),
+  role: text("role", { enum: ["editor", "viewer"] })
+    .notNull()
+    .default("editor"),
   expiresAt: integer("expires_at"),
   revokedAt: integer("revoked_at"),
   /** Membership id of the creator (no FK by design — history outlives roles). */

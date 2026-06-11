@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { createId, firstPosition, type FeedEvent, parseMutation } from "@caravan/shared";
+import { createId, type FeedEvent, firstPosition, parseMutation } from "@caravan/shared";
 import { afterEach, expect, test, vi } from "vitest";
 import { createDb, schema } from "../db";
 import { runMigrations } from "../db/migrate";
@@ -130,7 +130,8 @@ test("versions are strictly monotonic across mutations", () => {
   const actor = { userId: owner, type: "user" as const };
 
   const versions = [1, 2, 3].map(
-    (_) => executeMutation({ db: h.db }, { tripId, actor, mutation: createActivityMutation() }).version,
+    (_) =>
+      executeMutation({ db: h.db }, { tripId, actor, mutation: createActivityMutation() }).version,
   );
   expect(versions).toEqual([1, 2, 3]);
 });
@@ -353,7 +354,8 @@ test("eventsSince returns the ordered tail after a version", () => {
   const { tripId } = h.insertTrip(owner);
   const actor = { userId: owner, type: "user" as const };
   const events: FeedEvent[] = [1, 2, 3, 4].map(
-    (_) => executeMutation({ db: h.db }, { tripId, actor, mutation: createActivityMutation() }).event,
+    (_) =>
+      executeMutation({ db: h.db }, { tripId, actor, mutation: createActivityMutation() }).event,
   );
 
   const tail = eventsSince(h.db, tripId, 2);
