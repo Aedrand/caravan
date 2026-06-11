@@ -1,6 +1,9 @@
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
-import * as schema from "./schema";
+import * as authSchema from "./auth-schema";
+import * as appSchema from "./schema";
+
+const schema = { ...appSchema, ...authSchema };
 
 /**
  * Open (or create) the SQLite database with the boot pragmas from TD-3.

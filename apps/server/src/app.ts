@@ -3,6 +3,7 @@ import path from "node:path";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
+import type { Auth } from "./auth";
 import type { Config } from "./config";
 import type { Db } from "./db";
 import type { Logger } from "./logger";
@@ -11,6 +12,7 @@ export interface AppDeps {
   config: Config;
   db: Db;
   logger: Logger;
+  auth: Auth;
 }
 
 /**
@@ -18,7 +20,7 @@ export interface AppDeps {
  * else. Separated from the listener so tests call `app.request()` directly
  * and the typed `hc` client can be derived from `AppType`.
  */
-export function createApp({ config, logger }: AppDeps) {
+export function createApp({ config, logger, auth }: AppDeps) {
   const api = new Hono().get("/health", (c) => c.json({ status: "ok", service: "caravan" }));
 
   const app = new Hono()
@@ -35,6 +37,8 @@ export function createApp({ config, logger }: AppDeps) {
         "request",
       );
     })
+    // Better Auth owns /api/auth/* (sign-up, sign-in, session, sign-out, …)
+    .on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw))
     .route("/api", api)
     // unknown API routes are JSON 404s, never the SPA fallback
     .all("/api/*", (c) => c.json({ error: { code: "not_found", message: "Not found" } }, 404));

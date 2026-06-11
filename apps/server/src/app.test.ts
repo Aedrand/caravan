@@ -4,6 +4,7 @@ import path from "node:path";
 import pino from "pino";
 import { afterAll, expect, test } from "vitest";
 import { createApp } from "./app";
+import { createAuth } from "./auth";
 import { loadConfig } from "./config";
 import { createDb } from "./db";
 import { runMigrations } from "./db/migrate";
@@ -16,7 +17,8 @@ const config = loadConfig({
 });
 const { db, sqlite } = createDb(config.dbPath);
 runMigrations(db);
-const app = createApp({ config, db, logger: pino({ level: "silent" }) });
+const auth = createAuth({ db, config });
+const app = createApp({ config, db, logger: pino({ level: "silent" }), auth });
 
 afterAll(() => {
   sqlite.close();

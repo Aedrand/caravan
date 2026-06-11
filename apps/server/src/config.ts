@@ -20,6 +20,9 @@ const EnvSchema = z.object({
   SECRET_KEY: z.string().min(32).optional(),
   /** Built SPA location, served statically in production. */
   WEB_DIST: z.string().default("../web/dist"),
+  /** Optional first-boot admin pre-seed (TD-4); ignored once users exist. */
+  ADMIN_EMAIL: z.email().optional(),
+  ADMIN_PASSWORD: z.string().min(8).optional(),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -39,6 +42,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     logLevel: parsed.LOG_LEVEL,
     secretKey: parsed.SECRET_KEY ?? loadOrCreateSecretKey(dataDir),
     webDist: path.resolve(parsed.WEB_DIST),
+    adminEmail: parsed.ADMIN_EMAIL,
+    adminPassword: parsed.ADMIN_PASSWORD,
   };
 }
 
