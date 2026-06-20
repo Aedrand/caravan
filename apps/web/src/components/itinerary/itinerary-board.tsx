@@ -1,4 +1,22 @@
 import { type Activity, positionBetween, type TripSnapshot } from "@caravan/shared";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  DragOverlay,
+  type DragStartEvent,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
 import { Lightbulb, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -6,11 +24,19 @@ import { useTripMutation } from "@/lib/sync";
 import { ActivityCard } from "./activity-card";
 import { ActivityFormDialog } from "./activity-form-dialog";
 import { dayNumber, deriveDays, formatDayLabel } from "./format";
+import { SortableActivityCard } from "./sortable-activity-card";
 
 type DialogState =
   | { mode: "create"; defaultDate: string | null }
   | { mode: "edit"; activity: Activity }
   | null;
+
+const IDEAS = "col:ideas";
+const colId = (date: string | null): string => `col:${date ?? "ideas"}`;
+const colDate = (id: string): string | null => {
+  const v = id.slice(4);
+  return v === "ideas" ? null : v;
+};
 
 function groupByDate(activities: Activity[]): Map<string | null, Activity[]> {
   const map = new Map<string | null, Activity[]>();
@@ -35,6 +61,13 @@ export function ItineraryBoard({
   const { trip, activities } = snapshot;
   const { mutateAsync } = useTripMutation();
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
 
   const days = useMemo(
     () => deriveDays(trip.startDate, trip.endDate, activities),
@@ -42,6 +75,7 @@ export function ItineraryBoard({
   );
   const byDate = useMemo(() => groupByDate(activities), [activities]);
   const ideas = byDate.get(null) ?? [];
+  const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
 
   const appendPositionFor = (date: string | null): string => {
     const last = (byDate.get(date) ?? []).at(-1)?.position ?? null;
@@ -52,6 +86,50 @@ export function ItineraryBoard({
   const openEdit = (activity: Activity) => setDialog({ mode: "edit", activity });
   const remove = (activity: Activity) =>
     void mutateAsync("activity.delete", { activityId: activity.id }).catch(() => {});
+
+  function handleDragEnd(event: DragEndEvent) {
+    setActiveId(null);
+    const { active, over } = event;
+    if (!over) return;
+    const activeKey = String(active.id);
+    const overKey = String(over.id);
+    if (activeKey === overKey) return;
+
+    const moving = activities.find((a) => a.id === activeKey);
+    if (!moving) return;
+
+    // Target column: dropping onto a column droppable, or onto another card.
+    const overActivity = overKey.startsWith("col:")
+      ? null
+      : activities.find((a) => a.id === overKey);
+    const targetDate = overKey.startsWith("col:") ? colDate(overKey) : (overActivity?.date ?? null);
+
+    const targetItems = (byDate.get(targetDate) ?? []).filter((a) => a.id !== activeKey);
+    const insertIndex = overActivity
+      ? Math.max(
+          0,
+          targetItems.findIndex((a) => a.id === overKey),
+        )
+      : targetItems.length;
+    const before = targetItems[insertIndex - 1] ?? null;
+    const after = targetItems[insertIndex] ?? null;
+
+    // Skip a drop that lands in the same slot it started from (no feed noise).
+    if (targetDate === moving.date) {
+      const col = byDate.get(moving.date) ?? [];
+      const idx = col.findIndex((a) => a.id === activeKey);
+      const curBefore = col[idx - 1]?.id ?? null;
+      const curAfter = col[idx + 1]?.id ?? null;
+      if ((before?.id ?? null) === curBefore && (after?.id ?? null) === curAfter) return;
+    }
+
+    const position = positionBetween(before?.position ?? null, after?.position ?? null);
+    void mutateAsync("activity.move", {
+      activityId: activeKey,
+      date: targetDate,
+      position,
+    }).catch(() => {});
+  }
 
   const isEmpty = activities.length === 0 && days.length === 0;
 
@@ -82,13 +160,19 @@ export function ItineraryBoard({
           )}
         </div>
       ) : (
-        <>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveId(null)}
+        >
           {days.map((iso) => (
             <DaySection
               key={iso}
               iso={iso}
               n={dayNumber(iso, trip.startDate)}
-              activities={byDate.get(iso) ?? []}
+              items={byDate.get(iso) ?? []}
               canEdit={canEdit}
               onAdd={() => openCreate(iso)}
               onEdit={openEdit}
@@ -112,23 +196,28 @@ export function ItineraryBoard({
                 </Button>
               )}
             </div>
-            {ideas.length === 0 ? (
-              <EmptyColumn canEdit={canEdit} label="No ideas yet" onAdd={() => openCreate(null)} />
-            ) : (
-              <div className="grid gap-2 sm:grid-cols-2">
-                {ideas.map((activity) => (
-                  <ActivityCard
-                    key={activity.id}
-                    activity={activity}
-                    canEdit={canEdit}
-                    onEdit={openEdit}
-                    onDelete={remove}
-                  />
-                ))}
-              </div>
-            )}
+            <ActivityColumn
+              containerId={IDEAS}
+              items={ideas}
+              canEdit={canEdit}
+              emptyLabel="No ideas yet"
+              onAdd={() => openCreate(null)}
+              onEdit={openEdit}
+              onDelete={remove}
+            />
           </section>
-        </>
+
+          <DragOverlay>
+            {activeActivity ? (
+              <ActivityCard
+                activity={activeActivity}
+                canEdit={false}
+                onEdit={openEdit}
+                onDelete={remove}
+              />
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       <ActivityFormDialog
@@ -151,7 +240,7 @@ export function ItineraryBoard({
 function DaySection({
   iso,
   n,
-  activities,
+  items,
   canEdit,
   onAdd,
   onEdit,
@@ -159,7 +248,7 @@ function DaySection({
 }: {
   iso: string;
   n: number | null;
-  activities: Activity[];
+  items: Activity[];
   canEdit: boolean;
   onAdd: () => void;
   onEdit: (activity: Activity) => void;
@@ -181,22 +270,59 @@ function DaySection({
           </Button>
         )}
       </div>
-      {activities.length === 0 ? (
-        <EmptyColumn canEdit={canEdit} label="Nothing planned yet" onAdd={onAdd} />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {activities.map((activity) => (
-            <ActivityCard
+      <ActivityColumn
+        containerId={colId(iso)}
+        items={items}
+        canEdit={canEdit}
+        emptyLabel="Nothing planned yet"
+        onAdd={onAdd}
+        onEdit={onEdit}
+        onDelete={onDelete}
+      />
+    </section>
+  );
+}
+
+function ActivityColumn({
+  containerId,
+  items,
+  canEdit,
+  emptyLabel,
+  onAdd,
+  onEdit,
+  onDelete,
+}: {
+  containerId: string;
+  items: Activity[];
+  canEdit: boolean;
+  emptyLabel: string;
+  onAdd: () => void;
+  onEdit: (activity: Activity) => void;
+  onDelete: (activity: Activity) => void;
+}) {
+  const { setNodeRef } = useDroppable({ id: containerId });
+  return (
+    <SortableContext
+      id={containerId}
+      items={items.map((a) => a.id)}
+      strategy={verticalListSortingStrategy}
+    >
+      <div ref={setNodeRef} className="flex flex-col gap-2">
+        {items.length === 0 ? (
+          <EmptyColumn canEdit={canEdit} label={emptyLabel} onAdd={onAdd} />
+        ) : (
+          items.map((activity) => (
+            <SortableActivityCard
               key={activity.id}
               activity={activity}
               canEdit={canEdit}
               onEdit={onEdit}
               onDelete={onDelete}
             />
-          ))}
-        </div>
-      )}
-    </section>
+          ))
+        )}
+      </div>
+    </SortableContext>
   );
 }
 

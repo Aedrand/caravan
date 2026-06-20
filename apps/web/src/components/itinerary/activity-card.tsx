@@ -1,5 +1,6 @@
 import type { Activity } from "@caravan/shared";
 import { ExternalLink, Map as MapIcon, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,11 +17,13 @@ export function ActivityCard({
   canEdit,
   onEdit,
   onDelete,
+  dragHandle,
 }: {
   activity: Activity;
   canEdit: boolean;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
+  dragHandle?: ReactNode;
 }) {
   const meta = CATEGORY_META[activity.category];
   const timeRange = formatTimeRange(activity.startTime, activity.endTime);
@@ -28,6 +31,7 @@ export function ActivityCard({
 
   return (
     <article className="cv-card flex gap-3 p-3 sm:p-4">
+      {dragHandle}
       <span
         aria-hidden
         className="flex size-9 shrink-0 items-center justify-center rounded-control"
