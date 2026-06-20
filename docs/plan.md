@@ -217,7 +217,7 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 
 | # | Task | Size |
 |---|---|---|
-| E.1 | Design language **as the default theme of the TD-10 token contract**: define the semantic token set (incl. status colors, radius) + the warm default expressed in it; `<BrandMark/>` indirection for identity marks; type scale, card system, motion guidelines — applied to shell + itinerary first. **Run alongside 1.7/1.8 so the itinerary is born compliant** | M |
+| E.1 | Design language **as the default theme of the TD-10 token contract**: define the semantic token set (incl. status colors, radius) + the warm default expressed in it; `<BrandMark/>` indirection for identity marks; type scale, card system, motion guidelines — applied to shell + itinerary first. **Run alongside 1.7/1.8 so the itinerary is born compliant** | M | 🟡 Foundation landed 2026-06-19 (grounds in approved "D · The Blend" design): **two-axis token system per TD-11** (`data-style` poster+material × `data-theme` warm+dusk) in `apps/web/src/index.css`; self-hosted Bricolage/Albert via `@fontsource`; `BrandMark` + logo SVGs; `cv-control`/`cv-card` personality classes; Button/Card/auth-shell/header adopt them (placeholder emoji retired). Independent axis swap verified by screenshot. **Remaining:** `.dark` mode values per theme; category/stamp/avatar component tokens applied to itinerary surfaces as 1.7+ land; admin two-select picker is D.3 |
 | E.2 | Empty/loading/error states for every feature surface (work with A–D as they land) | M |
 | E.3 | Responsive pass: in-trip mobile ergonomics (today view, thumb reach, bottom nav) | M |
 | E.4 | Accessibility: keyboard paths (incl. dnd), focus management, contrast audit | M |

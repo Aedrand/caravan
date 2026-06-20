@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
+import { BrandMark } from "@/components/brand-mark";
+
 /**
  * Shared chrome for the auth pages: the same warm centered card as the
  * dashboard empty state (src/routes/index.tsx), with an icon badge, heading,
@@ -21,7 +23,8 @@ export function AuthShell({
 }) {
   return (
     <section className="flex flex-1 items-center justify-center">
-      <div className="w-full max-w-md rounded-xl border border-border/70 bg-card px-8 py-10 shadow-sm sm:px-10">
+      <div className="cv-card w-full max-w-md px-8 py-10 sm:px-10">
+        <BrandMark className="mb-8 flex w-full justify-center" size={30} />
         <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-accent text-accent-foreground">
           <Icon aria-hidden className="size-7" strokeWidth={1.75} />
         </div>

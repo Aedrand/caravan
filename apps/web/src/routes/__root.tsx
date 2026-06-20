@@ -1,4 +1,5 @@
 import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
+import { BrandMark } from "@/components/brand-mark";
 import { UserMenu } from "@/components/user-menu";
 
 export const Route = createRootRoute({
@@ -12,10 +13,9 @@ function RootLayout() {
         <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link
             to="/"
-            className="flex items-center gap-2 rounded-md text-lg font-semibold tracking-tight outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+            className="flex items-center rounded-control outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            <span aria-hidden>🚐</span>
-            <span>Caravan</span>
+            <BrandMark size={26} />
           </Link>
           <UserMenu />
         </div>

@@ -1,65 +1,231 @@
+/* Self-hosted fonts (vendored via @fontsource — no CDN, TD-11/TD-4). */
+@import "@fontsource/bricolage-grotesque/latin-700.css";
+@import "@fontsource/bricolage-grotesque/latin-800.css";
+@import "@fontsource/albert-sans/latin-500.css";
+@import "@fontsource/albert-sans/latin-600.css";
+@import "@fontsource/albert-sans/latin-700.css";
+@import "@fontsource/albert-sans/latin-800.css";
+
 @import "tailwindcss";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Caravan design tokens v0 — warm, aspirational travel palette.
- * Light mode only for now; values are OKLCH. Mapped onto the shadcn/ui
- * CSS variable contract so shadcn components pick them up automatically.
+ * Caravan theming — two orthogonal axes (TD-11), both data:
+ *
+ *   AXIS 1  data-style="poster|material|…"  → STRUCTURE (borders, shadows,
+ *           radii, type pairing, motion). Sets no hues.
+ *   AXIS 2  data-theme="warm|dusk|…"        → COLOR (paper, ink, brand hues).
+ *           Sets no structure.  (.dark is an orthogonal light/dark modifier.)
+ *
+ * Components consume only the SEMANTIC layer below — never a raw hue, never a
+ * literal border/shadow. Structural recipes reference color tokens (e.g. a
+ * poster shadow is `… 0 var(--ink)`), so the axes compose: change the style
+ * and every edge re-shapes; change the theme and every edge re-inks.
+ *
+ * Default ships as: data-style="poster" data-theme="warm" (set on <html>).
  */
-:root {
-  /* Warm off-white sand canvas + dark-brown ink */
-  --background: oklch(0.974 0.011 84);
-  --foreground: oklch(0.298 0.028 49);
 
-  /* Cards lift gently off the sand */
-  --card: oklch(0.993 0.005 88);
-  --card-foreground: oklch(0.298 0.028 49);
-  --popover: oklch(0.993 0.005 88);
-  --popover-foreground: oklch(0.298 0.028 49);
+/* ============================================================
+ * AXIS 1 — STYLE PACKS (structure only)
+ * ============================================================ */
 
-  /* Terracotta / burnt sienna primary */
-  --primary: oklch(0.601 0.133 39);
-  --primary-foreground: oklch(0.985 0.01 84);
+/* Poster — the Caravan default: warm paper poster you can click.
+   2px espresso-ink outlines, hard zero-blur offset shadows, things push in. */
+[data-style="poster"] {
+  --ff-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --ff-body: "Albert Sans", ui-sans-serif, system-ui, sans-serif;
+  --tracking-display: -0.025em;
+  --tracking-label: 0.12em;
+  --wt-body: 500;
+  --wt-bold: 800;
+  --leading-body: 1.5;
+  --leading-tight: 1.05;
 
-  /* Muted sage support */
-  --secondary: oklch(0.913 0.027 129);
-  --secondary-foreground: oklch(0.373 0.047 134);
+  --border-w: 2px;
+  --border-color: var(--ink);
+  --divider: 2px dotted var(--ink-faint);
 
-  --muted: oklch(0.943 0.016 80);
-  --muted-foreground: oklch(0.506 0.029 52);
+  --r-stamp: 6px;
+  --r-input: 10px;
+  --r-control: 12px;
+  --r-card: 16px;
+  --r-pill: 999px;
 
-  /* Deep teal accent — pale wash for hovers, deep ink on top */
-  --accent: oklch(0.934 0.024 192);
-  --accent-foreground: oklch(0.39 0.066 200);
+  /* hard offset, zero blur, ink-colored — bigger surface, bigger offset */
+  --sh-pressed: 1px 1px 0 var(--ink);
+  --sh-control: 2px 2px 0 var(--ink);
+  --sh-raised: 4px 4px 0 var(--ink);
+  --sh-overlay: 5px 5px 0 var(--ink);
+  --sh-focus: 3px 3px 0 var(--hue-accent); /* gold offset focus */
 
-  --destructive: oklch(0.551 0.177 27);
-  --destructive-foreground: oklch(0.985 0.01 84);
-
-  --border: oklch(0.882 0.021 78);
-  --input: oklch(0.882 0.021 78);
-  --ring: oklch(0.601 0.133 39);
-
-  --chart-1: oklch(0.601 0.133 39);
-  --chart-2: oklch(0.495 0.083 199);
-  --chart-3: oklch(0.655 0.062 130);
-  --chart-4: oklch(0.76 0.097 78);
-  --chart-5: oklch(0.46 0.047 47);
-
-  --sidebar: oklch(0.958 0.014 82);
-  --sidebar-foreground: oklch(0.298 0.028 49);
-  --sidebar-primary: oklch(0.601 0.133 39);
-  --sidebar-primary-foreground: oklch(0.985 0.01 84);
-  --sidebar-accent: oklch(0.934 0.024 192);
-  --sidebar-accent-foreground: oklch(0.39 0.066 200);
-  --sidebar-border: oklch(0.882 0.021 78);
-  --sidebar-ring: oklch(0.601 0.133 39);
-
-  /* Generous rounding — rounded-xl cards */
-  --radius: 0.75rem;
+  --press-translate: 2px; /* pressed elements physically push in */
+  --hover-lift: -1px;
+  --motion-press: 150ms;
 }
 
+/* Material — soft elevation, hairline borders, tight radii, no push-in.
+   Proves the style axis is real: same hues, completely different personality. */
+[data-style="material"] {
+  --ff-display: "Albert Sans", ui-sans-serif, system-ui, sans-serif;
+  --ff-body: "Albert Sans", ui-sans-serif, system-ui, sans-serif;
+  --tracking-display: -0.01em;
+  --tracking-label: 0.04em;
+  --wt-body: 400;
+  --wt-bold: 700;
+  --leading-body: 1.5;
+  --leading-tight: 1.2;
+
+  --border-w: 1px;
+  --border-color: color-mix(in oklab, var(--ink) 16%, transparent);
+  --divider: 1px solid color-mix(in oklab, var(--ink) 12%, transparent);
+
+  --r-stamp: 4px;
+  --r-input: 8px;
+  --r-control: 8px;
+  --r-card: 10px;
+  --r-pill: 999px;
+
+  /* soft blurred elevation, ink-tinted but translucent */
+  --sh-pressed: 0 1px 1px color-mix(in oklab, var(--ink) 14%, transparent);
+  --sh-control: 0 1px 2px color-mix(in oklab, var(--ink) 16%, transparent);
+  --sh-raised: 0 4px 12px color-mix(in oklab, var(--ink) 16%, transparent);
+  --sh-overlay: 0 12px 28px color-mix(in oklab, var(--ink) 22%, transparent);
+  --sh-focus: 0 0 0 3px color-mix(in oklab, var(--hue-info) 40%, transparent);
+
+  --press-translate: 0px;
+  --hover-lift: 0px;
+  --motion-press: 120ms;
+}
+
+/* ============================================================
+ * AXIS 2 — COLOR THEMES (hues only)
+ * ============================================================ */
+
+/* Warm — the Caravan default palette: sunny travel poster. */
+[data-theme="warm"] {
+  --paper: #f2e9d6;
+  --paper-bright: #f7f0df;
+  --surface-card: #fffbf1;
+  --ink: #3a2d20;
+  --ink-soft: #8d7b66;
+  --ink-faint: #cbbda2;
+
+  --hue-primary: #c2552f;
+  --hue-primary-soft: #f6dccd;
+  --hue-accent: #e0a32e;
+  --hue-accent-soft: #f8e9c4;
+  --hue-success: #6b7f58;
+  --hue-success-soft: #e3e8d4;
+  --hue-info: #5e7e8f;
+  --hue-info-soft: #dce8ed;
+  --hue-danger: #a23333;
+  --hue-danger-soft: #f2d7d2;
+
+  --disabled-bg: #eae1cc;
+  --disabled-ink: #a8987e;
+  --on-primary: #fffbf1;
+
+  --person-1: #c2552f;
+  --person-2: #e0a32e;
+  --person-3: #6b7f58;
+  --person-4: #5e7e8f;
+  --person-5: #8a5a83;
+  --person-6: #b07b4f;
+}
+
+/* Dusk — a cooler twilight palette; same structure, different hues. */
+[data-theme="dusk"] {
+  --paper: #e8e4ec;
+  --paper-bright: #f0edf3;
+  --surface-card: #fbf9fd;
+  --ink: #2e2838;
+  --ink-soft: #6e6680;
+  --ink-faint: #bdb4cb;
+
+  --hue-primary: #9a4f6b;
+  --hue-primary-soft: #ebd6df;
+  --hue-accent: #c98a3c;
+  --hue-accent-soft: #f3e3ca;
+  --hue-success: #5a7d6e;
+  --hue-success-soft: #d7e5de;
+  --hue-info: #566a99;
+  --hue-info-soft: #d6deef;
+  --hue-danger: #9e3551;
+  --hue-danger-soft: #eed2da;
+
+  --disabled-bg: #dad5e0;
+  --disabled-ink: #9a92a8;
+  --on-primary: #fbf9fd;
+
+  --person-1: #9a4f6b;
+  --person-2: #c98a3c;
+  --person-3: #5a7d6e;
+  --person-4: #566a99;
+  --person-5: #7e5c93;
+  --person-6: #a87650;
+}
+
+/* ============================================================
+ * SEMANTIC LAYER — the only names components may consume.
+ * Resolves both axes; also bridges to the shadcn/ui var contract.
+ * ============================================================ */
+:root {
+  /* --- shadcn/ui bridge (color) --- */
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --card: var(--surface-card);
+  --card-foreground: var(--ink);
+  --popover: var(--surface-card);
+  --popover-foreground: var(--ink);
+  --primary: var(--hue-primary);
+  --primary-foreground: var(--on-primary);
+  --secondary: var(--hue-success-soft);
+  --secondary-foreground: var(--ink);
+  --muted: var(--paper-bright);
+  --muted-foreground: var(--ink-soft);
+  --accent: var(--hue-accent-soft);
+  --accent-foreground: var(--ink);
+  --destructive: var(--hue-danger);
+  --destructive-foreground: var(--on-primary);
+  --border: var(--border-color);
+  --input: var(--border-color);
+  --ring: var(--hue-accent);
+  --radius: var(--r-control);
+
+  /* --- Caravan extras (brand quartet + states + categories) --- */
+  --primary-soft: var(--hue-primary-soft);
+  --accent-strong: var(--hue-accent);
+  --accent-soft: var(--hue-accent-soft);
+  --success: var(--hue-success);
+  --success-soft: var(--hue-success-soft);
+  --warning: var(--hue-accent);
+  --warning-soft: var(--hue-accent-soft);
+  --info: var(--hue-info);
+  --info-soft: var(--hue-info-soft);
+  --danger: var(--hue-danger);
+  --danger-soft: var(--hue-danger-soft);
+  --text-secondary: var(--ink-soft);
+
+  --cat-food: var(--hue-primary);
+  --cat-food-soft: var(--hue-primary-soft);
+  --cat-transport: var(--hue-info);
+  --cat-transport-soft: var(--hue-info-soft);
+  --cat-sight: var(--hue-success);
+  --cat-sight-soft: var(--hue-success-soft);
+  --cat-lodging: var(--hue-accent);
+  --cat-lodging-soft: var(--hue-accent-soft);
+
+  /* --- composite structural recipe (cross-axis) --- */
+  --border-interactive: var(--border-w) solid var(--border-color);
+  --shadow-focus: var(--sh-focus);
+}
+
+/* ============================================================
+ * Tailwind v4 utility exposure (keys differ from source tokens
+ * so `inline` keeps the var() reference — re-themes at runtime).
+ * ============================================================ */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -80,23 +246,45 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+
+  /* Caravan extras */
+  --color-primary-soft: var(--primary-soft);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-text-secondary: var(--text-secondary);
+  --color-cat-food: var(--cat-food);
+  --color-cat-transport: var(--cat-transport);
+  --color-cat-sight: var(--cat-sight);
+  --color-cat-lodging: var(--cat-lodging);
+
+  /* type */
+  --font-display: var(--ff-display);
+  --font-body: var(--ff-body);
+
+  /* radii — shadcn scale anchored to control radius, plus named tokens */
+  --radius-sm: calc(var(--r-control) - 4px);
+  --radius-md: calc(var(--r-control) - 2px);
+  --radius-lg: var(--r-control);
+  --radius-xl: var(--r-card);
+  --radius-stamp: var(--r-stamp);
+  --radius-input: var(--r-input);
+  --radius-control: var(--r-control);
+  --radius-card: var(--r-card);
+  --radius-pill: var(--r-pill);
+
+  /* offset/elevation shadow system */
+  --shadow-pressed: var(--sh-pressed);
+  --shadow-control: var(--sh-control);
+  --shadow-raised: var(--sh-raised);
+  --shadow-overlay: var(--sh-overlay);
 }
 
 @layer base {
@@ -104,11 +292,68 @@
     @apply border-border outline-ring/50;
   }
 
+  html {
+    background: var(--paper);
+  }
+
   body {
     @apply bg-background text-foreground antialiased;
+    font-family: var(--ff-body);
+    font-weight: var(--wt-body);
+    line-height: var(--leading-body);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--ff-display);
+    letter-spacing: var(--tracking-display);
+    line-height: var(--leading-tight);
+    font-weight: var(--wt-bold);
   }
 
   ::selection {
-    background-color: oklch(0.601 0.133 39 / 0.25);
+    background-color: color-mix(in oklab, var(--hue-primary) 25%, transparent);
+  }
+}
+
+/* ============================================================
+ * Personality-bearing surface classes. Travel + base components
+ * opt into these instead of hardcoding borders/shadows, so a
+ * style-pack swap restyles them for free.
+ * ============================================================ */
+@layer components {
+  .cv-control {
+    border: var(--border-interactive);
+    box-shadow: var(--shadow-control);
+    border-radius: var(--r-control);
+    transition:
+      transform var(--motion-press) ease-out,
+      box-shadow var(--motion-press) ease-out,
+      background-color var(--motion-press) ease-out;
+  }
+  .cv-control:hover {
+    transform: translate(var(--hover-lift), var(--hover-lift));
+  }
+  .cv-control:active {
+    box-shadow: var(--shadow-pressed);
+    transform: translate(var(--press-translate), var(--press-translate));
+  }
+  .cv-control:focus-visible {
+    outline: none;
+    box-shadow: var(--shadow-focus);
+  }
+
+  .cv-card {
+    background: var(--surface-card);
+    border: var(--border-interactive);
+    box-shadow: var(--shadow-raised);
+    border-radius: var(--r-card);
+  }
+
+  .cv-divider {
+    border: none;
+    border-top: var(--divider);
   }
 }

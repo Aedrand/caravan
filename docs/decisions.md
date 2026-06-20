@@ -339,7 +339,7 @@ The pattern is proven at far larger scale than ours (Linear: LWW for all structu
 
 ### TD-10: Instance theming — semantic token contract, themes as data
 
-**Status:** ✅ ACCEPTED (owner directed 2026-06-11, in-session)
+**Status:** ✅ ACCEPTED (owner directed 2026-06-11, in-session) · **Extended by TD-11** (2026-06-19: theming split into two orthogonal axes — style pack × color theme)
 
 **Decision:**
 - **The token contract comes first, the default look is an instance of it.** Every UI surface consumes only semantic CSS custom properties (`--primary`, `--accent`, `--muted`, `--warning`, `--danger`, radius, …) — never raw palette values. E.1's "design language" deliverable is therefore two artifacts: the token contract itself, and Caravan's warm default expressed inside it. Defined before the itinerary UI (1.7/1.8) so the app's biggest surface is born compliant, not retrofitted.
@@ -350,3 +350,25 @@ The pattern is proven at far larger scale than ours (Linear: LWW for all structu
 - **Surfaces:** admin picker UI lands with D.3's panel (Track D); custom instance name (already D.3 scope) joins the theme as part of "instance identity."
 
 **Rejected:** full custom CSS (unbounded support/security surface); per-user themes (it's the *group's* instance — one identity per deployment, v1); swappable icon sets (low payoff, asset-pipeline cost).
+
+---
+
+### TD-11: Two-axis theming — style pack × color theme as independent axes
+
+**Status:** ✅ ACCEPTED (owner directed 2026-06-19, in-session) · Extends [TD-10] · Grounded in the approved Caravan Design System (claude.ai/design, "D · The Blend")
+
+**Context:** TD-10 modeled a theme as "a few base hues + light/dark." The owner wants more reach: an instance should be able to change *the whole aesthetic personality* — not just recolor it. The reference design ("poster": warm paper, 2px espresso-ink outlines, hard zero-blur offset shadows, Bricolage/Albert type) is our default, but a host should be able to run "material" (soft elevation, hairline borders, tight radii) or "beach" (airy, big radii, soft long shadows) instead — and pick colors *independently* of that.
+
+**Decision — theming is two orthogonal axes, both data, that compose:**
+
+1. **Style pack** (`data-style` on the root: `poster` | `material` | `beach` | …) — the *structural personality*. A style pack sets only **structural tokens**: border treatment (`--border-interactive`, `--border-w`), the shadow system (`--shadow-control/raised/overlay/pressed/focus`, including blur vs. zero-blur offset), the radius scale (`--radius-control/card/pill/stamp`), the type pairing (`--font-display`, `--font-body`, tracking/weight floors), motion (`--motion-press`, press-translate distance), and density. It sets **no hues**.
+2. **Color theme** (`data-theme` on the root: `warm` | `dusk` | … , with `.dark` as an orthogonal light/dark modifier) — the *palette*. A color theme sets only **base hue + neutral + ink tokens** (`--paper`, `--surface-card`, `--ink`, `--ink-soft`, `--hue-primary/accent/success/info/danger` + `-soft` pairs). It sets **no structure**.
+3. **The semantic layer resolves both.** Components consume only semantic aliases — `--color-primary`, `--shadow-raised`, `--border-interactive`, `--radius-card`, `--font-display`, … — never a raw hue and never a literal border/shadow. Critically, **structural recipes reference color tokens**: e.g. poster's `--shadow-raised: var(--offset) var(--offset) 0 var(--ink)` pulls its ink from the *color* axis, so the two axes mix freely (poster+dusk re-inks every shadow; material+warm softens every edge). This is what makes them genuinely independent rather than a bundle.
+
+**Consequences:**
+- The E.1 token files split accordingly: `themes/*.css` (color, one file per palette) and `styles/*.css` (style packs, one file per personality), over a shared `semantic.css` + a shadcn/ui bridge. Adding a preset = adding one data file on one axis; it never touches components.
+- **D.3's admin picker becomes two selects** (Style + Color) plus a light/dark toggle — not one theme dropdown. `instance_settings` grows a `style_pack` key alongside the palette keys.
+- v1 ships **poster as default + warm as default**, with **material** as the second style pack and **dusk** as a second palette — enough to prove and exercise both axes in CI. `beach` and further presets are curated backlog (TD-10's "curated presets up front" still holds, now on two axes).
+- Self-host honesty (per owner, 2026-06-19): fonts are **vendored, not CDN-loaded** (`@fontsource/*` → bundled woff2), and icons stay the already-installed `lucide-react` package — no Google Fonts / unpkg calls at runtime, consistent with TD-4's offline-capable posture.
+
+**Rejected:** single-axis "skins" that bundle color+structure (rejected: the whole point is mixing a personality with an unrelated palette); per-component style overrides (rejected: re-introduces the divergence the token contract exists to prevent); letting a style pack set hues or a color theme set structure (rejected: collapses the two axes back into one). Custom-CSS upload stays rejected from TD-10.
