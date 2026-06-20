@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
+import { IdeasPanel } from "@/components/decisions/ideas-panel";
 import { PollsPanel } from "@/components/decisions/polls-panel";
 import { ExpensesPanel } from "@/components/expenses/expenses-panel";
 import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
@@ -113,10 +114,16 @@ export function TripWorkspace(props: TripWorkspaceProps) {
               canEdit={props.canEdit}
               mapOpen={mapOpen}
               onToggleMap={() => setMapOpen((v) => !v)}
+              onOpenDecide={() => setView("decide")}
             />
           ) : (
             <ViewScroll>
-              {view === "decide" && <PollsPanel snapshot={snapshot} canEdit={props.canEdit} />}
+              {view === "decide" && (
+                <div className="flex flex-col gap-8">
+                  <IdeasPanel snapshot={snapshot} canEdit={props.canEdit} />
+                  <PollsPanel snapshot={snapshot} canEdit={props.canEdit} />
+                </div>
+              )}
               {view === "money" && (
                 <ExpensesPanel
                   tripId={snapshot.trip.id}
@@ -311,17 +318,19 @@ function PlanView({
   canEdit,
   mapOpen,
   onToggleMap,
+  onOpenDecide,
 }: {
   snapshot: TripSnapshot;
   canEdit: boolean;
   mapOpen: boolean;
   onToggleMap: () => void;
+  onOpenDecide: () => void;
 }) {
   return (
     <MapSelectionProvider>
       <div className="flex h-full min-h-0">
         <div className="min-w-0 flex-[1.35] overflow-y-auto px-5 py-5">
-          <ItineraryBoard snapshot={snapshot} canEdit={canEdit} />
+          <ItineraryBoard snapshot={snapshot} canEdit={canEdit} onOpenDecide={onOpenDecide} />
         </div>
 
         {mapOpen ? (

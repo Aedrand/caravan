@@ -153,7 +153,7 @@ function TripError({ message, onRetry }: { message: string; onRetry: () => void 
 
 function TripSkeleton() {
   return (
-    <div
+    <section
       aria-busy="true"
       aria-label="Loading trip"
       className="flex h-dvh flex-col overflow-hidden bg-background"
@@ -171,6 +171,6 @@ function TripSkeleton() {
           <div className="h-24 animate-pulse rounded-xl bg-foreground/10" />
         </div>
       </div>
-    </div>
+    </section>
   );
 }

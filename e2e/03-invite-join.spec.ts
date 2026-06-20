@@ -34,7 +34,7 @@ test("invite link: stranger registers through it and collaborates live", async (
   await expect(a.getByText("Live")).toBeVisible();
 
   // Members live in the Group view now (C.4 workspace IA).
-  await a.getByRole("button", { name: "Group" }).click();
+  await a.getByRole("button", { name: "Group", exact: true }).click();
   const members = a.getByRole("region", { name: "Members" });
   await members.getByRole("button", { name: "Create invite link" }).click();
   const inviteUrl = await members.getByRole("textbox", { name: "Invite link" }).inputValue();

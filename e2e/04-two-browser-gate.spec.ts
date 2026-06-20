@@ -77,12 +77,12 @@ test("two members, two browsers: edits, presence, feed, convergence, catch-up", 
   await expect(a.getByText("Live")).toBeVisible();
 
   // Members live in the Group view now (C.4 workspace IA).
-  await a.getByRole("button", { name: "Group" }).click();
+  await a.getByRole("button", { name: "Group", exact: true }).click();
   const members = a.getByRole("region", { name: "Members" });
   await members.getByRole("button", { name: "Create invite link" }).click();
   const inviteUrl = await members.getByRole("textbox", { name: "Invite link" }).inputValue();
   // Back to Plan for the itinerary work below.
-  await a.getByRole("button", { name: "Plan" }).click();
+  await a.getByRole("button", { name: "Plan", exact: true }).click();
 
   // Editor (already has an account) accepts the invite and lands in the trip.
   await signIn(b, editor.email, editor.password);

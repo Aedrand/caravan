@@ -43,7 +43,6 @@ type DialogState =
   | { mode: "edit"; activity: Activity }
   | null;
 
-const IDEAS = "col:ideas";
 const colId = (date: string | null): string => `col:${date ?? "ideas"}`;
 const colDate = (id: string): string | null => {
   const v = id.slice(4);
@@ -66,9 +65,12 @@ function groupByDate(activities: Activity[]): Map<string | null, Activity[]> {
 export function ItineraryBoard({
   snapshot,
   canEdit,
+  onOpenDecide,
 }: {
   snapshot: TripSnapshot;
   canEdit: boolean;
+  /** Switch the workspace to the Decide view (where the ideas pool now lives). */
+  onOpenDecide?: () => void;
 }) {
   const { trip, activities } = snapshot;
   const { mutateAsync } = useTripMutation();
@@ -92,17 +94,8 @@ export function ItineraryBoard({
   const commentsByTarget = useCommentsByTarget(snapshot.comments);
   const membersById = useMembersById(snapshot.members);
 
-  // Ideas sort by enthusiasm: most votes first, ties keep fractional order (PD-2).
-  const ideas = useMemo(() => {
-    const pool = [...(byDate.get(null) ?? [])];
-    pool.sort((a, b) => {
-      const va = votesByActivity.get(a.id)?.length ?? 0;
-      const vb = votesByActivity.get(b.id)?.length ?? 0;
-      if (va !== vb) return vb - va;
-      return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
-    });
-    return pool;
-  }, [byDate, votesByActivity]);
+  // Ideas live in Decide now (C.4); Plan keeps just a pointer with the count.
+  const ideaCount = (byDate.get(null) ?? []).length;
 
   const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
 
@@ -326,37 +319,27 @@ export function ItineraryBoard({
               ))}
             </div>
 
-            <section className="mt-3 flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <Lightbulb aria-hidden className="size-5 text-[var(--accent-strong)]" />
-                  <h3 className="font-display text-lg font-bold">Ideas</h3>
-                  {ideas.length > 0 && (
-                    <span className="text-sm font-medium text-muted-foreground">
-                      {ideas.length}
-                    </span>
-                  )}
-                </div>
-                {canEdit && (
-                  <Button size="sm" variant="ghost" onClick={() => openCreate(null)}>
-                    <Plus aria-hidden />
-                    Add idea
-                  </Button>
-                )}
-              </div>
-              <ActivityColumn
-                containerId={IDEAS}
-                items={ideas}
-                canEdit={canEdit}
-                editingHints={editingHints}
-                flashing={flashing}
-                emptyLabel="No ideas yet"
-                onAdd={() => openCreate(null)}
-                onEdit={openEdit}
-                onDelete={remove}
-                renderFooter={renderFooter}
-              />
-            </section>
+            {/* Ideas moved to Decide — Plan keeps a compact pointer. */}
+            <button
+              type="button"
+              onClick={onOpenDecide}
+              className="mt-3 flex w-full items-center gap-3 rounded-card border bg-accent-soft px-4 py-3 text-left shadow-control transition-colors hover:bg-accent"
+            >
+              <Lightbulb aria-hidden className="size-5 shrink-0 text-[var(--accent-strong)]" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-display font-bold">
+                  {ideaCount > 0
+                    ? `${ideaCount} ${ideaCount === 1 ? "idea" : "ideas"} the group's floating`
+                    : "No ideas yet"}
+                </span>
+                <span className="block text-sm text-muted-foreground">
+                  {ideaCount > 0
+                    ? "Vote on them in Decide — top picks become days"
+                    : "Float a place the group can vote on"}
+                </span>
+              </span>
+              <span className="shrink-0 font-body text-sm font-bold">Open Decide →</span>
+            </button>
 
             {/* No drop animation: our reorder lands via the async activity.move
                 optimistic update, so the default settle would animate the overlay
@@ -442,12 +425,13 @@ function DayBlock({
       </>
     );
     return (
-      <div ref={sectionRef} className="scroll-mt-20" onMouseEnter={onFocus}>
+      <div ref={sectionRef} className="scroll-mt-20">
         {canEdit ? (
           <button
             ref={setNodeRef}
             type="button"
             onClick={onAdd}
+            onMouseEnter={onFocus}
             className={cn(
               "flex w-full items-center gap-2 rounded-control border-2 border-dashed border-border/55 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground",
               isOver && "border-foreground/50 bg-accent/40 text-foreground",
@@ -469,7 +453,7 @@ function DayBlock({
   }
 
   return (
-    <div ref={sectionRef} className="scroll-mt-20" onMouseEnter={onFocus}>
+    <div ref={sectionRef} className="scroll-mt-20">
       <div ref={setNodeRef} className={cn("rounded-card", isOver && "bg-accent/30")}>
         <DayHeader
           n={n}
@@ -478,6 +462,7 @@ function DayBlock({
           count={items.length}
           open={open}
           onToggle={onToggle}
+          onFocus={onFocus}
           canEdit={canEdit}
           onAdd={onAdd}
         />
@@ -532,6 +517,7 @@ function DayHeader({
   count,
   open,
   onToggle,
+  onFocus,
   canEdit,
   onAdd,
 }: {
@@ -541,6 +527,7 @@ function DayHeader({
   count: number;
   open: boolean;
   onToggle: () => void;
+  onFocus: () => void;
   canEdit: boolean;
   onAdd: () => void;
 }) {
@@ -549,6 +536,7 @@ function DayHeader({
       <button
         type="button"
         onClick={onToggle}
+        onMouseEnter={onFocus}
         aria-expanded={open}
         className="flex min-w-0 items-center gap-1.5 rounded-control text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
       >
@@ -620,82 +608,6 @@ function DayRail({
         );
       })}
     </div>
-  );
-}
-
-function ActivityColumn({
-  containerId,
-  items,
-  canEdit,
-  editingHints,
-  flashing,
-  emptyLabel,
-  onAdd,
-  onEdit,
-  onDelete,
-  renderFooter,
-}: {
-  containerId: string;
-  items: Activity[];
-  canEdit: boolean;
-  editingHints: Map<string, EditingHint>;
-  flashing: Set<string>;
-  emptyLabel: string;
-  onAdd: () => void;
-  onEdit: (activity: Activity) => void;
-  onDelete: (activity: Activity) => void;
-  renderFooter: (activity: Activity) => ReactNode;
-}) {
-  const { setNodeRef } = useDroppable({ id: containerId });
-  return (
-    <SortableContext
-      id={containerId}
-      items={items.map((a) => a.id)}
-      strategy={verticalListSortingStrategy}
-    >
-      <div ref={setNodeRef} className="flex flex-col gap-2">
-        {items.length === 0 ? (
-          <EmptyColumn canEdit={canEdit} label={emptyLabel} onAdd={onAdd} />
-        ) : (
-          items.map((activity) => (
-            <SortableActivityCard
-              key={activity.id}
-              activity={activity}
-              canEdit={canEdit}
-              editingBy={editingHints.get(activity.id)}
-              flash={flashing.has(activity.id)}
-              onEdit={onEdit}
-              onDelete={onDelete}
-              footer={renderFooter(activity)}
-            />
-          ))
-        )}
-      </div>
-    </SortableContext>
-  );
-}
-
-function EmptyColumn({
-  canEdit,
-  label,
-  onAdd,
-}: {
-  canEdit: boolean;
-  label: string;
-  onAdd: () => void;
-}) {
-  if (!canEdit) {
-    return <p className="px-1 text-sm text-muted-foreground">{label}.</p>;
-  }
-  return (
-    <button
-      type="button"
-      onClick={onAdd}
-      className="flex w-full items-center justify-center gap-2 rounded-card border-2 border-dashed border-border/60 px-4 py-5 text-sm font-medium text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
-    >
-      <Plus aria-hidden className="size-4" />
-      Add something
-    </button>
   );
 }
 
