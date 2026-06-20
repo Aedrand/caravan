@@ -199,7 +199,7 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 | C.1 | Geo proxy: `/api/geo/search|reverse` — Photon default, Geoapify/LocationIQ via env, SQLite cache, per-deployment rate limit (TD-5) | M |
 | C.2 | Place autocomplete in activity form (debounced ≥300 ms), freeform fallback, provenance fields | M |
 | C.3 | Map pane: MapLibre + OpenFreeMap, pins + clustering, pin↔card bidirectional highlight/scroll, unplotted-activities affordance | L |
-| C.4 | Split-view workspace layout: persistent map beside itinerary (desktop), toggle/bottom-sheet (mobile). **C.4 owns all map-pane layout**, consuming the shell slots E.1 defines; E.3 explicitly excludes the map pane | M |
+| C.4 | Split-view workspace layout: persistent map beside itinerary (desktop), toggle/bottom-sheet (mobile). **C.4 owns all map-pane layout**, consuming the shell slots E.1 defines; E.3 explicitly excludes the map pane. **Also owns long-trip itinerary navigation** (owner call 2026-06-19, folded in here): the 1.7 itinerary is a plain vertical day list — fine short-term, but a long trip (e.g. the 43-day Dolomites demo, mostly empty days) becomes an endless scroll. Design the fix *with* the map pane so the whole workspace is reshaped once: a sticky **DayTabs** day-jump rail (the component already exists in the design system) with the active day highlighted, **compact empty days** (thin one-line "+ Day N" rows, not full drop-boxes), and collapsible day sections / jump-to-today. | L |
 | C.5 | Tile/geocoder provider config surface + attribution + docs (incl. PMTiles heavy mode page) | S |
 
 ### Track D — Self-host polish `[P]` (≈ M5)
