@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRef, useState } from "react";
+import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
 import { DeleteTripDialog } from "@/components/trips/delete-trip-dialog";
 import { formatTripDates } from "@/components/trips/format";
 import { MembersPanel } from "@/components/trips/members-panel";
@@ -94,7 +95,6 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
   });
 
   const activeMembers = snapshot.members.filter((member) => member.status === "active");
-  const activityCount = snapshot.activities.length;
 
   // Failures roll back via the sync lib's snapshot invalidation — no local handling needed.
   const commitName = (name: string) => void mutateAsync("trip.update", { name }).catch(() => {});
@@ -188,20 +188,7 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
         )}
       </header>
 
-      <Card className="text-center">
-        <CardContent className="py-10">
-          <p className="text-sm text-muted-foreground">
-            The itinerary lands in the next milestone.
-          </p>
-          {activityCount > 0 && (
-            <p className="mt-2 text-sm font-medium">
-              {activityCount === 1
-                ? "1 activity already synced"
-                : `${activityCount} activities already synced`}
-            </p>
-          )}
-        </CardContent>
-      </Card>
+      <ItineraryBoard snapshot={snapshot} canEdit={canEdit} />
 
       <MembersPanel />
 
