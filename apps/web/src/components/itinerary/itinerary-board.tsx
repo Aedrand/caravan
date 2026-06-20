@@ -17,7 +17,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { Lightbulb, Plus } from "lucide-react";
+import { ChevronDown, Lightbulb, Plus } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityFooter } from "@/components/decisions/activity-footer";
@@ -30,9 +30,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
 import { useMyMember, usePresence, useTripMutation } from "@/lib/sync";
+import { cn } from "@/lib/utils";
 import { ActivityCard } from "./activity-card";
 import { ActivityFormDialog } from "./activity-form-dialog";
-import { dayNumber, deriveDays, formatDayLabel } from "./format";
+import { dayNumber, deriveDays, formatDayLabel, formatDayShort, todayIso } from "./format";
 import { SortableActivityCard } from "./sortable-activity-card";
 
 type EditingHint = { name: string; color: string };
@@ -131,6 +132,33 @@ export function ItineraryBoard({
 
   const flashing = useRecentlyEdited(activities);
 
+  // --- Long-trip day navigation (C.4 stage 2) ---
+  // Focus drives the rail highlight (and, in time, the map). Collapse defaults
+  // to "today + the days still ahead" so a 40-day trip opens on what's next.
+  const today = todayIso();
+  const todayInTrip = days.includes(today);
+  const emptyDays = useMemo(
+    () => new Set(days.filter((iso) => (byDate.get(iso) ?? []).length === 0)),
+    [days, byDate],
+  );
+  const [focusedIso, setFocusedIso] = useState<string>(() =>
+    todayInTrip ? today : (days[0] ?? ""),
+  );
+  const [collapseOverride, setCollapseOverride] = useState<Record<string, boolean>>({});
+  const defaultOpen = (iso: string): boolean =>
+    (byDate.get(iso) ?? []).length > 0 && (!todayInTrip || iso >= today);
+  const isOpen = (iso: string): boolean => collapseOverride[iso] ?? defaultOpen(iso);
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+
+  const jumpTo = (iso: string) => {
+    if (!iso) return;
+    setFocusedIso(iso);
+    setCollapseOverride((o) => ({ ...o, [iso]: true }));
+    requestAnimationFrame(() =>
+      sectionRefs.current[iso]?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
+
   // Tell the room which activity we're editing, so others see the hint.
   useEffect(() => {
     const editing = dialog?.mode === "edit" ? dialog.activity.id : null;
@@ -208,17 +236,7 @@ export function ItineraryBoard({
   const isEmpty = activities.length === 0 && days.length === 0;
 
   return (
-    <section className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="font-display text-xl font-bold">Itinerary</h2>
-        {canEdit && (
-          <Button size="sm" onClick={() => openCreate(days[0] ?? null)}>
-            <Plus aria-hidden />
-            Add activity
-          </Button>
-        )}
-      </div>
-
+    <section className="flex flex-col gap-3">
       {isEmpty ? (
         <div className="cv-card flex flex-col items-center gap-3 p-10 text-center">
           <p className="font-display text-lg font-bold">Nothing planned yet</p>
@@ -234,75 +252,129 @@ export function ItineraryBoard({
           )}
         </div>
       ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
-          onDragEnd={handleDragEnd}
-          onDragCancel={() => setActiveId(null)}
-        >
-          {days.map((iso) => (
-            <DaySection
-              key={iso}
-              iso={iso}
-              n={dayNumber(iso, trip.startDate)}
-              items={byDate.get(iso) ?? []}
-              canEdit={canEdit}
-              editingHints={editingHints}
-              flashing={flashing}
-              onAdd={() => openCreate(iso)}
-              onEdit={openEdit}
-              onDelete={remove}
-              renderFooter={renderFooter}
-            />
-          ))}
-
-          <section className="flex flex-col gap-3">
-            <div className="flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Lightbulb aria-hidden className="size-5 text-[var(--accent-strong)]" />
-                <h3 className="font-display text-lg font-bold">Ideas</h3>
-                {ideas.length > 0 && (
-                  <span className="text-sm font-medium text-muted-foreground">{ideas.length}</span>
-                )}
+        <>
+          {/* Sticky day-jump rail — scannable across a 2-day weekend or a 40-day epic. */}
+          <div className="-mx-5 -mt-5 sticky top-0 z-10 mb-1 border-b border-border/70 bg-background/95 px-5 py-2 backdrop-blur">
+            <div className="flex items-center gap-2">
+              <div className="-mx-1 min-w-0 flex-1 overflow-x-auto px-1">
+                <DayRail
+                  days={days}
+                  focusedIso={focusedIso}
+                  today={todayInTrip ? today : null}
+                  emptyDays={emptyDays}
+                  onJump={jumpTo}
+                />
               </div>
+              {todayInTrip && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => jumpTo(today)}
+                >
+                  Today
+                </Button>
+              )}
+              {days.length > 1 && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="hidden shrink-0 sm:inline-flex"
+                  onClick={() => jumpTo(days[0] ?? "")}
+                >
+                  Trip start
+                </Button>
+              )}
               {canEdit && (
-                <Button size="sm" variant="ghost" onClick={() => openCreate(null)}>
+                <Button size="sm" className="shrink-0" onClick={() => openCreate(days[0] ?? null)}>
                   <Plus aria-hidden />
-                  Add idea
+                  Add activity
                 </Button>
               )}
             </div>
-            <ActivityColumn
-              containerId={IDEAS}
-              items={ideas}
-              canEdit={canEdit}
-              editingHints={editingHints}
-              flashing={flashing}
-              emptyLabel="No ideas yet"
-              onAdd={() => openCreate(null)}
-              onEdit={openEdit}
-              onDelete={remove}
-              renderFooter={renderFooter}
-            />
-          </section>
+          </div>
 
-          {/* No drop animation: our reorder lands via the async activity.move
-              optimistic update, so the default settle would animate the overlay
-              back to the (not-yet-moved) source slot before the list re-renders
-              — the "snap back, then jump" glitch. Dropping instantly into the
-              new slot reads clean. */}
-          <DragOverlay dropAnimation={null}>
-            {activeActivity ? (
-              <ActivityCard
-                activity={activeActivity}
-                canEdit={false}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
+            onDragEnd={handleDragEnd}
+            onDragCancel={() => setActiveId(null)}
+          >
+            <div className="flex flex-col gap-1.5">
+              {days.map((iso) => (
+                <DayBlock
+                  key={iso}
+                  sectionRef={(el) => {
+                    sectionRefs.current[iso] = el;
+                  }}
+                  iso={iso}
+                  n={dayNumber(iso, trip.startDate)}
+                  items={byDate.get(iso) ?? []}
+                  isToday={iso === today}
+                  open={isOpen(iso)}
+                  onToggle={() => setCollapseOverride((o) => ({ ...o, [iso]: !isOpen(iso) }))}
+                  onFocus={() => setFocusedIso(iso)}
+                  canEdit={canEdit}
+                  editingHints={editingHints}
+                  flashing={flashing}
+                  onAdd={() => openCreate(iso)}
+                  onEdit={openEdit}
+                  onDelete={remove}
+                  renderFooter={renderFooter}
+                />
+              ))}
+            </div>
+
+            <section className="mt-3 flex flex-col gap-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Lightbulb aria-hidden className="size-5 text-[var(--accent-strong)]" />
+                  <h3 className="font-display text-lg font-bold">Ideas</h3>
+                  {ideas.length > 0 && (
+                    <span className="text-sm font-medium text-muted-foreground">
+                      {ideas.length}
+                    </span>
+                  )}
+                </div>
+                {canEdit && (
+                  <Button size="sm" variant="ghost" onClick={() => openCreate(null)}>
+                    <Plus aria-hidden />
+                    Add idea
+                  </Button>
+                )}
+              </div>
+              <ActivityColumn
+                containerId={IDEAS}
+                items={ideas}
+                canEdit={canEdit}
+                editingHints={editingHints}
+                flashing={flashing}
+                emptyLabel="No ideas yet"
+                onAdd={() => openCreate(null)}
                 onEdit={openEdit}
                 onDelete={remove}
+                renderFooter={renderFooter}
               />
-            ) : null}
-          </DragOverlay>
-        </DndContext>
+            </section>
+
+            {/* No drop animation: our reorder lands via the async activity.move
+                optimistic update, so the default settle would animate the overlay
+                back to the (not-yet-moved) source slot before the list re-renders
+                — the "snap back, then jump" glitch. Dropping instantly into the
+                new slot reads clean. */}
+            <DragOverlay dropAnimation={null}>
+              {activeActivity ? (
+                <ActivityCard
+                  activity={activeActivity}
+                  canEdit={false}
+                  onEdit={openEdit}
+                  onDelete={remove}
+                />
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </>
       )}
 
       <ActivityFormDialog
@@ -322,10 +394,15 @@ export function ItineraryBoard({
   );
 }
 
-function DaySection({
+function DayBlock({
+  sectionRef,
   iso,
   n,
   items,
+  isToday,
+  open,
+  onToggle,
+  onFocus,
   canEdit,
   editingHints,
   flashing,
@@ -334,9 +411,14 @@ function DaySection({
   onDelete,
   renderFooter,
 }: {
+  sectionRef: (el: HTMLElement | null) => void;
   iso: string;
   n: number | null;
   items: Activity[];
+  isToday: boolean;
+  open: boolean;
+  onToggle: () => void;
+  onFocus: () => void;
   canEdit: boolean;
   editingHints: Map<string, EditingHint>;
   flashing: Set<string>;
@@ -345,35 +427,199 @@ function DaySection({
   onDelete: (activity: Activity) => void;
   renderFooter: (activity: Activity) => ReactNode;
 }) {
+  // Drop target sits on the whole day, so a card lands even on a collapsed or
+  // empty day (handleDragEnd reads the `col:<iso>` id → appends to that day).
+  const { setNodeRef, isOver } = useDroppable({ id: colId(iso) });
+
+  // Empty day → one thin row, not a full dashed box. A 40-day trip would
+  // otherwise be ~40 big boxes to scroll past.
+  if (items.length === 0) {
+    const label = (
+      <>
+        <DayName n={n} />
+        <span className="truncate">{formatDayLabel(iso)} · nothing planned</span>
+        {isToday && <TodayBadge className="ml-auto" />}
+      </>
+    );
+    return (
+      <div ref={sectionRef} className="scroll-mt-20" onMouseEnter={onFocus}>
+        {canEdit ? (
+          <button
+            ref={setNodeRef}
+            type="button"
+            onClick={onAdd}
+            className={cn(
+              "flex w-full items-center gap-2 rounded-control border-2 border-dashed border-border/55 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground",
+              isOver && "border-foreground/50 bg-accent/40 text-foreground",
+            )}
+          >
+            <Plus aria-hidden className="size-4 shrink-0 text-[var(--ink-faint)]" />
+            {label}
+          </button>
+        ) : (
+          <div
+            ref={setNodeRef}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground"
+          >
+            {label}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <h3 className="font-display text-lg font-bold">
+    <div ref={sectionRef} className="scroll-mt-20" onMouseEnter={onFocus}>
+      <div ref={setNodeRef} className={cn("rounded-card", isOver && "bg-accent/30")}>
+        <DayHeader
+          n={n}
+          iso={iso}
+          isToday={isToday}
+          count={items.length}
+          open={open}
+          onToggle={onToggle}
+          canEdit={canEdit}
+          onAdd={onAdd}
+        />
+        {open && (
+          <SortableContext
+            id={colId(iso)}
+            items={items.map((a) => a.id)}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="flex flex-col gap-2 py-1 pl-7">
+              {items.map((activity) => (
+                <SortableActivityCard
+                  key={activity.id}
+                  activity={activity}
+                  canEdit={canEdit}
+                  editingBy={editingHints.get(activity.id)}
+                  flash={flashing.has(activity.id)}
+                  onEdit={onEdit}
+                  onDelete={onDelete}
+                  footer={renderFooter(activity)}
+                />
+              ))}
+            </div>
+          </SortableContext>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DayName({ n }: { n: number | null }) {
+  return <span className="font-display font-bold text-foreground">{n ? `Day ${n}` : "Day"}</span>;
+}
+
+function TodayBadge({ className }: { className?: string }) {
+  return (
+    <span
+      className={cn(
+        "shrink-0 rounded-pill border bg-accent-soft px-2 py-0.5 font-body text-[10px] font-bold uppercase tracking-wide text-foreground",
+        className,
+      )}
+    >
+      Today
+    </span>
+  );
+}
+
+function DayHeader({
+  n,
+  iso,
+  isToday,
+  count,
+  open,
+  onToggle,
+  canEdit,
+  onAdd,
+}: {
+  n: number | null;
+  iso: string;
+  isToday: boolean;
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+  canEdit: boolean;
+  onAdd: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        className="flex min-w-0 items-center gap-1.5 rounded-control text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+      >
+        <ChevronDown
+          aria-hidden
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform",
+            !open && "-rotate-90",
+          )}
+        />
+        <h3 className="truncate font-display text-lg font-bold">
           {n ? `Day ${n}` : "Day"}
           <span className="ml-2 font-body text-sm font-medium text-muted-foreground">
             {formatDayLabel(iso)}
           </span>
         </h3>
-        {canEdit && (
-          <Button size="sm" variant="ghost" onClick={onAdd}>
-            <Plus aria-hidden />
-            Add
-          </Button>
-        )}
-      </div>
-      <ActivityColumn
-        containerId={colId(iso)}
-        items={items}
-        canEdit={canEdit}
-        editingHints={editingHints}
-        flashing={flashing}
-        emptyLabel="Nothing planned yet"
-        onAdd={onAdd}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        renderFooter={renderFooter}
-      />
-    </section>
+      </button>
+      {isToday && <TodayBadge />}
+      <span className="ml-auto shrink-0 font-medium text-muted-foreground text-xs">
+        {count} {count === 1 ? "stop" : "stops"}
+      </span>
+      {canEdit && (
+        <Button size="sm" variant="ghost" className="shrink-0" onClick={onAdd}>
+          <Plus aria-hidden />
+          Add
+        </Button>
+      )}
+    </div>
+  );
+}
+
+function DayRail({
+  days,
+  focusedIso,
+  today,
+  emptyDays,
+  onJump,
+}: {
+  days: string[];
+  focusedIso: string;
+  today: string | null;
+  emptyDays: Set<string>;
+  onJump: (iso: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {days.map((iso) => {
+        const focused = iso === focusedIso;
+        const empty = emptyDays.has(iso);
+        return (
+          <button
+            key={iso}
+            type="button"
+            onClick={() => onJump(iso)}
+            aria-current={focused ? "true" : undefined}
+            className={cn(
+              "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-control border-2 px-2.5 py-1 font-body font-semibold text-xs transition-colors",
+              focused
+                ? "border-border bg-card text-foreground shadow-control"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+              empty && !focused && "opacity-55",
+            )}
+          >
+            {formatDayShort(iso)}
+            {iso === today && (
+              <span aria-hidden className="size-1.5 rounded-full bg-[var(--accent-strong)]" />
+            )}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
