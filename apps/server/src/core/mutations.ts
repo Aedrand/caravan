@@ -10,7 +10,7 @@ import type {
   MutationType,
   Role,
 } from "@caravan/shared";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, lt } from "drizzle-orm";
 import type { Db } from "../db";
 import { schema } from "../db";
 import { hasRole } from "./permissions";
@@ -221,6 +221,28 @@ export function eventsSince(db: Db, tripId: string, since: number, limit = 500):
     .from(schema.feedEvents)
     .where(and(eq(schema.feedEvents.tripId, tripId), gt(schema.feedEvents.version, since)))
     .orderBy(asc(schema.feedEvents.version))
+    .limit(limit)
+    .all()
+    .map(rowToEvent);
+}
+
+/** Feed reads (PD-7): events newest first, optionally older than `before`. */
+export function eventsBefore(
+  db: Db,
+  tripId: string,
+  before: number | null,
+  limit: number,
+): FeedEvent[] {
+  return db
+    .select()
+    .from(schema.feedEvents)
+    .where(
+      and(
+        eq(schema.feedEvents.tripId, tripId),
+        before === null ? undefined : lt(schema.feedEvents.version, before),
+      ),
+    )
+    .orderBy(desc(schema.feedEvents.version))
     .limit(limit)
     .all()
     .map(rowToEvent);

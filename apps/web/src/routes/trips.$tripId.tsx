@@ -13,6 +13,7 @@ import {
 import { useRef, useState } from "react";
 import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
 import { DeleteTripDialog } from "@/components/trips/delete-trip-dialog";
+import { FeedPanel } from "@/components/trips/feed-panel";
 import { formatTripDates } from "@/components/trips/format";
 import { MembersPanel } from "@/components/trips/members-panel";
 import { PresenceStrip } from "@/components/trips/presence-strip";
@@ -192,6 +193,8 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
       </header>
 
       <ItineraryBoard snapshot={snapshot} canEdit={canEdit} />
+
+      <FeedPanel tripId={trip.id} members={snapshot.members} />
 
       <MembersPanel />
 

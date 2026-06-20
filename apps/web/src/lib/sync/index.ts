@@ -8,5 +8,6 @@ export {
   useTripMutation,
   useTripSnapshot,
 } from "./context";
+export { type FeedPage, useFeed, useMarkSeen, useSeen } from "./feed";
 export { tripKeys } from "./keys";
 export { type ConnectionStatus, TripSocket, type TripSocketOptions } from "./socket";

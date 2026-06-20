@@ -18,6 +18,7 @@ import {
 import { apiFetch, apiPost } from "@/lib/api";
 import { authClient } from "@/lib/auth-client";
 import { applyEvent, applyMutationOptimistic } from "./apply";
+import { appendFeedEvent } from "./feed";
 import { tripKeys } from "./keys";
 import {
   createId,
@@ -109,6 +110,8 @@ function reconcileEvent(
     // The dashboard list renders trip names/archive state — keep it fresh.
     queryClient.invalidateQueries({ queryKey: tripKeys.list });
   }
+  // Every authoritative event is a feed entry (PD-7) — keep an open feed live.
+  appendFeedEvent(queryClient, tripId, event);
 }
 
 function handleSyncMessage(
