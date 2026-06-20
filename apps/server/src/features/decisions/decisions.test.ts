@@ -8,7 +8,6 @@ import { executeMutation } from "../../core/mutations";
 import { createDb, schema } from "../../db";
 import { runMigrations } from "../../db/migrate";
 import "../index"; // register all handlers (decisions + itinerary + trips)
-import { createDecisionsTables } from "./test-tables";
 
 const tempDirs: string[] = [];
 
@@ -19,9 +18,8 @@ afterEach(() => {
 function harness() {
   const dir = mkdtempSync(path.join(tmpdir(), "caravan-decisions-"));
   tempDirs.push(dir);
-  const { db, sqlite } = createDb(path.join(dir, "test.db"));
+  const { db } = createDb(path.join(dir, "test.db"));
   runMigrations(db);
-  createDecisionsTables(sqlite);
 
   const insertUser = (name: string) => {
     const id = createId();

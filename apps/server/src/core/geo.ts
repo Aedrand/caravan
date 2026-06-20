@@ -1,5 +1,5 @@
 import type { GeoPlace, MapConfig } from "@caravan/shared";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Config } from "../config";
 import type { Db } from "../db";
 import { schema } from "../db";
@@ -32,23 +32,6 @@ export class GeoError extends Error {
   }
 }
 
-/**
- * One-time idempotent creation of the geocode_cache table. Track C declares the
- * table in schema.ts but does NOT ship its migration (anti-collision), so the
- * runtime guarantees it exists. Harmless once a generated migration lands.
- */
-export function ensureGeoCacheTable(db: Db): void {
-  db.run(
-    sql`CREATE TABLE IF NOT EXISTS geocode_cache (
-      key TEXT PRIMARY KEY,
-      value TEXT NOT NULL,
-      created_at INTEGER NOT NULL,
-      expires_at INTEGER NOT NULL
-    )`,
-  );
-}
-
-/** Simple per-deployment token bucket: N upstream calls per rolling minute. */
 export function createRateLimiter(perMinute: number, now: () => number = Date.now) {
   let tokens = perMinute;
   let last = now();

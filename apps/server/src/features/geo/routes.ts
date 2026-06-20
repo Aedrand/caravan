@@ -2,14 +2,7 @@ import type { GeoReverseResponse, GeoSearchResponse, MapConfig } from "@caravan/
 import { type Context, Hono } from "hono";
 import type { AuthedEnv } from "../../auth/session";
 import type { Config } from "../../config";
-import {
-  buildMapConfig,
-  createRateLimiter,
-  ensureGeoCacheTable,
-  GeoError,
-  geoReverse,
-  geoSearch,
-} from "../../core/geo";
+import { buildMapConfig, createRateLimiter, GeoError, geoReverse, geoSearch } from "../../core/geo";
 import type { Db } from "../../db";
 import type { Logger } from "../../logger";
 
@@ -21,7 +14,6 @@ import type { Logger } from "../../logger";
  */
 export function createGeoRoutes(deps: { db: Db; config: Config; logger: Logger }) {
   const { db, config, logger } = deps;
-  ensureGeoCacheTable(db);
   const limiter = createRateLimiter(config.geo.rateLimitPerMinute);
   const geoDeps = { db, config, logger, limiter };
 

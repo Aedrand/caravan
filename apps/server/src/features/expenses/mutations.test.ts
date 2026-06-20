@@ -7,7 +7,6 @@ import { executeMutation, MutationError } from "../../core/mutations";
 import { createDb, schema } from "../../db";
 import { runMigrations } from "../../db/migrate";
 import "../../features"; // registers all mutation handlers
-import { createExpenseTables } from "./test-tables";
 
 const tempDirs: string[] = [];
 
@@ -21,7 +20,6 @@ function harness() {
   tempDirs.push(dir);
   const { db, sqlite } = createDb(path.join(dir, "test.db"));
   runMigrations(db);
-  createExpenseTables(sqlite); // tables have no committed migration yet (anti-collision)
 
   const insertUser = (name: string) => {
     const id = createId();

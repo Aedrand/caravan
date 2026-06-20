@@ -11,7 +11,6 @@ import { runMigrations } from "./db/migrate";
 // Side-effect: register every feature's mutation handlers with the pipeline.
 import "./features";
 // Track A: temporary DDL until the integrator generates the migration (anti-collision rule 1).
-import { createDecisionsTables } from "./features/decisions/test-tables";
 import { findValidInvite } from "./features/trips/invites";
 import { createLogger } from "./logger";
 
@@ -24,7 +23,6 @@ async function main() {
   try {
     db = createDb(config.dbPath);
     runMigrations(db.db);
-    createDecisionsTables(db.sqlite);
     logger.info({ dbPath: config.dbPath }, "database ready");
   } catch (err) {
     logger.fatal({ err }, "database migration failed — refusing to start");

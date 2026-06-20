@@ -4,11 +4,11 @@ import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import { loadConfig } from "../config";
 import { createDb } from "../db";
+import { runMigrations } from "../db/migrate";
 import { createLogger } from "../logger";
 import {
   buildMapConfig,
   createRateLimiter,
-  ensureGeoCacheTable,
   type GeoDeps,
   GeoError,
   geoReverse,
@@ -25,7 +25,7 @@ function deps(overrides: Partial<NodeJS.ProcessEnv> = {}): GeoDeps & { takes: ()
   const dir = mkdtempSync(path.join(tmpdir(), "caravan-geo-"));
   tempDirs.push(dir);
   const { db } = createDb(path.join(dir, "test.db"));
-  ensureGeoCacheTable(db);
+  runMigrations(db);
   const config = loadConfig({ DATA_DIR: dir, LOG_LEVEL: "fatal", ...overrides });
   const logger = createLogger(config);
   let takes = 0;
