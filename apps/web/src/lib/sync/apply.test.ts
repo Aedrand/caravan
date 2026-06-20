@@ -80,6 +80,10 @@ function makeSnapshot(overrides: Partial<TripSnapshot> = {}): TripSnapshot {
     trip: makeTrip(),
     members: [makeMember()],
     activities: [makeActivity()],
+    // Track A appended these to the snapshot; existing cases default them empty.
+    votes: [],
+    comments: [],
+    polls: [],
     ...overrides,
   };
 }

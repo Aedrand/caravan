@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { lazy, Suspense, useRef, useState } from "react";
+import { PollsPanel } from "@/components/decisions/polls-panel";
 import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
 import { MapSelectionProvider } from "@/components/map/selection";
 import { DeleteTripDialog } from "@/components/trips/delete-trip-dialog";
@@ -206,6 +207,8 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
           <MapPanel snapshot={snapshot} />
         </Suspense>
       </MapSelectionProvider>
+
+      <PollsPanel snapshot={snapshot} canEdit={canEdit} />
 
       <FeedPanel tripId={trip.id} members={snapshot.members} />
 

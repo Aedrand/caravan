@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 function describe(event: FeedEvent): string {
   const p = (event.payload ?? {}) as Record<string, unknown>;
   const title = typeof p.title === "string" ? p.title : "an activity";
+  const str = (k: string, fallback: string) =>
+    typeof p[k] === "string" ? (p[k] as string) : fallback;
   switch (event.type) {
     case "activity.create":
       return `added ${title}`;
@@ -37,6 +39,27 @@ function describe(event: FeedEvent): string {
       return "created an invite link";
     case "invite.revoke":
       return "revoked an invite link";
+    // --- Track A: votes / comments / polls ---
+    case "vote.toggle":
+      return p.on === false
+        ? `removed their vote on ${str("activityTitle", "an activity")}`
+        : `voted for ${str("activityTitle", "an activity")}`;
+    case "comment.create":
+      return `commented on ${str("targetTitle", p.targetType === "poll" ? "a poll" : "an activity")}`;
+    case "comment.update":
+      return `edited a comment on ${str("targetTitle", p.targetType === "poll" ? "a poll" : "an activity")}`;
+    case "comment.delete":
+      return `deleted a comment on ${str("targetTitle", p.targetType === "poll" ? "a poll" : "an activity")}`;
+    case "poll.create":
+      return `opened the poll “${str("question", "a poll")}”`;
+    case "poll.addOption":
+      return `added an option to “${str("question", "a poll")}”`;
+    case "poll.vote":
+      return `voted in “${str("question", "a poll")}”`;
+    case "poll.close":
+      return `closed the poll “${str("question", "a poll")}”`;
+    case "poll.convert":
+      return `turned “${str("question", "a poll")}” into the idea ${str("activityTitle", "an activity")}`;
     default:
       return "made a change";
   }

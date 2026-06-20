@@ -14,7 +14,15 @@ import { and, asc, desc, eq, gt, lt } from "drizzle-orm";
 import type { Db } from "../db";
 import { schema } from "../db";
 import { hasRole } from "./permissions";
-import { serializeActivity, serializeInvite, serializeMember, serializeTrip } from "./serialize";
+import {
+  serializeActivity,
+  serializeComment,
+  serializeInvite,
+  serializeMember,
+  serializePollWithDetails,
+  serializeTrip,
+  serializeVote,
+} from "./serialize";
 
 /**
  * The mutation pipeline (TD-1, plan §3.3): validate → authorize → apply +
@@ -122,6 +130,37 @@ function readPostImage(tx: Tx, entityType: EntityType, entityId: string): Entity
         .where(eq(schema.inviteLinks.id, entityId))
         .get();
       return row ? serializeInvite(row) : null;
+    }
+    // Track A. A `vote` post-image is the just-cast vote row (null = retracted);
+    // the full voter set rides in the event payload so the client rebuilds the
+    // avatar list directly. Comment null = deleted. Poll entityId is the poll
+    // id, and the image is the whole graph so any sub-change lands atomically.
+    case "vote": {
+      const row = tx
+        .select()
+        .from(schema.activityVotes)
+        .where(eq(schema.activityVotes.id, entityId))
+        .get();
+      return row ? serializeVote(row) : null;
+    }
+    case "comment": {
+      const row = tx.select().from(schema.comments).where(eq(schema.comments.id, entityId)).get();
+      return row ? serializeComment(row) : null;
+    }
+    case "poll": {
+      const poll = tx.select().from(schema.polls).where(eq(schema.polls.id, entityId)).get();
+      if (!poll) return null;
+      const options = tx
+        .select()
+        .from(schema.pollOptions)
+        .where(eq(schema.pollOptions.pollId, entityId))
+        .all();
+      const votes = tx
+        .select()
+        .from(schema.pollVotes)
+        .where(eq(schema.pollVotes.pollId, entityId))
+        .all();
+      return serializePollWithDetails(poll, options, votes);
     }
   }
 }

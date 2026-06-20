@@ -154,3 +154,111 @@ export const feedEvents = sqliteTable(
   },
   (t) => [uniqueIndex("feed_events_trip_version").on(t.tripId, t.version)],
 );
+
+// ---------------------------------------------------------------------------
+// Track A — group decisions (votes / polls / comments). Additive tables only;
+// migrations are generated centrally at integration (anti-collision rule 1).
+// ---------------------------------------------------------------------------
+
+/** A single positive "I'm in" per member per activity (PD-2). */
+export const activityVotes = sqliteTable(
+  "activity_votes",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    activityId: text("activity_id")
+      .notNull()
+      .references(() => activities.id, { onDelete: "cascade" }),
+    /** Membership id of the voter. */
+    memberId: text("member_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    // One vote per member per activity — the toggle's invariant (PD-2).
+    uniqueIndex("activity_votes_activity_member").on(t.activityId, t.memberId),
+    index("activity_votes_trip").on(t.tripId),
+  ],
+);
+
+/** Flat comment streams on an activity or a poll (PD-4). */
+export const comments = sqliteTable(
+  "comments",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    /** Polymorphic target: "activity" | "poll" (no FK — target lives in either table). */
+    targetType: text("target_type", { enum: ["activity", "poll"] }).notNull(),
+    targetId: text("target_id").notNull(),
+    /** Membership id of the author. */
+    authorId: text("author_id").notNull(),
+    body: text("body").notNull(),
+    createdAt: integer("created_at").notNull(),
+    /** Null until first edited (PD-4). */
+    editedAt: integer("edited_at"),
+  },
+  (t) => [index("comments_trip_target").on(t.tripId, t.targetType, t.targetId)],
+);
+
+/** Open questions that aren't activity-shaped (PD-3). */
+export const polls = sqliteTable(
+  "polls",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    question: text("question").notNull(),
+    multiSelect: integer("multi_select", { mode: "boolean" }).notNull().default(false),
+    allowMemberOptions: integer("allow_member_options", { mode: "boolean" })
+      .notNull()
+      .default(true),
+    /** Membership id of the creator (creator or owner may close). */
+    createdBy: text("created_by").notNull(),
+    closesAt: integer("closes_at"),
+    closedAt: integer("closed_at"),
+    /** Set when the winning option is converted to an activity (A.3). */
+    convertedActivityId: text("converted_activity_id"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("polls_trip").on(t.tripId)],
+);
+
+export const pollOptions = sqliteTable(
+  "poll_options",
+  {
+    id: text("id").primaryKey(),
+    pollId: text("poll_id")
+      .notNull()
+      .references(() => polls.id, { onDelete: "cascade" }),
+    label: text("label").notNull(),
+    /** Membership id of whoever added the option. */
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("poll_options_poll").on(t.pollId)],
+);
+
+export const pollVotes = sqliteTable(
+  "poll_votes",
+  {
+    id: text("id").primaryKey(),
+    pollId: text("poll_id")
+      .notNull()
+      .references(() => polls.id, { onDelete: "cascade" }),
+    optionId: text("option_id")
+      .notNull()
+      .references(() => pollOptions.id, { onDelete: "cascade" }),
+    /** Membership id of the voter (visible — PD-3). */
+    memberId: text("member_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    // One vote per member per OPTION; multi-select is many such rows per poll.
+    uniqueIndex("poll_votes_option_member").on(t.optionId, t.memberId),
+    index("poll_votes_poll").on(t.pollId),
+  ],
+);
