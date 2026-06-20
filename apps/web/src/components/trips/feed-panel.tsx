@@ -84,12 +84,23 @@ function describe(event: FeedEvent): string {
   }
 }
 
-export function FeedPanel({ tripId, members }: { tripId: string; members: TripMember[] }) {
+export function FeedPanel({
+  tripId,
+  members,
+  embedded = false,
+}: {
+  tripId: string;
+  members: TripMember[];
+  // Drawer mode (C.4): always-open rows, no collapsible card chrome — the
+  // workspace's feed drawer supplies the "What changed" header around it.
+  embedded?: boolean;
+}) {
   const feedQuery = useFeed(tripId);
   const seenQuery = useSeen(tripId);
   const markSeen = useMarkSeen(tripId);
 
-  const [expanded, setExpanded] = useState(false);
+  const [expandedState, setExpanded] = useState(false);
+  const expanded = embedded || expandedState;
   // Frozen at open so the divider doesn't jump as we mark things seen.
   const [seenAtOpen, setSeenAtOpen] = useState(0);
 
@@ -123,6 +134,68 @@ export function FeedPanel({ tripId, members }: { tripId: string; members: TripMe
     if (latestVersion > seen) markSeen(latestVersion);
   }
 
+  const body =
+    events.length === 0 ? (
+      <p className="py-3 text-sm text-muted-foreground">
+        Nothing's happened yet — changes show up here as the group plans.
+      </p>
+    ) : (
+      <ul className="flex flex-col">
+        {events.map((event, i) => {
+          const prev = events[i - 1];
+          const showDivider =
+            prev !== undefined && prev.version > seenAtOpen && event.version <= seenAtOpen;
+          const member = event.actorMemberId ? memberById.get(event.actorMemberId) : undefined;
+          const name = event.actorType !== "user" ? "Scout" : (member?.name ?? "Someone");
+          const color = member
+            ? (colors.get(member.id) ?? FALLBACK_PERSON_COLOR)
+            : "var(--ink-soft)";
+          return (
+            <Fragment key={event.id}>
+              {showDivider && (
+                <li
+                  aria-hidden
+                  className="flex items-center gap-2 py-2 text-xs font-medium text-muted-foreground"
+                >
+                  <span className="h-px flex-1 bg-[var(--ink-faint)]" />
+                  caught up to here
+                  <span className="h-px flex-1 bg-[var(--ink-faint)]" />
+                </li>
+              )}
+              <li className="flex items-start gap-2.5 py-2">
+                <span
+                  aria-hidden
+                  className="mt-0.5 flex size-6 shrink-0 select-none items-center justify-center rounded-full text-[11px] font-semibold uppercase text-white"
+                  style={{ backgroundColor: color }}
+                >
+                  {name.trim().charAt(0) || "?"}
+                </span>
+                <div className="min-w-0">
+                  <p className="text-sm leading-snug">
+                    <span className="font-semibold">{name}</span> {describe(event)}
+                    {event.actorType !== "user" && (
+                      <span aria-hidden className="ml-1 text-[var(--accent-strong)]">
+                        ✦
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{relativeTime(event.createdAt)}</p>
+                </div>
+              </li>
+            </Fragment>
+          );
+        })}
+        {hasMore && (
+          <li className="py-2 text-center text-xs text-muted-foreground">
+            Earlier activity isn't shown here.
+          </li>
+        )}
+      </ul>
+    );
+
+  // Drawer mode: rows only — the drawer owns the header and scroll.
+  if (embedded) return body;
+
   return (
     <section className="cv-card flex flex-col">
       <button
@@ -148,71 +221,7 @@ export function FeedPanel({ tripId, members }: { tripId: string; members: TripMe
         />
       </button>
 
-      {expanded && (
-        <div className="cv-divider px-4 pt-2 pb-3">
-          {events.length === 0 ? (
-            <p className="py-3 text-sm text-muted-foreground">
-              Nothing's happened yet — changes show up here as the group plans.
-            </p>
-          ) : (
-            <ul className="flex flex-col">
-              {events.map((event, i) => {
-                const prev = events[i - 1];
-                const showDivider =
-                  prev !== undefined && prev.version > seenAtOpen && event.version <= seenAtOpen;
-                const member = event.actorMemberId
-                  ? memberById.get(event.actorMemberId)
-                  : undefined;
-                const name = event.actorType !== "user" ? "Scout" : (member?.name ?? "Someone");
-                const color = member
-                  ? (colors.get(member.id) ?? FALLBACK_PERSON_COLOR)
-                  : "var(--ink-soft)";
-                return (
-                  <Fragment key={event.id}>
-                    {showDivider && (
-                      <li
-                        aria-hidden
-                        className="flex items-center gap-2 py-2 text-xs font-medium text-muted-foreground"
-                      >
-                        <span className="h-px flex-1 bg-[var(--ink-faint)]" />
-                        caught up to here
-                        <span className="h-px flex-1 bg-[var(--ink-faint)]" />
-                      </li>
-                    )}
-                    <li className="flex items-start gap-2.5 py-2">
-                      <span
-                        aria-hidden
-                        className="mt-0.5 flex size-6 shrink-0 select-none items-center justify-center rounded-full text-[11px] font-semibold uppercase text-white"
-                        style={{ backgroundColor: color }}
-                      >
-                        {name.trim().charAt(0) || "?"}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="text-sm leading-snug">
-                          <span className="font-semibold">{name}</span> {describe(event)}
-                          {event.actorType !== "user" && (
-                            <span aria-hidden className="ml-1 text-[var(--accent-strong)]">
-                              ✦
-                            </span>
-                          )}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {relativeTime(event.createdAt)}
-                        </p>
-                      </div>
-                    </li>
-                  </Fragment>
-                );
-              })}
-              {hasMore && (
-                <li className="py-2 text-center text-xs text-muted-foreground">
-                  Earlier activity isn't shown here.
-                </li>
-              )}
-            </ul>
-          )}
-        </div>
-      )}
+      {expanded && <div className="cv-divider px-4 pt-2 pb-3">{body}</div>}
     </section>
   );
 }

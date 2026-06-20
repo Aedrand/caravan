@@ -47,6 +47,17 @@ async function openEdit(page: Page, title: string) {
   await expect(page.getByRole("dialog", { name: "Edit activity" })).toBeVisible();
 }
 
+// The feed is a bell-triggered modal drawer now (C.4 workspace IA): open it,
+// read the attributed rows, then dismiss so it stops covering the itinerary.
+async function expectFeed(page: Page, ...lines: string[]) {
+  await page.getByRole("button", { name: "What changed" }).click();
+  for (const line of lines) {
+    await expect(page.getByText(line)).toBeVisible({ timeout: LIVE });
+  }
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog", { name: "What changed" })).toBeHidden();
+}
+
 test("two members, two browsers: edits, presence, feed, convergence, catch-up", async ({
   browser,
 }) => {
@@ -65,9 +76,13 @@ test("two members, two browsers: edits, presence, feed, convergence, catch-up", 
   await expect(a).toHaveURL(/\/trips\/[0-9a-f]{32}$/);
   await expect(a.getByText("Live")).toBeVisible();
 
+  // Members live in the Group view now (C.4 workspace IA).
+  await a.getByRole("button", { name: "Group" }).click();
   const members = a.getByRole("region", { name: "Members" });
   await members.getByRole("button", { name: "Create invite link" }).click();
   const inviteUrl = await members.getByRole("textbox", { name: "Invite link" }).inputValue();
+  // Back to Plan for the itinerary work below.
+  await a.getByRole("button", { name: "Plan" }).click();
 
   // Editor (already has an account) accepts the invite and lands in the trip.
   await signIn(b, editor.email, editor.password);
@@ -86,10 +101,8 @@ test("two members, two browsers: edits, presence, feed, convergence, catch-up", 
   await expect(a.getByRole("heading", { name: "Harbor dinner" })).toBeVisible({ timeout: LIVE });
   await expect(b.getByRole("heading", { name: "Castle tour" })).toBeVisible({ timeout: LIVE });
 
-  // ⑤ Feed attributes both actors. (Open B's feed; it stays open below.)
-  await b.getByRole("button", { name: /^Activity/ }).click();
-  await expect(b.getByText("Avery Trailhead added Castle tour")).toBeVisible({ timeout: LIVE });
-  await expect(b.getByText("Bela Wanderer added Harbor dinner")).toBeVisible({ timeout: LIVE });
+  // ⑤ Feed attributes both actors (open B's feed drawer, read, dismiss).
+  await expectFeed(b, "Avery Trailhead added Castle tour", "Bela Wanderer added Harbor dinner");
 
   // ④ Editing hint: A opens the editor on Castle tour → B sees the live hint,
   // which clears when A backs out.
@@ -108,7 +121,7 @@ test("two members, two browsers: edits, presence, feed, convergence, catch-up", 
   await edit.getByLabel("Day").selectOption(DAY_1);
   await edit.getByRole("button", { name: "Save changes" }).click();
   await expect(edit).toBeHidden();
-  await expect(b.getByText("Avery Trailhead moved Harbor dinner")).toBeVisible({ timeout: LIVE });
+  await expectFeed(b, "Avery Trailhead moved Harbor dinner");
 
   // ⑥ Offline catch-up: B drops the network, A adds while B is dark, B comes
   // back and the reconnect replays the missed state.
