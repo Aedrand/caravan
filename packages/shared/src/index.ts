@@ -5,6 +5,7 @@ export * from "./schemas/activity";
 export * from "./schemas/api";
 export * from "./schemas/common";
 export * from "./schemas/feed";
+export * from "./schemas/geo";
 export * from "./schemas/trip";
 export * from "./schemas/ws";
 export * from "./time";

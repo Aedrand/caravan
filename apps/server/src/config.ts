@@ -23,6 +23,26 @@ const EnvSchema = z.object({
   /** Optional first-boot admin pre-seed (TD-4); ignored once users exist. */
   ADMIN_EMAIL: z.email().optional(),
   ADMIN_PASSWORD: z.string().min(8).optional(),
+
+  // --- Maps & geocoding (TD-5, Track C). All optional: defaults are keyless. ---
+  /** Forward/reverse geocoder. Photon (default) is keyless; others need a key. */
+  GEOCODING_PROVIDER: z.enum(["photon", "geoapify", "locationiq", "nominatim"]).default("photon"),
+  /** Override the Photon base URL — e.g. a self-hosted regional Photon (TD-5 heavy mode). */
+  PHOTON_URL: z.url().default("https://photon.komoot.io"),
+  /** Geoapify key — preferred keyed upgrade (3k req/day free). */
+  GEOAPIFY_KEY: z.string().min(1).optional(),
+  /** LocationIQ key (5k/day; attribution link required). */
+  LOCATIONIQ_KEY: z.string().min(1).optional(),
+  /** Nominatim base URL — only legitimate for reverse geocoding (TD-5). */
+  NOMINATIM_URL: z.url().default("https://nominatim.openstreetmap.org"),
+  /** Per-deployment geo rate limit: max upstream requests per minute. */
+  GEO_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
+  /** Vector tile source for the browser map (TD-5). OpenFreeMap is keyless. */
+  TILE_PROVIDER: z.enum(["openfreemap", "maptiler", "stadia"]).default("openfreemap"),
+  /** MapTiler key — nicer tile styles (non-commercial free tier). */
+  MAPTILER_KEY: z.string().min(1).optional(),
+  /** Stadia key — alternative keyed tile styles. */
+  STADIA_KEY: z.string().min(1).optional(),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -44,6 +64,17 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     webDist: path.resolve(parsed.WEB_DIST),
     adminEmail: parsed.ADMIN_EMAIL,
     adminPassword: parsed.ADMIN_PASSWORD,
+    geo: {
+      geocodingProvider: parsed.GEOCODING_PROVIDER,
+      photonUrl: parsed.PHOTON_URL,
+      geoapifyKey: parsed.GEOAPIFY_KEY,
+      locationiqKey: parsed.LOCATIONIQ_KEY,
+      nominatimUrl: parsed.NOMINATIM_URL,
+      rateLimitPerMinute: parsed.GEO_RATE_LIMIT_PER_MINUTE,
+      tileProvider: parsed.TILE_PROVIDER,
+      maptilerKey: parsed.MAPTILER_KEY,
+      stadiaKey: parsed.STADIA_KEY,
+    },
   };
 }
 

@@ -44,3 +44,15 @@ test("unknown API routes return a JSON 404 envelope, not the SPA", async () => {
   expect(res.status).toBe(404);
   expect(await res.json()).toEqual({ error: { code: "not_found", message: "Not found" } });
 });
+
+// Track C: geo proxy mounts and is session-gated (keys + rate limit stay server-side).
+// App construction also exercises ensureGeoCacheTable against a migrate()-only DB.
+test("GET /api/geo/map-config requires a session", async () => {
+  const res = await app.request("/api/geo/map-config");
+  expect(res.status).toBe(401);
+});
+
+test("GET /api/geo/search requires a session", async () => {
+  const res = await app.request("/api/geo/search?q=lisbon");
+  expect(res.status).toBe(401);
+});

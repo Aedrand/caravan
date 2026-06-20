@@ -3,11 +3,14 @@ import {
   type Activity,
   type ActivityCategory,
   createId,
+  type GeoPlace,
   type MutationPayload,
   type MutationResponse,
   type MutationType,
+  type Place,
 } from "@caravan/shared";
 import { type FormEvent, useState } from "react";
+import { PlaceAutocomplete } from "@/components/map/place-autocomplete";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -86,6 +89,21 @@ function ActivityForm({
   const [startTime, setStartTime] = useState(activity?.startTime ?? "");
   const [endTime, setEndTime] = useState(activity?.endTime ?? "");
   const [location, setLocation] = useState(activity?.placeName ?? "");
+  // Coordinates/provenance from a picked suggestion. Seeded from the activity if
+  // it already had a located place; cleared the moment the user edits the text
+  // (a hand-edited label no longer matches the pin).
+  const [picked, setPicked] = useState<GeoPlace | null>(
+    activity?.placeName && activity.lat != null && activity.lng != null
+      ? {
+          name: activity.placeName,
+          address: activity.address ?? undefined,
+          lat: activity.lat,
+          lng: activity.lng,
+          provider: activity.placeProvider ?? "unknown",
+          ref: activity.placeRef ?? undefined,
+        }
+      : null,
+  );
   const [notes, setNotes] = useState(activity?.notes ?? "");
   const [linkUrl, setLinkUrl] = useState(activity?.linkUrl ?? "");
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +130,20 @@ function ActivityForm({
     const start = startTime || null;
     const end = endTime || null;
     const placeName = location.trim();
-    const place = placeName ? { name: placeName } : null;
+    // A picked suggestion still matching the box → full place with coordinates +
+    // provenance. Otherwise freeform: a name-only place (no pin) — still saves.
+    const place: Place | null = !placeName
+      ? null
+      : picked && picked.name === placeName
+        ? {
+            name: picked.name,
+            address: picked.address,
+            lat: picked.lat,
+            lng: picked.lng,
+            provider: picked.provider,
+            ref: picked.ref,
+          }
+        : { name: placeName };
 
     setSubmitting(true);
     setError(null);
@@ -138,7 +169,14 @@ function ActivityForm({
         if (end !== activity.endTime) patch.endTime = end;
         if (notes !== activity.notes) patch.notes = notes;
         if (link !== activity.linkUrl) patch.linkUrl = link;
-        if ((place?.name ?? null) !== activity.placeName) patch.place = place;
+        // Send `place` when the name OR the coordinates/provenance changed, so
+        // picking a pin for an already-named place still attaches the location.
+        const placeChanged =
+          (place?.name ?? null) !== activity.placeName ||
+          (place?.lat ?? null) !== activity.lat ||
+          (place?.lng ?? null) !== activity.lng ||
+          (place?.ref ?? null) !== activity.placeRef;
+        if (placeChanged) patch.place = place;
 
         if (Object.keys(patch).length > 0) {
           await mutateAsync("activity.update", { activityId: activity.id, patch });
@@ -176,13 +214,24 @@ function ActivityForm({
 
       <div className="grid gap-2">
         <Label htmlFor="activity-location">Location</Label>
-        <Input
-          id="activity-location"
+        <PlaceAutocomplete
+          inputId="activity-location"
           value={location}
-          maxLength={200}
-          placeholder="Where is it? (optional)"
-          onChange={(e) => setLocation(e.target.value)}
+          picked={picked !== null && picked.name === location.trim()}
+          placeholder="Search a place, or just type one (optional)"
+          onTextChange={(text) => {
+            setLocation(text);
+            // Hand-editing the label detaches it from the picked pin.
+            if (picked && text.trim() !== picked.name) setPicked(null);
+          }}
+          onPick={(place) => {
+            setPicked(place);
+            setLocation(place.name);
+          }}
         />
+        {picked && picked.name === location.trim() && (
+          <p className="text-muted-foreground text-xs">Pinned on the map ✓</p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">

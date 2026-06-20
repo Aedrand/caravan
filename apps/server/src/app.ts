@@ -10,6 +10,7 @@ import type { Config } from "./config";
 import { createSyncRoutes } from "./core/sync";
 import type { TripRooms } from "./core/ws";
 import type { Db } from "./db";
+import { createGeoRoutes } from "./features/geo/routes";
 import { createInviteRoutes } from "./features/trips/invite-routes";
 import { createTripsRoutes } from "./features/trips/routes";
 import type { Logger } from "./logger";
@@ -35,9 +36,15 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
     .route("/", createTripsRoutes({ db, logger }))
     .route("/", createSyncRoutes({ db, rooms, logger, upgradeWebSocket }));
 
+  // Geo proxy (Track C): session-gated; keeps geocoder keys + rate limit server-side.
+  const geo = new Hono<AuthedEnv>()
+    .use("*", requireUser(auth))
+    .route("/", createGeoRoutes({ db, config, logger }));
+
   const api = new Hono()
     .get("/health", (c) => c.json({ status: "ok", service: "caravan" }))
     .route("/trips", trips)
+    .route("/geo", geo)
     // Invite door: GET info is public; accept gates itself on a session.
     .route("/invites", createInviteRoutes({ db, rooms, logger, requireUser: requireUser(auth) }));
 

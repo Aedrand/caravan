@@ -110,6 +110,27 @@ export const activities = sqliteTable(
 );
 
 /**
+ * Geocode response cache (TD-5, Track C). Keyed by `<op>:<normalized query>`,
+ * stores the normalized GeoPlace[] JSON the proxy returned. Nominatim *requires*
+ * caching; for Photon it cuts load on the donated public instance. Rows carry
+ * an `expiresAt` so the proxy can treat stale entries as misses.
+ *
+ * NOTE (integrator): this table is declared here but its migration is NOT
+ * committed under drizzle/ (Track C does not run db:generate — anti-collision).
+ * At runtime the geo module creates it idempotently via CREATE TABLE IF NOT
+ * EXISTS (see core/geo.ts → ensureGeoCacheTable). Fold a generated migration in
+ * at integration and the runtime guard becomes a no-op.
+ */
+export const geocodeCache = sqliteTable("geocode_cache", {
+  /** `<provider>:<op>:<normalized key>` — op is `search` | `reverse`. */
+  key: text("key").primaryKey(),
+  /** JSON-encoded normalized GeoPlace[] (search) or GeoPlace|null (reverse). */
+  value: text("value").notNull(),
+  createdAt: integer("created_at").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+});
+
+/**
  * One row per mutation (TD-1): the activity feed, the sync catch-up log, and
  * the attribution record are the same table. The PK is the client-generated
  * mutation id — the INSERT itself is the idempotency check.

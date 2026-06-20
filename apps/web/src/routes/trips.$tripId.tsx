@@ -10,8 +10,9 @@ import {
   Pencil,
   Trash2,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { lazy, Suspense, useRef, useState } from "react";
 import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
+import { MapSelectionProvider } from "@/components/map/selection";
 import { DeleteTripDialog } from "@/components/trips/delete-trip-dialog";
 import { FeedPanel } from "@/components/trips/feed-panel";
 import { formatTripDates } from "@/components/trips/format";
@@ -40,6 +41,12 @@ import {
 } from "@/lib/sync";
 import type { TripSnapshot } from "@/lib/sync/shared";
 import { cn } from "@/lib/utils";
+
+// Lazy: maplibre-gl is heavy (~300 kB gzip). Keep it off the trip route's
+// initial paint; the map streams in once the rest of the trip has rendered.
+const MapPanel = lazy(() =>
+  import("@/components/map/map-panel").then((m) => ({ default: m.MapPanel })),
+);
 
 export const Route = createFileRoute("/trips/$tripId")({
   beforeLoad: async () => {
@@ -192,7 +199,13 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
         )}
       </header>
 
-      <ItineraryBoard snapshot={snapshot} canEdit={canEdit} />
+      <MapSelectionProvider>
+        <ItineraryBoard snapshot={snapshot} canEdit={canEdit} />
+
+        <Suspense fallback={null}>
+          <MapPanel snapshot={snapshot} />
+        </Suspense>
+      </MapSelectionProvider>
 
       <FeedPanel tripId={trip.id} members={snapshot.members} />
 
