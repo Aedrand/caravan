@@ -17,7 +17,14 @@ import { schema } from "../db";
 import type { Logger } from "../logger";
 import { getActiveMember } from "./membership";
 import { eventsBefore, eventsSince, executeMutation, MutationError } from "./mutations";
-import { serializeActivity, serializeMember, serializeTrip } from "./serialize";
+import {
+  serializeActivity,
+  serializeComment,
+  serializeMember,
+  serializePollWithDetails,
+  serializeTrip,
+  serializeVote,
+} from "./serialize";
 import type { createTripRooms } from "./ws";
 
 /**
@@ -142,10 +149,53 @@ export function createSyncRoutes({ db, rooms, logger, upgradeWebSocket }: SyncDe
           .orderBy(asc(schema.activities.position), asc(schema.activities.id))
           .all();
 
+        // Track A — votes / comments / polls ride in the snapshot (additive).
+        const voteRows = db
+          .select()
+          .from(schema.activityVotes)
+          .where(eq(schema.activityVotes.tripId, trip.id))
+          .all();
+        const commentRows = db
+          .select()
+          .from(schema.comments)
+          .where(eq(schema.comments.tripId, trip.id))
+          .orderBy(asc(schema.comments.createdAt), asc(schema.comments.id))
+          .all();
+        const pollRows = db
+          .select()
+          .from(schema.polls)
+          .where(eq(schema.polls.tripId, trip.id))
+          .orderBy(asc(schema.polls.createdAt), asc(schema.polls.id))
+          .all();
+        const optionRows = db
+          .select()
+          .from(schema.pollOptions)
+          .innerJoin(schema.polls, eq(schema.polls.id, schema.pollOptions.pollId))
+          .where(eq(schema.polls.tripId, trip.id))
+          .orderBy(asc(schema.pollOptions.createdAt), asc(schema.pollOptions.id))
+          .all();
+        const pollVoteRows = db
+          .select()
+          .from(schema.pollVotes)
+          .innerJoin(schema.polls, eq(schema.polls.id, schema.pollVotes.pollId))
+          .where(eq(schema.polls.tripId, trip.id))
+          .all();
+
         const snapshot: TripSnapshot = {
           trip: serializeTrip(trip),
           members: memberRows.map((row) => serializeMember(row.member, row.userName)),
           activities: activityRows.map(serializeActivity),
+          votes: voteRows.map(serializeVote),
+          comments: commentRows.map(serializeComment),
+          polls: pollRows.map((poll) =>
+            serializePollWithDetails(
+              poll,
+              optionRows
+                .filter((o) => o.poll_options.pollId === poll.id)
+                .map((o) => o.poll_options),
+              pollVoteRows.filter((v) => v.poll_votes.pollId === poll.id).map((v) => v.poll_votes),
+            ),
+          ),
         };
         return c.json(snapshot);
       })

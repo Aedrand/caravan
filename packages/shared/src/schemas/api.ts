@@ -1,15 +1,28 @@
 import { z } from "zod";
 import { ActivitySchema } from "./activity";
+import { CommentSchema } from "./comment";
 import { CurrencySchema, IsoDateSchema } from "./common";
+import { PollWithDetailsSchema } from "./poll";
 import { RoleSchema, TripMemberSchema, TripSchema } from "./trip";
+import { ActivityVoteSchema } from "./vote";
 
 /** REST DTOs for the sync contract (plan §3.3) and trip CRUD (M1.1). */
 
-/** GET /api/trips/:id/snapshot — full state; `trip.version` is the sync cursor. */
+/**
+ * GET /api/trips/:id/snapshot — full state; `trip.version` is the sync cursor.
+ *
+ * Track A appended `votes`, `comments`, and `polls` (additive — older clients
+ * ignore unknown keys, newer servers always send them). They reconcile through
+ * the same post-image path as activities, so the snapshot stays the single
+ * source the UI renders from.
+ */
 export const TripSnapshotSchema = z.object({
   trip: TripSchema,
   members: z.array(TripMemberSchema),
   activities: z.array(ActivitySchema),
+  votes: z.array(ActivityVoteSchema),
+  comments: z.array(CommentSchema),
+  polls: z.array(PollWithDetailsSchema),
 });
 export type TripSnapshot = z.infer<typeof TripSnapshotSchema>;
 

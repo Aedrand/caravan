@@ -21,6 +21,7 @@ export function ActivityCard({
   dragHandle,
   editingBy,
   flash,
+  footer,
 }: {
   activity: Activity;
   canEdit: boolean;
@@ -31,6 +32,8 @@ export function ActivityCard({
   editingBy?: { name: string; color: string };
   /** Briefly true right after a remote change lands, to draw the eye (PD-5). */
   flash?: boolean;
+  /** Track A: votes + comments rail rendered under the card body (PD-2/PD-4). */
+  footer?: ReactNode;
 }) {
   const meta = CATEGORY_META[activity.category];
   const timeRange = formatTimeRange(activity.startTime, activity.endTime);
@@ -131,6 +134,8 @@ export function ActivityCard({
             )}
           </div>
         )}
+
+        {footer}
       </div>
     </article>
   );

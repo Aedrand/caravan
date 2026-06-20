@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { type Activity, ActivitySchema } from "./activity";
+import { type Comment, CommentSchema } from "./comment";
 import { EpochMsSchema, IdSchema } from "./common";
+import { type PollWithDetails, PollWithDetailsSchema } from "./poll";
 import {
   type InviteLink,
   InviteLinkSchema,
@@ -9,6 +11,7 @@ import {
   TripMemberSchema,
   TripSchema,
 } from "./trip";
+import { type ActivityVote, ActivityVoteSchema } from "./vote";
 
 /**
  * One row per mutation: simultaneously the activity feed (PD-5), the sync
@@ -20,7 +23,16 @@ export const ACTOR_TYPES = ["user", "house_ai", "personal_ai"] as const;
 export const ActorTypeSchema = z.enum(ACTOR_TYPES);
 export type ActorType = z.infer<typeof ActorTypeSchema>;
 
-export const ENTITY_TYPES = ["trip", "member", "invite", "activity"] as const;
+export const ENTITY_TYPES = [
+  "trip",
+  "member",
+  "invite",
+  "activity",
+  // Track A — group decisions (votes/comments/polls).
+  "vote",
+  "comment",
+  "poll",
+] as const;
 export const EntityTypeSchema = z.enum(ENTITY_TYPES);
 export type EntityType = z.infer<typeof EntityTypeSchema>;
 
@@ -30,14 +42,33 @@ export type EntityType = z.infer<typeof EntityTypeSchema>;
  * caches surgically instead of refetching; `null` means the entity no longer
  * exists (hard deletes). Feed payloads stay summaries — this is sync state.
  */
-export type EntityPostImage = Trip | TripMember | InviteLink | Activity;
+export type EntityPostImage =
+  | Trip
+  | TripMember
+  | InviteLink
+  | Activity
+  | ActivityVote
+  | Comment
+  | PollWithDetails;
 
-/** Parse an unknown post-image with the schema for the event's entityType. */
+/**
+ * Parse an unknown post-image with the schema for the event's entityType.
+ *
+ * Track A note: a `vote` toggle that REMOVES a vote has a null post-image, and
+ * an `activity`/`poll`/`comment` hard-delete likewise — null is always valid
+ * and short-circuits before this map (see refineEntity). The schemas here are
+ * the post-image of the surviving row when one exists. A `vote` post-image is
+ * the just-cast vote row; the full voter set rides in the event payload so the
+ * client can rebuild the avatar list without a refetch.
+ */
 export const entityPostImageSchemas = {
   trip: TripSchema,
   member: TripMemberSchema,
   invite: InviteLinkSchema,
   activity: ActivitySchema,
+  vote: ActivityVoteSchema,
+  comment: CommentSchema,
+  poll: PollWithDetailsSchema,
 } as const satisfies Record<EntityType, z.ZodType>;
 
 export const FeedEventSchema = z.object({

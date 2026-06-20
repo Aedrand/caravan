@@ -18,7 +18,15 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { Lightbulb, Plus } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { ActivityFooter } from "@/components/decisions/activity-footer";
+import {
+  commentsFor,
+  useCommentsByTarget,
+  useMembersById,
+  useVotesByActivity,
+} from "@/components/decisions/use-decisions";
 import { Button } from "@/components/ui/button";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
 import { useMyMember, usePresence, useTripMutation } from "@/lib/sync";
@@ -77,7 +85,24 @@ export function ItineraryBoard({
     [trip.startDate, trip.endDate, activities],
   );
   const byDate = useMemo(() => groupByDate(activities), [activities]);
-  const ideas = byDate.get(null) ?? [];
+
+  // Track A: votes + comments rails, and the ideas-by-votes default sort (PD-2).
+  const votesByActivity = useVotesByActivity(snapshot.votes);
+  const commentsByTarget = useCommentsByTarget(snapshot.comments);
+  const membersById = useMembersById(snapshot.members);
+
+  // Ideas sort by enthusiasm: most votes first, ties keep fractional order (PD-2).
+  const ideas = useMemo(() => {
+    const pool = [...(byDate.get(null) ?? [])];
+    pool.sort((a, b) => {
+      const va = votesByActivity.get(a.id)?.length ?? 0;
+      const vb = votesByActivity.get(b.id)?.length ?? 0;
+      if (va !== vb) return vb - va;
+      return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
+    });
+    return pool;
+  }, [byDate, votesByActivity]);
+
   const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
 
   const me = useMyMember();
@@ -121,6 +146,20 @@ export function ItineraryBoard({
   const openEdit = (activity: Activity) => setDialog({ mode: "edit", activity });
   const remove = (activity: Activity) =>
     void mutateAsync("activity.delete", { activityId: activity.id }).catch(() => {});
+
+  // The votes + comments rail under each card (Track A). `canEdit` gates voting
+  // and commenting (viewers see tallies + threads read-only).
+  const renderFooter = (activity: Activity): ReactNode => (
+    <ActivityFooter
+      activityId={activity.id}
+      voterIds={votesByActivity.get(activity.id) ?? []}
+      comments={commentsFor(commentsByTarget, "activity", activity.id)}
+      myMember={me}
+      canEdit={canEdit}
+      membersById={membersById}
+      colors={colors}
+    />
+  );
 
   function handleDragEnd(event: DragEndEvent) {
     setActiveId(null);
@@ -214,6 +253,7 @@ export function ItineraryBoard({
               onAdd={() => openCreate(iso)}
               onEdit={openEdit}
               onDelete={remove}
+              renderFooter={renderFooter}
             />
           ))}
 
@@ -243,6 +283,7 @@ export function ItineraryBoard({
               onAdd={() => openCreate(null)}
               onEdit={openEdit}
               onDelete={remove}
+              renderFooter={renderFooter}
             />
           </section>
 
@@ -291,6 +332,7 @@ function DaySection({
   onAdd,
   onEdit,
   onDelete,
+  renderFooter,
 }: {
   iso: string;
   n: number | null;
@@ -301,6 +343,7 @@ function DaySection({
   onAdd: () => void;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
+  renderFooter: (activity: Activity) => ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-3">
@@ -328,6 +371,7 @@ function DaySection({
         onAdd={onAdd}
         onEdit={onEdit}
         onDelete={onDelete}
+        renderFooter={renderFooter}
       />
     </section>
   );
@@ -343,6 +387,7 @@ function ActivityColumn({
   onAdd,
   onEdit,
   onDelete,
+  renderFooter,
 }: {
   containerId: string;
   items: Activity[];
@@ -353,6 +398,7 @@ function ActivityColumn({
   onAdd: () => void;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
+  renderFooter: (activity: Activity) => ReactNode;
 }) {
   const { setNodeRef } = useDroppable({ id: containerId });
   return (
@@ -374,6 +420,7 @@ function ActivityColumn({
               flash={flashing.has(activity.id)}
               onEdit={onEdit}
               onDelete={onDelete}
+              footer={renderFooter(activity)}
             />
           ))
         )}

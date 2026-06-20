@@ -2,6 +2,7 @@ import type { Activity } from "@caravan/shared";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { GripVertical } from "lucide-react";
+import type { ReactNode } from "react";
 import { ActivityCard } from "./activity-card";
 
 /** An ActivityCard made draggable via a dedicated grip handle (so links and the
@@ -14,6 +15,7 @@ export function SortableActivityCard({
   onDelete,
   editingBy,
   flash,
+  footer,
 }: {
   activity: Activity;
   canEdit: boolean;
@@ -21,6 +23,7 @@ export function SortableActivityCard({
   onDelete: (activity: Activity) => void;
   editingBy?: { name: string; color: string };
   flash?: boolean;
+  footer?: ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: activity.id,
@@ -36,6 +39,7 @@ export function SortableActivityCard({
         onDelete={onDelete}
         editingBy={editingBy}
         flash={flash}
+        footer={footer}
       />
     );
   }
@@ -53,6 +57,7 @@ export function SortableActivityCard({
         onDelete={onDelete}
         editingBy={editingBy}
         flash={flash}
+        footer={footer}
         dragHandle={
           <button
             type="button"

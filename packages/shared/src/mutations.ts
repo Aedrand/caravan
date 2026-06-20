@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ActivityCategorySchema, PlaceSchema } from "./schemas/activity";
+import { COMMENT_MAX_LENGTH, CommentTargetTypeSchema } from "./schemas/comment";
 import {
   CurrencySchema,
   EpochMsSchema,
@@ -9,6 +10,7 @@ import {
   PositionSchema,
 } from "./schemas/common";
 import type { EntityPostImage, FeedEvent } from "./schemas/feed";
+import { POLL_OPTION_MAX, POLL_OPTIONS_LIMIT, POLL_QUESTION_MAX } from "./schemas/poll";
 import { InviteRoleSchema } from "./schemas/trip";
 
 /**
@@ -99,6 +101,73 @@ export const mutationPayloads = {
     position: PositionSchema,
   }),
   "activity.delete": z.strictObject({ activityId: IdSchema }),
+
+  // --- Track A: group decisions (votes / comments / polls) -----------------
+
+  /** Toggle this member's single positive vote on an activity (PD-2). */
+  "vote.toggle": z.strictObject({ activityId: IdSchema }),
+
+  /**
+   * Comments (PD-4). The id is client-generated (stable optimistic insert) and
+   * the target is exactly one of activity | poll. Bodies are trimmed plain text.
+   */
+  "comment.create": z.strictObject({
+    commentId: IdSchema,
+    targetType: CommentTargetTypeSchema,
+    targetId: IdSchema,
+    body: z.string().trim().min(1).max(COMMENT_MAX_LENGTH),
+  }),
+  "comment.update": z.strictObject({
+    commentId: IdSchema,
+    body: z.string().trim().min(1).max(COMMENT_MAX_LENGTH),
+  }),
+  "comment.delete": z.strictObject({ commentId: IdSchema }),
+
+  /**
+   * Polls (PD-3). The poll id and the initial option ids are client-generated.
+   * Single-choice by default; member-added options default ON.
+   */
+  "poll.create": z.strictObject({
+    pollId: IdSchema,
+    question: z.string().trim().min(1).max(POLL_QUESTION_MAX),
+    multiSelect: z.boolean().default(false),
+    allowMemberOptions: z.boolean().default(true),
+    closesAt: EpochMsSchema.nullable().default(null),
+    options: z
+      .array(
+        z.strictObject({
+          optionId: IdSchema,
+          label: z.string().trim().min(1).max(POLL_OPTION_MAX),
+        }),
+      )
+      .min(2)
+      .max(POLL_OPTIONS_LIMIT),
+  }),
+  /** Add an option to an existing poll (allowed for members only if the poll permits it). */
+  "poll.addOption": z.strictObject({
+    pollId: IdSchema,
+    optionId: IdSchema,
+    label: z.string().trim().min(1).max(POLL_OPTION_MAX),
+  }),
+  /**
+   * Set this member's vote(s). The full chosen option set is sent (not a delta)
+   * so the toggle is idempotent and respects the single/multi flag server-side.
+   */
+  "poll.vote": z.strictObject({
+    pollId: IdSchema,
+    optionIds: z.array(IdSchema).max(POLL_OPTIONS_LIMIT),
+  }),
+  /** Close a poll early (creator or trip owner). Closed polls stay visible. */
+  "poll.close": z.strictObject({ pollId: IdSchema }),
+  /**
+   * Convert a closed poll's winning option into an Ideas-pool activity (A.3).
+   * The new activity id + its ordering position are client-generated.
+   */
+  "poll.convert": z.strictObject({
+    pollId: IdSchema,
+    activityId: IdSchema,
+    position: PositionSchema,
+  }),
 } as const;
 
 export type MutationType = keyof typeof mutationPayloads;
@@ -154,4 +223,16 @@ export interface FeedPayloadMap {
   "activity.update": { title: string; fields: string[] };
   "activity.move": { title: string; fromDate: string | null; toDate: string | null };
   "activity.delete": { title: string; date: string | null };
+
+  // --- Track A ---------------------------------------------------------------
+  /** `on` distinguishes the cast vs. the retraction in the feed verb. */
+  "vote.toggle": { activityTitle: string; on: boolean };
+  "comment.create": { targetType: "activity" | "poll"; targetTitle: string };
+  "comment.update": { targetType: "activity" | "poll"; targetTitle: string };
+  "comment.delete": { targetType: "activity" | "poll"; targetTitle: string };
+  "poll.create": { question: string };
+  "poll.addOption": { question: string; label: string };
+  "poll.vote": { question: string };
+  "poll.close": { question: string };
+  "poll.convert": { question: string; activityTitle: string };
 }

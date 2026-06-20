@@ -15,6 +15,7 @@ import { WebSocketServer } from "ws";
 import type { SessionUser } from "../auth/session";
 import { createDb, schema } from "../db";
 import { runMigrations } from "../db/migrate";
+import { createDecisionsTables } from "../features/decisions/test-tables";
 import "../features"; // registers mutation handlers
 import type { Logger } from "../logger";
 import { createSyncRoutes } from "./sync";
@@ -55,6 +56,9 @@ async function startHarness() {
   tempDirs.push(dir);
   const { db, sqlite } = createDb(path.join(dir, "test.db"));
   runMigrations(db);
+  // Track A tables aren't in the committed migrations yet (generated centrally
+  // at integration); the snapshot endpoint reads them, so create them here.
+  createDecisionsTables(sqlite);
 
   const logger = {
     warn: vi.fn(),
