@@ -1,4 +1,4 @@
-import { createRootRoute, Link, Outlet } from "@tanstack/react-router";
+import { createRootRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { BrandMark } from "@/components/brand-mark";
 import { UserMenu } from "@/components/user-menu";
 
@@ -7,6 +7,14 @@ export const Route = createRootRoute({
 });
 
 function RootLayout() {
+  // The trip workspace (C.4) is a full-screen shell with its own consolidated
+  // top bar (logo + account folded in), so the app's global header steps aside
+  // there — one bar, not two.
+  const fullBleed = useRouterState({
+    select: (state) => state.matches.some((match) => match.routeId === "/trips/$tripId"),
+  });
+  if (fullBleed) return <Outlet />;
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className="sticky top-0 z-10 border-b border-border/70 bg-background/85 backdrop-blur">

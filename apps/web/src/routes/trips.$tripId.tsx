@@ -112,7 +112,7 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
 
 function TripNotFound() {
   return (
-    <section className="flex flex-1 items-center justify-center">
+    <section className="grid min-h-dvh place-items-center p-6">
       <Card className="w-full max-w-md text-center">
         <CardHeader>
           <CardTitle className="text-xl">Trip not found</CardTitle>
@@ -135,7 +135,7 @@ function TripNotFound() {
 
 function TripError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <section className="flex flex-1 items-center justify-center">
+    <section className="grid min-h-dvh place-items-center p-6">
       <Card className="w-full max-w-md text-center">
         <CardHeader>
           <CardTitle className="text-xl">Something went sideways</CardTitle>
@@ -153,16 +153,24 @@ function TripError({ message, onRetry }: { message: string; onRetry: () => void 
 
 function TripSkeleton() {
   return (
-    <section aria-busy="true" aria-label="Loading trip" className="flex flex-col gap-6">
-      <div className="flex items-start gap-3">
-        <div className="size-8 animate-pulse rounded-md bg-muted" />
-        <div className="flex-1 space-y-2">
-          <div className="h-8 w-64 max-w-full animate-pulse rounded-md bg-muted" />
-          <div className="h-4 w-48 max-w-full animate-pulse rounded-md bg-muted" />
-        </div>
-        <div className="h-8 w-32 animate-pulse rounded-md bg-muted" />
+    <div
+      aria-busy="true"
+      aria-label="Loading trip"
+      className="flex h-dvh flex-col overflow-hidden bg-background"
+    >
+      <div className="flex shrink-0 items-center gap-3 border-b bg-muted px-4 py-2.5">
+        <div className="size-8 animate-pulse rounded-md bg-foreground/10" />
+        <div className="h-6 w-48 animate-pulse rounded-md bg-foreground/10" />
+        <div className="ml-auto h-8 w-24 animate-pulse rounded-md bg-foreground/10" />
       </div>
-      <div className="h-40 animate-pulse rounded-xl border border-border/70 bg-muted/60" />
-    </section>
+      <div className="flex min-h-0 flex-1">
+        <div className="w-20 shrink-0 border-r bg-muted" />
+        <div className="flex-1 space-y-3 p-6">
+          <div className="h-8 w-40 animate-pulse rounded-md bg-foreground/10" />
+          <div className="h-24 animate-pulse rounded-xl bg-foreground/10" />
+          <div className="h-24 animate-pulse rounded-xl bg-foreground/10" />
+        </div>
+      </div>
+    </div>
   );
 }

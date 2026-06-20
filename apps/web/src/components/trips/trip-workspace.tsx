@@ -1,4 +1,4 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
   ArchiveRestore,
@@ -7,6 +7,7 @@ import {
   CalendarDays,
   Copy,
   Ellipsis,
+  LogOut,
   MapPin,
   PanelRightClose,
   PanelRightOpen,
@@ -19,6 +20,7 @@ import {
   X,
 } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
+import { BrandMark } from "@/components/brand-mark";
 import { PollsPanel } from "@/components/decisions/polls-panel";
 import { ExpensesPanel } from "@/components/expenses/expenses-panel";
 import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
@@ -37,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { authClient } from "@/lib/auth-client";
 import { useConnectionStatus } from "@/lib/sync";
 import type { TripSnapshot } from "@/lib/sync/shared";
 import { cn } from "@/lib/utils";
@@ -85,7 +88,7 @@ export function TripWorkspace(props: TripWorkspaceProps) {
   const [feedOpen, setFeedOpen] = useState(false);
 
   return (
-    <div className="-my-10 ml-[calc(50%-50vw)] mr-[calc(50%-50vw)] flex h-[calc(100dvh-3.5rem)] w-screen flex-col overflow-hidden bg-background">
+    <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
       <TopBar {...props} onOpenFeed={() => setFeedOpen(true)} />
 
       {archived && (
@@ -196,6 +199,7 @@ function TopBar({
           <ArrowLeft aria-hidden />
         </Link>
       </Button>
+      <BrandMark variant="mark" size={24} className="hidden shrink-0 md:inline-flex" />
 
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <TripNameEditor name={trip.name} canEdit={canEdit} pending={pending} onCommit={onRename} />
@@ -249,8 +253,55 @@ function TopBar({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        <AccountMenu />
       </div>
     </header>
+  );
+}
+
+/* ---------- account (folded into the consolidated top bar) ---------- */
+function AccountMenu() {
+  const { data: session, isPending } = authClient.useSession();
+  const navigate = useNavigate();
+  const [signingOut, setSigningOut] = useState(false);
+
+  if (isPending || !session) return <div className="size-8 shrink-0" aria-hidden />;
+
+  const name = session.user.name || session.user.email;
+  const initial = (name[0] ?? "?").toUpperCase();
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await authClient.signOut();
+      await navigate({ to: "/login" });
+    } finally {
+      setSigningOut(false);
+    }
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label="Account"
+          className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-primary font-semibold text-primary-foreground text-xs outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          {initial}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <div className="px-2 py-1.5 text-sm">
+          <p className="font-medium">{name}</p>
+        </div>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem disabled={signingOut} onSelect={() => void handleSignOut()}>
+          <LogOut aria-hidden />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -274,32 +325,29 @@ function PlanView({
         </div>
 
         {mapOpen ? (
-          <div className="hidden w-[38%] min-w-80 max-w-[34rem] shrink-0 flex-col border-l lg:flex">
-            <div className="flex shrink-0 items-center justify-between gap-2 border-b px-4 py-2.5">
-              <span className="flex items-center gap-2 font-display font-bold">
-                <MapPin aria-hidden className="size-4 text-[var(--accent-strong)]" />
-                Map
-              </span>
-              <Button variant="ghost" size="sm" onClick={onToggleMap} aria-label="Hide map">
-                <PanelRightClose aria-hidden />
-                Hide
-              </Button>
-            </div>
-            <div className="min-h-0 flex-1 p-4">
-              <Suspense fallback={null}>
-                <MapPanel snapshot={snapshot} fill />
-              </Suspense>
-            </div>
+          <div className="relative hidden w-[38%] min-w-80 max-w-[34rem] shrink-0 border-l p-3 lg:block">
+            <Suspense fallback={null}>
+              <MapPanel snapshot={snapshot} fill />
+            </Suspense>
+            <button
+              type="button"
+              onClick={onToggleMap}
+              aria-label="Hide map"
+              title="Hide map"
+              className="absolute top-5 left-5 z-10 flex size-8 items-center justify-center rounded-md border bg-card text-foreground shadow-control transition-colors hover:bg-muted"
+            >
+              <PanelRightClose aria-hidden className="size-4" />
+            </button>
           </div>
         ) : (
           <button
             type="button"
             onClick={onToggleMap}
             aria-label="Show map"
-            className="hidden w-12 shrink-0 flex-col items-center gap-1.5 border-l px-1 py-4 text-muted-foreground transition-colors hover:text-foreground lg:flex"
+            title="Show map"
+            className="hidden w-9 shrink-0 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:flex"
           >
             <PanelRightOpen aria-hidden className="size-5" />
-            <span className="font-body font-bold text-[11px] uppercase tracking-wide">Map</span>
           </button>
         )}
       </div>
