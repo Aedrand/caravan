@@ -1,6 +1,6 @@
 # Caravan — End-to-End Implementation Plan
 
-Drafted 2026-06-10; **ratified by the owner 2026-06-11** (all decisions ACCEPTED — see `decisions.md`; TD-7 modified: OAuth 2.1 ships with v1.3). **Build status: M0 + M1 COMPLETE (M1 closed 2026-06-19)** — walking skeleton, full collaborative itinerary (create/edit/reorder), presence, attributed feed, and the two-browser gate all landed and CI-green. Contracts frozen; the parallel fan-out (Tracks A–E) is open. Companion reading order: `../PROJECT.md` → `decisions.md` → this file.
+Drafted 2026-06-10; **ratified by the owner 2026-06-11** (all decisions ACCEPTED — see `decisions.md`; TD-7 modified: OAuth 2.1 ships with v1.3). **Build status: M0 + M1 COMPLETE (M1 closed 2026-06-19)** — walking skeleton, full collaborative itinerary (create/edit/reorder), presence, attributed feed, and the two-browser gate all landed and CI-green. Contracts frozen. **Fan-out Tracks A/B/C integrated to `main` 2026-06-20** (`f114142`) — group decisions, expenses + settlement, and maps/places, built in parallel (worktree agents) and merged with one unified migration (0003); repo-wide green (190 tests) + in-browser verified. **Next: the trip-page workspace layout (C.4 + Track E) is with Claude Design** (brief: `docs/design/trip-page-layout-brief.md`). Companion reading order: `../PROJECT.md` → `decisions.md` → this file.
 
 **This plan is built for parallel execution.** After a deliberately serial foundation (M0–M1) establishes the contracts, the work fans out into independent tracks with disjoint file ownership, designed so multiple implementation agents (or people) can run concurrently without colliding. §5 defines the execution model; every task is tagged `[P]` (parallel-safe) or `[S]` (serial/foundation).
 
@@ -174,6 +174,8 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 
 ### Track A — Decisions `[P]` (≈ M2)
 
+> ✅ **Done 2026-06-20** — integrated to `main`. Voting (visible voter avatars, ideas-by-votes), comments (on activities + polls), polls (create / multi-select / member-options, vote, manual close, poll→activity conversion), feed verbs. Optional scheduled poll auto-close + two-browser poll E2E deferred (lifecycle covered by unit tests).
+
 | # | Task | Size |
 |---|---|---|
 | A.1 | Vote toggle: mutation + optimistic UI + voter avatars + ideas-sort-by-votes (PD-2) | M |
@@ -184,6 +186,8 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 
 ### Track B — Expenses `[P]` (≈ M3)
 
+> ✅ **Done 2026-06-20** — integrated to `main`. Expense CRUD + equal/custom splits, first-class payments, the exhaustively-tested min-transaction settlement engine (integer cents, ghosts, largest-remainder rounding), and the money UI. Money reads via a dedicated endpoint outside the snapshot (TD-12). Optional two-browser money E2E deferred (settlement covered by unit tests).
+
 | # | Task | Size |
 |---|---|---|
 | B.1 | Expense CRUD + splits (equal default / exact with sum validation), category set, optional day/activity link (PD-8) | L |
@@ -193,6 +197,8 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 | B.5 | Feed integration + E2E: log → split → settle in two browsers | S |
 
 ### Track C — Map & places `[P]` (≈ M4)
+
+> 🟡 **C.1–C.3 + C.5 done 2026-06-20** — integrated to `main`. Geo proxy (`/api/geo/search|reverse`, Photon keyless default + key-optional providers, SQLite cache, rate limit), debounced place autocomplete in the activity form (freeform fallback), lazy MapLibre + OpenFreeMap map panel (clustered pins, pin↔card highlight, unplotted list), provider/tile config + attribution + `docs/maps-and-places.md`. **C.4 (split-view workspace + long-trip day navigation) is now with Claude Design** as the trip-page layout pass — it absorbed the broader workspace IA, since the fan-out added Polls/Expenses/Map panels that currently stack vertically. Brief: `docs/design/trip-page-layout-brief.md`.
 
 | # | Task | Size |
 |---|---|---|
