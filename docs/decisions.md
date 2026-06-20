@@ -372,3 +372,20 @@ The pattern is proven at far larger scale than ours (Linear: LWW for all structu
 - Self-host honesty (per owner, 2026-06-19): fonts are **vendored, not CDN-loaded** (`@fontsource/*` → bundled woff2), and icons stay the already-installed `lucide-react` package — no Google Fonts / unpkg calls at runtime, consistent with TD-4's offline-capable posture.
 
 **Rejected:** single-axis "skins" that bundle color+structure (rejected: the whole point is mixing a personality with an unrelated palette); per-component style overrides (rejected: re-introduces the divergence the token contract exists to prevent); letting a style pack set hues or a color theme set structure (rejected: collapses the two axes back into one). Custom-CSS upload stays rejected from TD-10.
+
+---
+
+### TD-12: Expenses & settlement implementation shape (Track B)
+
+**Status:** ✅ ACCEPTED (Track B build, 2026-06-20) · Implements PD-8/PD-9 · Author: Track B agent during the parallel fan-out
+
+**Context:** Track B (expenses, payments, settlement) needed a few choices that touch frozen contract seams; recorded here so the supervisor/integrator sees the "why" and the merge has no surprises.
+
+**Decisions:**
+- **Money lives outside the trip snapshot.** Expenses/payments are read via a new feature endpoint `GET /api/trips/:id/money` (`{ expenses, payments }` — `TripMoneySchema`), not added to `TripSnapshotSchema`. The itinerary core snapshot stays lean (it's hot on every trip load); the money query refetches only when an `expense.*`/`payment.*` feed event arrives (the sync pipeline already broadcasts these). This mirrors how invites already sit outside the snapshot.
+- **Two new entity types** (`expense`, `payment`) were appended to the shared `ENTITY_TYPES` + `entityPostImageSchemas`, and to `readPostImage` in `core/mutations.ts`. This is additive — the pipeline itself is unchanged — but it does touch a `core/` file (the post-image reader is exhaustive over `EntityType`, so new types require new cases). Flagged for supervisor awareness; no behavior change to existing types.
+- **Splits are declared, not enumerated, on the wire.** The client sends a `SplitSpec` (`equal` over member ids, or `exact` per-member amounts) and the **server** materializes the per-participant `expense_shares` rows — equal via largest-remainder rounding, exact validated to sum to the total. So the authoritative share math runs in one place. The same pure `resolveSplit`/`splitEqual` (shared lib) runs client-side for the optimistic/preview path, guaranteeing agreement.
+- **Settlement is a pure shared function, never stored.** `settle(expenses, payments, memberIds)` → net balances + greedy min-transaction plan; integer minor units throughout; deterministic (ties by member id). Computed client-side on render. Exhaustively unit-tested (rounding remainders, ghosts both directions, partial/over payments, multi-party, randomized zero-sum + settles-to-zero invariant).
+- **Permissions (PD-8):** `editor` role to create money records; creator-or-owner to edit/delete (enforced in `apply()`, not just the registry role). Participant/payer/payee membership ids are validated against the trip — **ghosts allowed** (PD-9) so balances survive departures; strangers rejected.
+
+**Integrator note (action required):** the `expenses` / `expense_shares` / `payments` tables were **added to `db/schema.ts` only** — per the fan-out anti-collision rule, `pnpm db:generate` was NOT run and no `drizzle/` migration was committed. The integrator must generate the migration at merge. Tests create the tables via `features/expenses/test-tables.ts` (kept in sync with the schema) until that migration lands.

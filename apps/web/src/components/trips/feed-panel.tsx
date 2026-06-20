@@ -60,6 +60,25 @@ function describe(event: FeedEvent): string {
       return `closed the poll “${str("question", "a poll")}”`;
     case "poll.convert":
       return `turned “${str("question", "a poll")}” into the idea ${str("activityTitle", "an activity")}`;
+    case "expense.create": {
+      const desc = typeof p.description === "string" ? p.description : "an expense";
+      return `added the expense ${desc}`;
+    }
+    case "expense.update": {
+      const desc = typeof p.description === "string" ? p.description : "an expense";
+      return `edited the expense ${desc}`;
+    }
+    case "expense.delete": {
+      const desc = typeof p.description === "string" ? p.description : "an expense";
+      return `removed the expense ${desc}`;
+    }
+    case "payment.create":
+    case "payment.delete": {
+      const from = typeof p.fromName === "string" ? p.fromName : "someone";
+      const to = typeof p.toName === "string" ? p.toName : "someone";
+      const verb = event.type === "payment.create" ? "recorded" : "removed";
+      return `${verb} a payment from ${from} to ${to}`;
+    }
     default:
       return "made a change";
   }

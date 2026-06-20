@@ -10,6 +10,7 @@ import type { Config } from "./config";
 import { createSyncRoutes } from "./core/sync";
 import type { TripRooms } from "./core/ws";
 import type { Db } from "./db";
+import { createExpensesRoutes } from "./features/expenses/routes";
 import { createGeoRoutes } from "./features/geo/routes";
 import { createInviteRoutes } from "./features/trips/invite-routes";
 import { createTripsRoutes } from "./features/trips/routes";
@@ -34,6 +35,7 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
   const trips = new Hono<AuthedEnv>()
     .use("*", requireUser(auth))
     .route("/", createTripsRoutes({ db, logger }))
+    .route("/", createExpensesRoutes({ db }))
     .route("/", createSyncRoutes({ db, rooms, logger, upgradeWebSocket }));
 
   // Geo proxy (Track C): session-gated; keeps geocoder keys + rate limit server-side.

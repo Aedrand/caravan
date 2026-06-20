@@ -98,7 +98,11 @@ export function applyEvent(
       return { ...snap, trip, members };
     }
     case "invite":
-      // The snapshot holds no invites — only advance the version watermark.
+    case "expense":
+    case "payment":
+      // The snapshot holds no invites or money — those live in their own
+      // queries (Track B's `money` query refetches on these events). Only
+      // advance the version watermark so the feed/catch-up stays consistent.
       return { ...snap, trip: { ...snap.trip, version: event.version } };
     case "vote": {
       const trip = { ...snap.trip, version: event.version };
@@ -373,6 +377,14 @@ export function applyMutationOptimistic(
     case "member.setRole":
     case "invite.create":
     case "invite.revoke":
+    // Expenses & payments (Track B) live outside the snapshot in their own
+    // `money` query, which refetches on the confirmed feed event — no
+    // snapshot-level optimistic guess.
+    case "expense.create":
+    case "expense.update":
+    case "expense.delete":
+    case "payment.create":
+    case "payment.delete":
       return snap;
   }
 }

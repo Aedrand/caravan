@@ -17,8 +17,10 @@ import { hasRole } from "./permissions";
 import {
   serializeActivity,
   serializeComment,
+  serializeExpense,
   serializeInvite,
   serializeMember,
+  serializePayment,
   serializePollWithDetails,
   serializeTrip,
   serializeVote,
@@ -161,6 +163,20 @@ function readPostImage(tx: Tx, entityType: EntityType, entityId: string): Entity
         .where(eq(schema.pollVotes.pollId, entityId))
         .all();
       return serializePollWithDetails(poll, options, votes);
+    }
+    case "expense": {
+      const row = tx.select().from(schema.expenses).where(eq(schema.expenses.id, entityId)).get();
+      if (!row) return null;
+      const shareRows = tx
+        .select()
+        .from(schema.expenseShares)
+        .where(eq(schema.expenseShares.expenseId, entityId))
+        .all();
+      return serializeExpense(row, shareRows);
+    }
+    case "payment": {
+      const row = tx.select().from(schema.payments).where(eq(schema.payments.id, entityId)).get();
+      return row ? serializePayment(row) : null;
     }
   }
 }
