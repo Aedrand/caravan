@@ -246,7 +246,12 @@ export function ItineraryBoard({
             />
           </section>
 
-          <DragOverlay>
+          {/* No drop animation: our reorder lands via the async activity.move
+              optimistic update, so the default settle would animate the overlay
+              back to the (not-yet-moved) source slot before the list re-renders
+              — the "snap back, then jump" glitch. Dropping instantly into the
+              new slot reads clean. */}
+          <DragOverlay dropAnimation={null}>
             {activeActivity ? (
               <ActivityCard
                 activity={activeActivity}
