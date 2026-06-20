@@ -2,6 +2,7 @@ import {
   ACTIVITY_CATEGORIES,
   ACTOR_TYPES,
   ENTITY_TYPES,
+  EXPENSE_CATEGORIES,
   MEMBER_STATUSES,
   TRIP_ROLES,
 } from "@caravan/shared";
@@ -132,4 +133,75 @@ export const feedEvents = sqliteTable(
     createdAt: integer("created_at").notNull(),
   },
   (t) => [uniqueIndex("feed_events_trip_version").on(t.tripId, t.version)],
+);
+
+/**
+ * Track B — expenses & settlement (PD-8). Money is integer minor units; a
+ * single currency per trip lives on `trips.currency`. An expense's shares (one
+ * row per participant in `expense_shares`) always sum to `amount_minor`.
+ * `paid_by`, `created_by`, and share `member_id` are trip MEMBERSHIP ids (no FK
+ * — history outlives membership rows the way other features do), so ghosts
+ * (PD-9) keep their balances after leaving.
+ */
+export const expenses = sqliteTable(
+  "expenses",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    /** Membership id of the payer (who fronted the money). */
+    paidBy: text("paid_by").notNull(),
+    /** Total in minor units; strictly positive (enforced in the mutation). */
+    amountMinor: integer("amount_minor").notNull(),
+    description: text("description").notNull(),
+    category: text("category", { enum: EXPENSE_CATEGORIES }).notNull().default("other"),
+    notes: text("notes").notNull().default(""),
+    /** Optional itinerary linkage (PD-8). */
+    date: text("date"),
+    activityId: text("activity_id"),
+    /** Membership id of the creator (edit/delete permission rule). */
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("expenses_trip").on(t.tripId)],
+);
+
+export const expenseShares = sqliteTable(
+  "expense_shares",
+  {
+    id: text("id").primaryKey(),
+    expenseId: text("expense_id")
+      .notNull()
+      .references(() => expenses.id, { onDelete: "cascade" }),
+    /** Membership id of the participant (ghosts included — PD-9). */
+    memberId: text("member_id").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+  },
+  (t) => [
+    index("expense_shares_expense").on(t.expenseId),
+    uniqueIndex("expense_shares_expense_member").on(t.expenseId, t.memberId),
+  ],
+);
+
+export const payments = sqliteTable(
+  "payments",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    /** Membership id of the payer (debtor settling up). */
+    fromMember: text("from_member").notNull(),
+    /** Membership id of the recipient (creditor). */
+    toMember: text("to_member").notNull(),
+    amountMinor: integer("amount_minor").notNull(),
+    notes: text("notes").notNull().default(""),
+    date: text("date"),
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("payments_trip").on(t.tripId)],
 );

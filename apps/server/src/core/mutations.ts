@@ -14,7 +14,14 @@ import { and, asc, desc, eq, gt, lt } from "drizzle-orm";
 import type { Db } from "../db";
 import { schema } from "../db";
 import { hasRole } from "./permissions";
-import { serializeActivity, serializeInvite, serializeMember, serializeTrip } from "./serialize";
+import {
+  serializeActivity,
+  serializeExpense,
+  serializeInvite,
+  serializeMember,
+  serializePayment,
+  serializeTrip,
+} from "./serialize";
 
 /**
  * The mutation pipeline (TD-1, plan §3.3): validate → authorize → apply +
@@ -122,6 +129,20 @@ function readPostImage(tx: Tx, entityType: EntityType, entityId: string): Entity
         .where(eq(schema.inviteLinks.id, entityId))
         .get();
       return row ? serializeInvite(row) : null;
+    }
+    case "expense": {
+      const row = tx.select().from(schema.expenses).where(eq(schema.expenses.id, entityId)).get();
+      if (!row) return null;
+      const shareRows = tx
+        .select()
+        .from(schema.expenseShares)
+        .where(eq(schema.expenseShares.expenseId, entityId))
+        .all();
+      return serializeExpense(row, shareRows);
+    }
+    case "payment": {
+      const row = tx.select().from(schema.payments).where(eq(schema.payments.id, entityId)).get();
+      return row ? serializePayment(row) : null;
     }
   }
 }

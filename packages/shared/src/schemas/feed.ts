@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { type Activity, ActivitySchema } from "./activity";
 import { EpochMsSchema, IdSchema } from "./common";
+import { type Expense, ExpenseSchema } from "./expense";
+import { type Payment, PaymentSchema } from "./payment";
 import {
   type InviteLink,
   InviteLinkSchema,
@@ -20,7 +22,7 @@ export const ACTOR_TYPES = ["user", "house_ai", "personal_ai"] as const;
 export const ActorTypeSchema = z.enum(ACTOR_TYPES);
 export type ActorType = z.infer<typeof ActorTypeSchema>;
 
-export const ENTITY_TYPES = ["trip", "member", "invite", "activity"] as const;
+export const ENTITY_TYPES = ["trip", "member", "invite", "activity", "expense", "payment"] as const;
 export const EntityTypeSchema = z.enum(ENTITY_TYPES);
 export type EntityType = z.infer<typeof EntityTypeSchema>;
 
@@ -30,7 +32,7 @@ export type EntityType = z.infer<typeof EntityTypeSchema>;
  * caches surgically instead of refetching; `null` means the entity no longer
  * exists (hard deletes). Feed payloads stay summaries — this is sync state.
  */
-export type EntityPostImage = Trip | TripMember | InviteLink | Activity;
+export type EntityPostImage = Trip | TripMember | InviteLink | Activity | Expense | Payment;
 
 /** Parse an unknown post-image with the schema for the event's entityType. */
 export const entityPostImageSchemas = {
@@ -38,6 +40,8 @@ export const entityPostImageSchemas = {
   member: TripMemberSchema,
   invite: InviteLinkSchema,
   activity: ActivitySchema,
+  expense: ExpenseSchema,
+  payment: PaymentSchema,
 } as const satisfies Record<EntityType, z.ZodType>;
 
 export const FeedEventSchema = z.object({

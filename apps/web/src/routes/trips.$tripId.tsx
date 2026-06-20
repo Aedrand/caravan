@@ -11,6 +11,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useRef, useState } from "react";
+import { ExpensesPanel } from "@/components/expenses/expenses-panel";
 import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
 import { DeleteTripDialog } from "@/components/trips/delete-trip-dialog";
 import { FeedPanel } from "@/components/trips/feed-panel";
@@ -193,6 +194,13 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
       </header>
 
       <ItineraryBoard snapshot={snapshot} canEdit={canEdit} />
+
+      <ExpensesPanel
+        tripId={trip.id}
+        members={snapshot.members}
+        currency={trip.currency}
+        canEdit={canEdit}
+      />
 
       <FeedPanel tripId={trip.id} members={snapshot.members} />
 

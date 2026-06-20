@@ -8,6 +8,7 @@ import {
   IsoDateSchema,
   PositionSchema,
 } from "./schemas/common";
+import { AmountMinorSchema, ExpenseCategorySchema } from "./schemas/expense";
 import type { EntityPostImage, FeedEvent } from "./schemas/feed";
 import { InviteRoleSchema } from "./schemas/trip";
 
@@ -37,6 +38,61 @@ const timePairRefinement = {
  * these as hrefs (1.7).
  */
 const LinkUrlSchema = z.url({ protocol: /^https?$/ }).max(2048);
+
+/**
+ * How an expense is divided (PD-8). Two modes:
+ * - `equal`: split evenly among `memberIds`; the server distributes rounding
+ *   remainders by largest-remainder so the shares sum exactly to the total.
+ * - `exact`: explicit per-member minor-unit amounts; the server validates the
+ *   sum equals the total. Custom amounts may be zero (a member who owes nothing
+ *   but is "in" on the line item is fine to omit instead).
+ *
+ * Participants are trip MEMBERSHIP ids — ghosts included, so balances stay
+ * stable after someone leaves (PD-9).
+ */
+export const SplitSpecSchema = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("equal"),
+    memberIds: z.array(IdSchema).min(1),
+  }),
+  z.strictObject({
+    kind: z.literal("exact"),
+    shares: z
+      .array(z.strictObject({ memberId: IdSchema, amountMinor: AmountMinorSchema.nonnegative() }))
+      .min(1),
+  }),
+]);
+export type SplitSpec = z.infer<typeof SplitSpecSchema>;
+
+const ExpenseCreateSchema = z.strictObject({
+  expenseId: IdSchema,
+  paidBy: IdSchema,
+  amountMinor: AmountMinorSchema.positive(),
+  description: z.string().trim().min(1).max(200),
+  category: ExpenseCategorySchema.default("other"),
+  notes: z.string().max(2000).default(""),
+  date: IsoDateSchema.nullable().default(null),
+  activityId: IdSchema.nullable().default(null),
+  split: SplitSpecSchema,
+});
+
+const ExpensePatchSchema = z
+  .strictObject({
+    paidBy: IdSchema.optional(),
+    amountMinor: AmountMinorSchema.positive().optional(),
+    description: z.string().trim().min(1).max(200).optional(),
+    category: ExpenseCategorySchema.optional(),
+    notes: z.string().max(2000).optional(),
+    date: IsoDateSchema.nullable().optional(),
+    activityId: IdSchema.nullable().optional(),
+    /**
+     * Re-splitting is all-or-nothing: present `split` replaces every share,
+     * absent leaves them untouched. The server re-validates that the resulting
+     * shares sum to the (possibly new) amount.
+     */
+    split: SplitSpecSchema.optional(),
+  })
+  .refine((p) => Object.keys(p).length > 0, { message: "empty patch" });
 
 export const mutationPayloads = {
   "trip.update": z
@@ -99,6 +155,32 @@ export const mutationPayloads = {
     position: PositionSchema,
   }),
   "activity.delete": z.strictObject({ activityId: IdSchema }),
+
+  // ── Track B: expenses & settlement (PD-8) ──────────────────────────────
+  // Splits are declared, not enumerated: the client sends a SplitSpec and the
+  // server materializes the per-participant `shares` (equal → largest-remainder
+  // rounding; exact → validated to sum to the total). Money is integer minor
+  // units everywhere.
+  "expense.create": ExpenseCreateSchema,
+  "expense.update": z.strictObject({
+    expenseId: IdSchema,
+    patch: ExpensePatchSchema,
+  }),
+  "expense.delete": z.strictObject({ expenseId: IdSchema }),
+
+  "payment.create": z
+    .strictObject({
+      paymentId: IdSchema,
+      fromMember: IdSchema,
+      toMember: IdSchema,
+      amountMinor: AmountMinorSchema.positive(),
+      notes: z.string().max(2000).default(""),
+      date: IsoDateSchema.nullable().default(null),
+    })
+    .refine((p) => p.fromMember !== p.toMember, {
+      message: "a payment must be between two different members",
+    }),
+  "payment.delete": z.strictObject({ paymentId: IdSchema }),
 } as const;
 
 export type MutationType = keyof typeof mutationPayloads;
@@ -154,4 +236,9 @@ export interface FeedPayloadMap {
   "activity.update": { title: string; fields: string[] };
   "activity.move": { title: string; fromDate: string | null; toDate: string | null };
   "activity.delete": { title: string; date: string | null };
+  "expense.create": { description: string; amountMinor: number };
+  "expense.update": { description: string; fields: string[] };
+  "expense.delete": { description: string; amountMinor: number };
+  "payment.create": { fromName: string; toName: string; amountMinor: number };
+  "payment.delete": { fromName: string; toName: string; amountMinor: number };
 }

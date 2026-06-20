@@ -1,4 +1,12 @@
-import type { Activity, InviteLink, Trip, TripMember } from "@caravan/shared";
+import type {
+  Activity,
+  Expense,
+  ExpenseShare,
+  InviteLink,
+  Payment,
+  Trip,
+  TripMember,
+} from "@caravan/shared";
 import type { schema } from "../db";
 
 /**
@@ -59,6 +67,50 @@ export function serializeMember(
     status: row.status,
     aiWriteEnabled: row.aiWriteEnabled,
     joinedAt: row.joinedAt,
+  };
+}
+
+/**
+ * Expense + its participant shares (Track B). Shares come from a separate query
+ * (one row per participant); the caller passes the rows for this expense.
+ */
+export function serializeExpense(
+  row: typeof schema.expenses.$inferSelect,
+  shareRows: (typeof schema.expenseShares.$inferSelect)[],
+): Expense {
+  const shares: ExpenseShare[] = shareRows.map((s) => ({
+    memberId: s.memberId,
+    amountMinor: s.amountMinor,
+  }));
+  return {
+    id: row.id,
+    tripId: row.tripId,
+    paidBy: row.paidBy,
+    amountMinor: row.amountMinor,
+    description: row.description,
+    category: row.category,
+    notes: row.notes,
+    date: row.date,
+    activityId: row.activityId,
+    shares,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+export function serializePayment(row: typeof schema.payments.$inferSelect): Payment {
+  return {
+    id: row.id,
+    tripId: row.tripId,
+    fromMember: row.fromMember,
+    toMember: row.toMember,
+    amountMinor: row.amountMinor,
+    notes: row.notes,
+    date: row.date,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   };
 }
 
