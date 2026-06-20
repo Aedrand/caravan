@@ -12,11 +12,15 @@ export function SortableActivityCard({
   canEdit,
   onEdit,
   onDelete,
+  editingBy,
+  flash,
 }: {
   activity: Activity;
   canEdit: boolean;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
+  editingBy?: { name: string; color: string };
+  flash?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: activity.id,
@@ -25,7 +29,14 @@ export function SortableActivityCard({
 
   if (!canEdit) {
     return (
-      <ActivityCard activity={activity} canEdit={canEdit} onEdit={onEdit} onDelete={onDelete} />
+      <ActivityCard
+        activity={activity}
+        canEdit={canEdit}
+        onEdit={onEdit}
+        onDelete={onDelete}
+        editingBy={editingBy}
+        flash={flash}
+      />
     );
   }
 
@@ -40,6 +51,8 @@ export function SortableActivityCard({
         canEdit={canEdit}
         onEdit={onEdit}
         onDelete={onDelete}
+        editingBy={editingBy}
+        flash={flash}
         dragHandle={
           <button
             type="button"

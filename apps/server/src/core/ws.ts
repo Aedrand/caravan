@@ -21,6 +21,22 @@ const WS_OPEN = 1;
 /** Presence entries older than this are prunable — but only on dead connections. */
 const PRESENCE_STALE_MS = 60_000;
 
+/** Heartbeat cadence: ping every connection this often; one missed cycle (no
+ *  pong) means the socket is half-open and gets terminated so it leaves the
+ *  roster instead of lingering as a phantom presence. */
+const HEARTBEAT_MS = 30_000;
+
+/** The node `ws` socket behind a Hono WSContext (`WSContext.raw`), narrowed to
+ *  just the liveness surface so we don't depend on the `ws` types directly.
+ *  Absent in unit tests (fake WSContext) — every use is guarded. */
+interface RawSocket {
+  readyState: number;
+  isAlive?: boolean;
+  ping(): void;
+  terminate(): void;
+  on(event: "pong", listener: () => void): void;
+}
+
 /** A live connection as the room sees it. */
 export interface TripRoomConn {
   /** Connection id (per socket, not per member — multiple tabs are normal). */
@@ -39,8 +55,12 @@ interface ConnState extends TripRoomConn {
 
 const emptyView = (): PresenceView => ({ date: null, activityId: null, editing: null });
 
+const rawOf = (conn: ConnState): RawSocket | undefined =>
+  conn.ws.raw as unknown as RawSocket | undefined;
+
 export function createTripRooms(logger: Logger) {
   const rooms = new Map<string, Map<string, ConnState>>();
+  let heartbeat: ReturnType<typeof setInterval> | null = null;
 
   function send(tripId: string, conn: ConnState, message: string): void {
     try {
@@ -91,6 +111,14 @@ export function createTripRooms(logger: Logger) {
         rooms.set(tripId, room);
       }
       room.set(conn.id, { ...conn, view: null, ts: Date.now() });
+      // Mark live and reset liveness on every pong (browsers auto-pong pings).
+      const raw = conn.ws.raw as unknown as RawSocket | undefined;
+      if (raw && typeof raw.on === "function") {
+        raw.isAlive = true;
+        raw.on("pong", () => {
+          raw.isAlive = true;
+        });
+      }
       broadcastPresence(tripId);
     },
 
@@ -121,7 +149,43 @@ export function createTripRooms(logger: Logger) {
 
     roster,
 
+    /** Begin the ping/terminate sweep. Called once at server boot (not in
+     *  tests). Idempotent. */
+    startHeartbeat(intervalMs: number = HEARTBEAT_MS): void {
+      if (heartbeat !== null) clearInterval(heartbeat);
+      heartbeat = setInterval(() => {
+        for (const room of rooms.values()) {
+          for (const conn of room.values()) {
+            const raw = rawOf(conn);
+            if (!raw || raw.readyState !== WS_OPEN) continue;
+            if (raw.isAlive === false) {
+              // Missed the previous cycle — half-open. Terminate; onClose →
+              // leave() drops it from the roster and rebroadcasts.
+              try {
+                raw.terminate();
+              } catch (err) {
+                logger.warn({ err, connId: conn.id }, "ws terminate failed");
+              }
+              continue;
+            }
+            raw.isAlive = false;
+            try {
+              raw.ping();
+            } catch (err) {
+              logger.warn({ err, connId: conn.id }, "ws ping failed");
+            }
+          }
+        }
+      }, intervalMs);
+      // A pending heartbeat must not keep the process alive on its own.
+      if (typeof heartbeat.unref === "function") heartbeat.unref();
+    },
+
     shutdown(): void {
+      if (heartbeat !== null) {
+        clearInterval(heartbeat);
+        heartbeat = null;
+      }
       for (const [tripId, room] of rooms) {
         for (const conn of room.values()) {
           try {

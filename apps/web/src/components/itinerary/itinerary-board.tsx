@@ -18,13 +18,16 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { Lightbulb, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { useTripMutation } from "@/lib/sync";
+import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
+import { useMyMember, usePresence, useTripMutation } from "@/lib/sync";
 import { ActivityCard } from "./activity-card";
 import { ActivityFormDialog } from "./activity-form-dialog";
 import { dayNumber, deriveDays, formatDayLabel } from "./format";
 import { SortableActivityCard } from "./sortable-activity-card";
+
+type EditingHint = { name: string; color: string };
 
 type DialogState =
   | { mode: "create"; defaultDate: string | null }
@@ -76,6 +79,38 @@ export function ItineraryBoard({
   const byDate = useMemo(() => groupByDate(activities), [activities]);
   const ideas = byDate.get(null) ?? [];
   const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
+
+  const me = useMyMember();
+  const presence = usePresence();
+  const reportView = presence.reportView;
+
+  const colors = useMemo(() => {
+    const active = snapshot.members
+      .filter((m) => m.status === "active")
+      .sort((a, b) => a.joinedAt - b.joinedAt);
+    return personColors(active);
+  }, [snapshot.members]);
+
+  // Which activity each *other* online member is editing right now (PD-5).
+  const editingHints = useMemo(() => {
+    const map = new Map<string, EditingHint>();
+    for (const p of presence.members) {
+      if (p.memberId === me?.id || !p.view.editing) continue;
+      map.set(p.view.editing, {
+        name: p.name,
+        color: colors.get(p.memberId) ?? FALLBACK_PERSON_COLOR,
+      });
+    }
+    return map;
+  }, [presence.members, me?.id, colors]);
+
+  const flashing = useRecentlyEdited(activities);
+
+  // Tell the room which activity we're editing, so others see the hint.
+  useEffect(() => {
+    const editing = dialog?.mode === "edit" ? dialog.activity.id : null;
+    reportView({ date: null, activityId: editing, editing });
+  }, [dialog, reportView]);
 
   const appendPositionFor = (date: string | null): string => {
     const last = (byDate.get(date) ?? []).at(-1)?.position ?? null;
@@ -174,6 +209,8 @@ export function ItineraryBoard({
               n={dayNumber(iso, trip.startDate)}
               items={byDate.get(iso) ?? []}
               canEdit={canEdit}
+              editingHints={editingHints}
+              flashing={flashing}
               onAdd={() => openCreate(iso)}
               onEdit={openEdit}
               onDelete={remove}
@@ -200,6 +237,8 @@ export function ItineraryBoard({
               containerId={IDEAS}
               items={ideas}
               canEdit={canEdit}
+              editingHints={editingHints}
+              flashing={flashing}
               emptyLabel="No ideas yet"
               onAdd={() => openCreate(null)}
               onEdit={openEdit}
@@ -242,6 +281,8 @@ function DaySection({
   n,
   items,
   canEdit,
+  editingHints,
+  flashing,
   onAdd,
   onEdit,
   onDelete,
@@ -250,6 +291,8 @@ function DaySection({
   n: number | null;
   items: Activity[];
   canEdit: boolean;
+  editingHints: Map<string, EditingHint>;
+  flashing: Set<string>;
   onAdd: () => void;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
@@ -274,6 +317,8 @@ function DaySection({
         containerId={colId(iso)}
         items={items}
         canEdit={canEdit}
+        editingHints={editingHints}
+        flashing={flashing}
         emptyLabel="Nothing planned yet"
         onAdd={onAdd}
         onEdit={onEdit}
@@ -287,6 +332,8 @@ function ActivityColumn({
   containerId,
   items,
   canEdit,
+  editingHints,
+  flashing,
   emptyLabel,
   onAdd,
   onEdit,
@@ -295,6 +342,8 @@ function ActivityColumn({
   containerId: string;
   items: Activity[];
   canEdit: boolean;
+  editingHints: Map<string, EditingHint>;
+  flashing: Set<string>;
   emptyLabel: string;
   onAdd: () => void;
   onEdit: (activity: Activity) => void;
@@ -316,6 +365,8 @@ function ActivityColumn({
               key={activity.id}
               activity={activity}
               canEdit={canEdit}
+              editingBy={editingHints.get(activity.id)}
+              flash={flashing.has(activity.id)}
               onEdit={onEdit}
               onDelete={onDelete}
             />
@@ -348,4 +399,41 @@ function EmptyColumn({
       Add something
     </button>
   );
+}
+
+/**
+ * Flag activities whose `updatedAt` advanced since the last render, briefly, so
+ * a remote change draws the eye (PD-5). Seeds silently on first mount — only
+ * subsequent changes flash.
+ */
+function useRecentlyEdited(activities: Activity[]): Set<string> {
+  const seen = useRef<Map<string, number>>(new Map());
+  const [flashing, setFlashing] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const changed: string[] = [];
+    const present = new Set<string>();
+    for (const a of activities) {
+      present.add(a.id);
+      const prev = seen.current.get(a.id);
+      if (prev !== undefined && a.updatedAt > prev) changed.push(a.id);
+      seen.current.set(a.id, a.updatedAt);
+    }
+    for (const id of [...seen.current.keys()]) {
+      if (!present.has(id)) seen.current.delete(id);
+    }
+    if (changed.length === 0) return;
+
+    setFlashing((prev) => new Set([...prev, ...changed]));
+    const timer = setTimeout(() => {
+      setFlashing((prev) => {
+        const next = new Set(prev);
+        for (const id of changed) next.delete(id);
+        return next;
+      });
+    }, 1600);
+    return () => clearTimeout(timer);
+  }, [activities]);
+
+  return flashing;
 }

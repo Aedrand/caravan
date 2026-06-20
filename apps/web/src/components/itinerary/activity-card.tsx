@@ -9,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 import { CATEGORY_META } from "./categories";
 import { formatTimeRange, mapsSearchUrl } from "./format";
 
@@ -18,19 +19,31 @@ export function ActivityCard({
   onEdit,
   onDelete,
   dragHandle,
+  editingBy,
+  flash,
 }: {
   activity: Activity;
   canEdit: boolean;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
   dragHandle?: ReactNode;
+  /** A live hint that another member is editing this card right now (PD-5). */
+  editingBy?: { name: string; color: string };
+  /** Briefly true right after a remote change lands, to draw the eye (PD-5). */
+  flash?: boolean;
 }) {
   const meta = CATEGORY_META[activity.category];
   const timeRange = formatTimeRange(activity.startTime, activity.endTime);
   const hasLinks = Boolean(activity.placeName) || Boolean(activity.linkUrl);
 
   return (
-    <article className="cv-card flex gap-3 p-3 sm:p-4">
+    <article
+      className={cn(
+        "cv-card flex gap-3 p-3 transition-[outline-color] duration-500 sm:p-4",
+        flash && "outline outline-2 outline-offset-2",
+      )}
+      style={flash ? { outlineColor: "var(--accent-strong)" } : undefined}
+    >
       {dragHandle}
       <span
         aria-hidden
@@ -45,6 +58,15 @@ export function ActivityCard({
           <div className="min-w-0">
             <h4 className="font-display font-bold leading-snug">{activity.title}</h4>
             {timeRange && <p className="mt-0.5 text-sm text-muted-foreground">{timeRange}</p>}
+            {editingBy && (
+              <p
+                className="mt-1 flex items-center gap-1 text-xs font-semibold"
+                style={{ color: editingBy.color }}
+              >
+                <span aria-hidden>✦</span>
+                {editingBy.name} is editing…
+              </p>
+            )}
           </div>
           {canEdit && (
             <DropdownMenu>

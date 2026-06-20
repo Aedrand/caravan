@@ -37,6 +37,7 @@ async function main() {
 
   const jobs = createJobRegistry(logger);
   const rooms = createTripRooms(logger);
+  rooms.startHeartbeat();
   const app = createApp({ config, db: db.db, logger, auth, rooms });
 
   // noServer is required — the Hono adapter handles the HTTP upgrade itself.

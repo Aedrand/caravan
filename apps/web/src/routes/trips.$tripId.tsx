@@ -15,6 +15,7 @@ import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
 import { DeleteTripDialog } from "@/components/trips/delete-trip-dialog";
 import { formatTripDates } from "@/components/trips/format";
 import { MembersPanel } from "@/components/trips/members-panel";
+import { PresenceStrip } from "@/components/trips/presence-strip";
 import { useDeleteTrip, useDuplicateTrip } from "@/components/trips/use-trip-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +29,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api";
 import { fetchSession } from "@/lib/auth-client";
+import { personColors } from "@/lib/person-colors";
 import {
   TripSyncProvider,
   useConnectionStatus,
@@ -35,7 +37,7 @@ import {
   useTripMutation,
   useTripSnapshot,
 } from "@/lib/sync";
-import type { TripMember, TripSnapshot } from "@/lib/sync/shared";
+import type { TripSnapshot } from "@/lib/sync/shared";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/trips/$tripId")({
@@ -95,6 +97,7 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
   });
 
   const activeMembers = snapshot.members.filter((member) => member.status === "active");
+  const presenceColors = personColors([...activeMembers].sort((a, b) => a.joinedAt - b.joinedAt));
 
   // Failures roll back via the sync lib's snapshot invalidation — no local handling needed.
   const commitName = (name: string) => void mutateAsync("trip.update", { name }).catch(() => {});
@@ -137,7 +140,7 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-3 pt-1">
-            <MembersStrip members={activeMembers} />
+            <PresenceStrip colors={presenceColors} />
             <ConnectionIndicator />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -282,27 +285,6 @@ function TripNameEditor({
         </Button>
       )}
     </div>
-  );
-}
-
-function MembersStrip({ members }: { members: TripMember[] }) {
-  if (members.length === 0) return null;
-  return (
-    <ul
-      className="hidden -space-x-2 sm:flex"
-      aria-label={members.length === 1 ? "1 member" : `${members.length} members`}
-    >
-      {members.map((member) => (
-        <li
-          key={member.id}
-          title={member.name}
-          className="flex size-8 select-none items-center justify-center rounded-full border-2 border-background bg-accent text-xs font-semibold uppercase text-accent-foreground"
-        >
-          <span aria-hidden>{member.name.trim().charAt(0) || "?"}</span>
-          <span className="sr-only">{member.name}</span>
-        </li>
-      ))}
-    </ul>
   );
 }
 
