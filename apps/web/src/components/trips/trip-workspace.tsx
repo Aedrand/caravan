@@ -41,7 +41,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
-import { useConnectionStatus } from "@/lib/sync";
+import { useConnectionStatus, useFeed, useMarkSeen, useUnreadCount } from "@/lib/sync";
 import type { TripSnapshot } from "@/lib/sync/shared";
 import { cn } from "@/lib/utils";
 
@@ -199,6 +199,7 @@ function TopBar({
   onOpenFeed,
 }: TripWorkspaceProps & { onOpenFeed: () => void }) {
   const { trip } = snapshot;
+  const unread = useUnreadCount(trip.id);
   return (
     <header className="flex shrink-0 items-center gap-3 border-b bg-muted px-4 py-2.5">
       <Button asChild variant="outline" size="icon-sm" className="shrink-0">
@@ -225,15 +226,25 @@ function TopBar({
       <div className="flex shrink-0 items-center gap-3">
         <PresenceStrip colors={presenceColors} />
         <ConnectionIndicator />
-        <Button
-          variant="outline"
-          size="icon-sm"
-          onClick={onOpenFeed}
-          aria-label="What changed"
-          title="What changed"
-        >
-          <Bell aria-hidden />
-        </Button>
+        <div className="relative shrink-0">
+          <Button
+            variant="outline"
+            size="icon-sm"
+            onClick={onOpenFeed}
+            aria-label="What changed"
+            title="What changed"
+          >
+            <Bell aria-hidden />
+          </Button>
+          {unread > 0 && (
+            <span
+              aria-hidden
+              className="-top-1 -right-1 pointer-events-none absolute flex h-4 min-w-4 select-none items-center justify-center rounded-pill bg-primary px-1 font-bold text-[10px] text-primary-foreground leading-none shadow-control"
+            >
+              {unread > 9 ? "9+" : unread}
+            </span>
+          )}
+        </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon-sm" aria-label="Trip actions">
@@ -373,17 +384,13 @@ function ViewScroll({ children }: { children: ReactNode }) {
 }
 
 /* ---------- feed drawer (Stage 4 refines: unread badge, caught-up styling) ---------- */
-function FeedDrawer({
-  open,
-  onClose,
-  tripId,
-  members,
-}: {
+function FeedDrawer(props: {
   open: boolean;
   onClose: () => void;
   tripId: string;
   members: TripSnapshot["members"];
 }) {
+  const { open, onClose } = props;
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
@@ -393,7 +400,38 @@ function FeedDrawer({
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
 
+  // Mount the body only while open so it remounts fresh each time (re-freezing
+  // its catch-up boundary); keep all feed hooks below this null guard.
   if (!open) return null;
+  return <FeedDrawerBody {...props} />;
+}
+
+function FeedDrawerBody({
+  onClose,
+  tripId,
+  members,
+}: {
+  open: boolean;
+  onClose: () => void;
+  tripId: string;
+  members: TripSnapshot["members"];
+}) {
+  const feedQuery = useFeed(tripId);
+  const markSeen = useMarkSeen(tripId);
+  const unread = useUnreadCount(tripId);
+  // Opening auto-marks seen (so `unread` collapses to 0), so hold the count
+  // captured on the first render for the header pill.
+  const openUnreadRef = useRef<number | null>(null);
+  if (openUnreadRef.current === null) openUnreadRef.current = unread;
+  const openUnread = openUnreadRef.current;
+
+  // "Mark all as read" — advance the cursor to the newest event, then dismiss.
+  function markAllRead() {
+    const latest = feedQuery.data?.events[0]?.version ?? 0;
+    if (latest > 0) markSeen(latest);
+    onClose();
+  }
+
   return (
     <div className="fixed inset-0 z-50">
       <button
@@ -410,6 +448,11 @@ function FeedDrawer({
         <div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
           <Bell aria-hidden className="size-5 text-[var(--accent-strong)]" />
           <span className="font-display font-bold text-lg">What changed</span>
+          {openUnread > 0 && (
+            <span className="rounded-pill bg-primary px-2 py-0.5 font-semibold text-primary-foreground text-xs">
+              {openUnread > 9 ? "9+" : openUnread} new
+            </span>
+          )}
           <Button
             variant="ghost"
             size="icon-sm"
@@ -422,6 +465,11 @@ function FeedDrawer({
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <FeedPanel tripId={tripId} members={members} embedded />
+        </div>
+        <div className="shrink-0 border-t p-3">
+          <Button variant="outline" className="w-full" onClick={markAllRead}>
+            Mark all as read
+          </Button>
         </div>
       </div>
     </div>

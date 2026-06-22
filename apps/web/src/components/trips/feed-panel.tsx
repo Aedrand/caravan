@@ -1,9 +1,9 @@
 import type { FeedEvent, TripMember } from "@caravan/shared";
 import { ChevronDown } from "lucide-react";
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
 import { relativeTime } from "@/lib/relative-time";
-import { useFeed, useMarkSeen, useSeen } from "@/lib/sync";
+import { useFeed, useMarkSeen, useSeen, useUnreadCount } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 
 /** The verb phrase for a feed line, keyed on mutation type (payloads are summaries). */
@@ -98,17 +98,20 @@ export function FeedPanel({
   const feedQuery = useFeed(tripId);
   const seenQuery = useSeen(tripId);
   const markSeen = useMarkSeen(tripId);
+  const unread = useUnreadCount(tripId);
 
   const [expandedState, setExpanded] = useState(false);
   const expanded = embedded || expandedState;
   // Frozen at open so the divider doesn't jump as we mark things seen.
   const [seenAtOpen, setSeenAtOpen] = useState(0);
+  // Embedded mode mounts fresh each time the drawer opens, so there's no toggle
+  // to snapshot `seen` at; freeze it once the seen query first resolves instead.
+  const frozenRef = useRef(false);
 
   const events = feedQuery.data?.events ?? [];
   const hasMore = feedQuery.data?.hasMore ?? false;
   const seen = seenQuery.data?.version ?? 0;
   const latestVersion = events[0]?.version ?? 0;
-  const unread = events.filter((e) => e.version > seen).length;
 
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
   const colors = useMemo(
@@ -118,6 +121,15 @@ export function FeedPanel({
       ),
     [members],
   );
+
+  // Embedded (drawer) open: snapshot `seen` once it has resolved so the
+  // "caught up to here" divider has a stable boundary, then let the effect
+  // below advance the cursor (which clears the bell badge).
+  useEffect(() => {
+    if (!embedded || frozenRef.current || !seenQuery.isSuccess) return;
+    frozenRef.current = true;
+    setSeenAtOpen(seen);
+  }, [embedded, seenQuery.isSuccess, seen]);
 
   // While the feed is open, keep the cursor at the newest event we've shown.
   useEffect(() => {
@@ -155,11 +167,11 @@ export function FeedPanel({
               {showDivider && (
                 <li
                   aria-hidden
-                  className="flex items-center gap-2 py-2 text-xs font-medium text-muted-foreground"
+                  className="flex items-center gap-2.5 py-2 font-body font-bold text-[11px] text-muted-foreground uppercase tracking-wide"
                 >
-                  <span className="h-px flex-1 bg-[var(--ink-faint)]" />
-                  caught up to here
-                  <span className="h-px flex-1 bg-[var(--ink-faint)]" />
+                  <span className="flex-1 border-border border-t-2 border-dotted" />
+                  Caught up to here
+                  <span className="flex-1 border-border border-t-2 border-dotted" />
                 </li>
               )}
               <li className="flex items-start gap-2.5 py-2">

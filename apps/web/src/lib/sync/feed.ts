@@ -33,6 +33,14 @@ export function useSeen(tripId: string): UseQueryResult<{ version: number }, Err
   });
 }
 
+/** How many feed events are newer than this member's seen cursor (bell badge + pill). */
+export function useUnreadCount(tripId: string): number {
+  const feedQuery = useFeed(tripId);
+  const seenQuery = useSeen(tripId);
+  const seen = seenQuery.data?.version ?? 0;
+  return (feedQuery.data?.events ?? []).filter((e) => e.version > seen).length;
+}
+
 /** Advance this member's seen cursor; the server clamps it forward-only.
  *  Returns react-query's stable `mutate`, safe to use in effect deps. */
 export function useMarkSeen(tripId: string): (version: number) => void {
