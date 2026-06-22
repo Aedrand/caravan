@@ -18,8 +18,8 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { ChevronDown, Lightbulb, Plus } from "lucide-react";
-import type { ReactNode } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode, RefObject } from "react";
+import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ActivityFooter } from "@/components/decisions/activity-footer";
 import {
   commentsFor,
@@ -62,15 +62,24 @@ function groupByDate(activities: Activity[]): Map<string | null, Activity[]> {
   return map;
 }
 
+/** Imperative handle so an out-of-tree control (the mobile add FAB) can open
+ * the create dialog without reaching into the board's private dialog state. */
+export interface ItineraryBoardHandle {
+  addActivity: () => void;
+}
+
 export function ItineraryBoard({
   snapshot,
   canEdit,
   onOpenDecide,
+  handleRef,
 }: {
   snapshot: TripSnapshot;
   canEdit: boolean;
   /** Switch the workspace to the Decide view (where the ideas pool now lives). */
   onOpenDecide?: () => void;
+  /** Lets the workspace's mobile FAB trigger "add activity" (see handle). */
+  handleRef?: RefObject<ItineraryBoardHandle | null>;
 }) {
   const { trip, activities } = snapshot;
   const { mutateAsync } = useTripMutation();
@@ -165,6 +174,12 @@ export function ItineraryBoard({
 
   const openCreate = (date: string | null) => setDialog({ mode: "create", defaultDate: date });
   const openEdit = (activity: Activity) => setDialog({ mode: "edit", activity });
+
+  // Mirror the toolbar's "Add activity" default (first day, or the ideas pool
+  // when there are no dated days) so the mobile FAB opens the same dialog.
+  useImperativeHandle(handleRef, () => ({
+    addActivity: () => openCreate(days[0] ?? null),
+  }));
   const remove = (activity: Activity) =>
     void mutateAsync("activity.delete", { activityId: activity.id }).catch(() => {});
 

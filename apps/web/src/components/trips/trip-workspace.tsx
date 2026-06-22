@@ -8,10 +8,12 @@ import {
   Copy,
   Ellipsis,
   LogOut,
+  Map as MapIcon,
   MapPin,
   PanelRightClose,
   PanelRightOpen,
   Pencil,
+  Plus,
   Route as RouteIcon,
   Trash2,
   Users,
@@ -19,12 +21,12 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { lazy, type ReactNode, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, type ReactNode, type RefObject, Suspense, useEffect, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { IdeasPanel } from "@/components/decisions/ideas-panel";
 import { PollsPanel } from "@/components/decisions/polls-panel";
 import { ExpensesPanel } from "@/components/expenses/expenses-panel";
-import { ItineraryBoard } from "@/components/itinerary/itinerary-board";
+import { ItineraryBoard, type ItineraryBoardHandle } from "@/components/itinerary/itinerary-board";
 import { MapSelectionProvider } from "@/components/map/selection";
 import { FeedPanel } from "@/components/trips/feed-panel";
 import { formatTripDates } from "@/components/trips/format";
@@ -43,18 +45,34 @@ import { Input } from "@/components/ui/input";
 import { authClient } from "@/lib/auth-client";
 import { useConnectionStatus, useFeed, useMarkSeen, useUnreadCount } from "@/lib/sync";
 import type { TripSnapshot } from "@/lib/sync/shared";
+import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 // Lazy: maplibre-gl is heavy (~300 kB gzip). Keep it off the route's initial
-// chunk; it streams in with the (default) Plan view.
+// chunk; it streams in with the (default) Plan view's ambient split, or the
+// mobile Map tab.
 const MapPanel = lazy(() =>
   import("@/components/map/map-panel").then((m) => ({ default: m.MapPanel })),
 );
 
-type View = "plan" | "decide" | "money" | "group";
+// `map` is a mobile-only view: on desktop the map stays a split inside Plan, so
+// it never appears in the desktop rail (and a resize to desktop falls back to
+// Plan — see TripWorkspace).
+type View = "plan" | "map" | "decide" | "money" | "group";
 
-const NAV: { id: View; label: string; icon: typeof RouteIcon }[] = [
+type NavItem = { id: View; label: string; icon: typeof RouteIcon };
+
+const NAV: NavItem[] = [
   { id: "plan", label: "Plan", icon: RouteIcon },
+  { id: "decide", label: "Decide", icon: Vote },
+  { id: "money", label: "Money", icon: Wallet },
+  { id: "group", label: "Group", icon: Users },
+];
+
+// Mobile bottom tabs add a dedicated Map tab between Plan and Decide.
+const MOBILE_NAV: NavItem[] = [
+  { id: "plan", label: "Plan", icon: RouteIcon },
+  { id: "map", label: "Map", icon: MapIcon },
   { id: "decide", label: "Decide", icon: Vote },
   { id: "money", label: "Money", icon: Wallet },
   { id: "group", label: "Group", icon: Users },
@@ -83,13 +101,25 @@ export interface TripWorkspaceProps {
  * `max-w-6xl` main and cancels its vertical padding).
  */
 export function TripWorkspace(props: TripWorkspaceProps) {
-  const { snapshot, archived, isOwner, pending, onToggleArchive } = props;
+  const { snapshot, archived, isOwner, pending, onToggleArchive, canEdit } = props;
   const [view, setView] = useState<View>("plan");
   const [mapOpen, setMapOpen] = useState(true);
   const [feedOpen, setFeedOpen] = useState(false);
+  const isDesktop = useIsDesktop();
+  const boardRef = useRef<ItineraryBoardHandle | null>(null);
+
+  // `map` is mobile-only. If the viewport grows to desktop while it's active,
+  // fall back to Plan (whose ambient split surfaces the same map) so the rail —
+  // which has no Map tab — never shows a selection it can't represent.
+  useEffect(() => {
+    if (isDesktop && view === "map") setView("plan");
+  }, [isDesktop, view]);
+
+  // Render Plan when desktop coerces the map view away, before the effect runs.
+  const activeView: View = isDesktop && view === "map" ? "plan" : view;
 
   return (
-    <div className="flex h-dvh w-full flex-col overflow-hidden bg-background">
+    <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-background">
       <TopBar {...props} onOpenFeed={() => setFeedOpen(true)} />
 
       {archived && (
@@ -105,38 +135,63 @@ export function TripWorkspace(props: TripWorkspaceProps) {
       )}
 
       <div className="flex min-h-0 flex-1">
-        <Rail view={view} onView={setView} />
+        <Rail view={activeView} onView={setView} />
 
         <main className="min-w-0 flex-1">
-          {view === "plan" ? (
+          {activeView === "plan" ? (
             <PlanView
               snapshot={snapshot}
-              canEdit={props.canEdit}
+              canEdit={canEdit}
               mapOpen={mapOpen}
               onToggleMap={() => setMapOpen((v) => !v)}
               onOpenDecide={() => setView("decide")}
+              boardRef={boardRef}
             />
+          ) : activeView === "map" ? (
+            // Mobile-only full-area map (the Map bottom tab).
+            <MapSelectionProvider>
+              <div className="h-full p-3">
+                <Suspense fallback={null}>
+                  <MapPanel snapshot={snapshot} fill />
+                </Suspense>
+              </div>
+            </MapSelectionProvider>
           ) : (
             <ViewScroll>
-              {view === "decide" && (
+              {activeView === "decide" && (
                 <div className="flex flex-col gap-8">
-                  <IdeasPanel snapshot={snapshot} canEdit={props.canEdit} />
-                  <PollsPanel snapshot={snapshot} canEdit={props.canEdit} />
+                  <IdeasPanel snapshot={snapshot} canEdit={canEdit} />
+                  <PollsPanel snapshot={snapshot} canEdit={canEdit} />
                 </div>
               )}
-              {view === "money" && (
+              {activeView === "money" && (
                 <ExpensesPanel
                   tripId={snapshot.trip.id}
                   members={snapshot.members}
                   currency={snapshot.trip.currency}
-                  canEdit={props.canEdit}
+                  canEdit={canEdit}
                 />
               )}
-              {view === "group" && <MembersPanel />}
+              {activeView === "group" && <MembersPanel />}
             </ViewScroll>
           )}
         </main>
       </div>
+
+      {/* Mobile add FAB — wired for Plan (add activity); Decide/Money keep their
+          in-panel "Add" buttons. Sits above the bottom tab bar, thumb-reachable. */}
+      {activeView === "plan" && canEdit && !archived && (
+        <button
+          type="button"
+          aria-label="Add activity"
+          onClick={() => boardRef.current?.addActivity()}
+          className="absolute right-4 bottom-20 z-20 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-overlay transition-transform hover:scale-105 active:scale-95 lg:hidden"
+        >
+          <Plus aria-hidden className="size-7" />
+        </button>
+      )}
+
+      <BottomNav view={activeView} onView={setView} />
 
       <FeedDrawer
         open={feedOpen}
@@ -148,12 +203,12 @@ export function TripWorkspace(props: TripWorkspaceProps) {
   );
 }
 
-/* ---------- left rail ---------- */
+/* ---------- left rail (desktop only — mobile uses BottomNav) ---------- */
 function Rail({ view, onView }: { view: View; onView: (v: View) => void }) {
   return (
     <nav
       aria-label="Trip sections"
-      className="flex w-20 shrink-0 flex-col items-center gap-1.5 border-r bg-muted px-2.5 py-3.5"
+      className="hidden w-20 shrink-0 flex-col items-center gap-1.5 border-r bg-muted px-2.5 py-3.5 lg:flex"
     >
       {NAV.map((item) => {
         const active = view === item.id;
@@ -183,6 +238,40 @@ function Rail({ view, onView }: { view: View; onView: (v: View) => void }) {
   );
 }
 
+/* ---------- bottom tab nav (mobile only — desktop uses Rail) ----------
+ * `lg:hidden` (display:none at desktop) keeps these buttons OUT of the a11y
+ * tree at ≥lg, so they don't duplicate the rail's Plan/Decide/Money/Group for
+ * role queries during the (Desktop Chrome) e2e run. Map is mobile-only here. */
+function BottomNav({ view, onView }: { view: View; onView: (v: View) => void }) {
+  return (
+    <nav aria-label="Trip sections" className="flex shrink-0 border-t bg-muted lg:hidden">
+      {MOBILE_NAV.map((item) => {
+        const active = view === item.id;
+        const Icon = item.icon;
+        return (
+          <button
+            key={item.id}
+            type="button"
+            onClick={() => onView(item.id)}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "-mt-px flex flex-1 flex-col items-center gap-1 border-t-[3px] px-1 pt-2 pb-1.5 transition-colors",
+              active
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon aria-hidden className="size-5" />
+            <span className="font-body font-bold text-[10px] uppercase tracking-wide">
+              {item.label}
+            </span>
+          </button>
+        );
+      })}
+    </nav>
+  );
+}
+
 /* ---------- top bar ---------- */
 function TopBar({
   snapshot,
@@ -201,7 +290,7 @@ function TopBar({
   const { trip } = snapshot;
   const unread = useUnreadCount(trip.id);
   return (
-    <header className="flex shrink-0 items-center gap-3 border-b bg-muted px-4 py-2.5">
+    <header className="flex shrink-0 items-center gap-2 border-b bg-muted px-3 py-2 sm:gap-3 sm:px-4 sm:py-2.5">
       <Button asChild variant="outline" size="icon-sm" className="shrink-0">
         <Link to="/" aria-label="Back to your trips">
           <ArrowLeft aria-hidden />
@@ -223,7 +312,7 @@ function TopBar({
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-3">
+      <div className="flex shrink-0 items-center gap-2 sm:gap-3">
         <PresenceStrip colors={presenceColors} />
         <ConnectionIndicator />
         <div className="relative shrink-0">
@@ -271,6 +360,9 @@ function TopBar({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
+        {/* Theme toggle lives in the desktop rail; surface it here on mobile
+            (where the rail is hidden) so it stays reachable. */}
+        <ThemeToggle className="size-8 lg:hidden" />
         <AccountMenu />
       </div>
     </header>
@@ -330,18 +422,27 @@ function PlanView({
   mapOpen,
   onToggleMap,
   onOpenDecide,
+  boardRef,
 }: {
   snapshot: TripSnapshot;
   canEdit: boolean;
   mapOpen: boolean;
   onToggleMap: () => void;
   onOpenDecide: () => void;
+  boardRef: RefObject<ItineraryBoardHandle | null>;
 }) {
   return (
     <MapSelectionProvider>
       <div className="flex h-full min-h-0">
-        <div className="min-w-0 flex-[1.35] overflow-y-auto px-5 py-5">
-          <ItineraryBoard snapshot={snapshot} canEdit={canEdit} onOpenDecide={onOpenDecide} />
+        {/* Extra bottom padding on mobile clears the add FAB; the map split
+            (and its padding) is desktop-only, so this only affects narrow screens. */}
+        <div className="min-w-0 flex-[1.35] overflow-y-auto px-5 py-5 pb-24 lg:pb-5">
+          <ItineraryBoard
+            snapshot={snapshot}
+            canEdit={canEdit}
+            onOpenDecide={onOpenDecide}
+            handleRef={boardRef}
+          />
         </div>
 
         {mapOpen ? (
@@ -377,7 +478,8 @@ function PlanView({
 
 function ViewScroll({ children }: { children: ReactNode }) {
   return (
-    <div className="h-full overflow-y-auto px-5 py-6">
+    // pb clears the mobile bottom tab bar; trimmed back to py-6 at desktop.
+    <div className="h-full overflow-y-auto px-5 pt-6 pb-20 lg:pb-6">
       <div className="mx-auto max-w-3xl">{children}</div>
     </div>
   );
@@ -443,7 +545,8 @@ function FeedDrawerBody({
       <div
         role="dialog"
         aria-label="What changed"
-        className="absolute inset-y-0 right-0 flex w-full max-w-sm flex-col bg-muted shadow-overlay"
+        // Full-screen on mobile; the capped `max-w-sm` slide-over returns at lg.
+        className="absolute inset-y-0 right-0 flex w-full max-w-none flex-col bg-muted shadow-overlay lg:max-w-sm"
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
           <Bell aria-hidden className="size-5 text-[var(--accent-strong)]" />
