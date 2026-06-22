@@ -1,10 +1,8 @@
 import type { FeedEvent, TripMember } from "@caravan/shared";
-import { ChevronDown } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
 import { relativeTime } from "@/lib/relative-time";
-import { useFeed, useMarkSeen, useSeen, useUnreadCount } from "@/lib/sync";
-import { cn } from "@/lib/utils";
+import { useFeed, useMarkSeen, useSeen } from "@/lib/sync";
 
 /** The verb phrase for a feed line, keyed on mutation type (payloads are summaries). */
 function describe(event: FeedEvent): string {
@@ -84,27 +82,14 @@ function describe(event: FeedEvent): string {
   }
 }
 
-export function FeedPanel({
-  tripId,
-  members,
-  embedded = false,
-}: {
-  tripId: string;
-  members: TripMember[];
-  // Drawer mode (C.4): always-open rows, no collapsible card chrome — the
-  // workspace's feed drawer supplies the "What changed" header around it.
-  embedded?: boolean;
-}) {
+export function FeedPanel({ tripId, members }: { tripId: string; members: TripMember[] }) {
   const feedQuery = useFeed(tripId);
   const seenQuery = useSeen(tripId);
   const markSeen = useMarkSeen(tripId);
-  const unread = useUnreadCount(tripId);
 
-  const [expandedState, setExpanded] = useState(false);
-  const expanded = embedded || expandedState;
   // Frozen at open so the divider doesn't jump as we mark things seen.
   const [seenAtOpen, setSeenAtOpen] = useState(0);
-  // Embedded mode mounts fresh each time the drawer opens, so there's no toggle
+  // The drawer mounts a fresh FeedPanel each time it opens, so there's no toggle
   // to snapshot `seen` at; freeze it once the seen query first resolves instead.
   const frozenRef = useRef(false);
 
@@ -122,29 +107,19 @@ export function FeedPanel({
     [members],
   );
 
-  // Embedded (drawer) open: snapshot `seen` once it has resolved so the
-  // "caught up to here" divider has a stable boundary, then let the effect
-  // below advance the cursor (which clears the bell badge).
+  // On drawer open: snapshot `seen` once it has resolved so the "caught up to
+  // here" divider has a stable boundary, then let the effect below advance the
+  // cursor (which clears the bell badge).
   useEffect(() => {
-    if (!embedded || frozenRef.current || !seenQuery.isSuccess) return;
+    if (frozenRef.current || !seenQuery.isSuccess) return;
     frozenRef.current = true;
     setSeenAtOpen(seen);
-  }, [embedded, seenQuery.isSuccess, seen]);
+  }, [seenQuery.isSuccess, seen]);
 
   // While the feed is open, keep the cursor at the newest event we've shown.
   useEffect(() => {
-    if (expanded && latestVersion > seen) markSeen(latestVersion);
-  }, [expanded, latestVersion, seen, markSeen]);
-
-  function toggle() {
-    if (expanded) {
-      setExpanded(false);
-      return;
-    }
-    setSeenAtOpen(seen);
-    setExpanded(true);
     if (latestVersion > seen) markSeen(latestVersion);
-  }
+  }, [latestVersion, seen, markSeen]);
 
   const body =
     events.length === 0 ? (
@@ -205,35 +180,6 @@ export function FeedPanel({
       </ul>
     );
 
-  // Drawer mode: rows only — the drawer owns the header and scroll.
-  if (embedded) return body;
-
-  return (
-    <section className="cv-card flex flex-col">
-      <button
-        type="button"
-        onClick={toggle}
-        aria-expanded={expanded}
-        className="flex items-center justify-between gap-3 rounded-card px-4 py-3 text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
-      >
-        <span className="flex items-center gap-2">
-          <span className="font-display font-bold">Activity</span>
-          {unread > 0 && (
-            <span className="rounded-pill bg-primary px-2 py-0.5 text-xs font-semibold text-primary-foreground">
-              {unread > 9 ? "9+" : unread} new
-            </span>
-          )}
-        </span>
-        <ChevronDown
-          aria-hidden
-          className={cn(
-            "size-4 text-muted-foreground transition-transform",
-            expanded && "rotate-180",
-          )}
-        />
-      </button>
-
-      {expanded && <div className="cv-divider px-4 pt-2 pb-3">{body}</div>}
-    </section>
-  );
+  // Rows only — the drawer owns the header and scroll.
+  return body;
 }

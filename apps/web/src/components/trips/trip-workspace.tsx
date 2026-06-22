@@ -567,7 +567,7 @@ function FeedDrawerBody({
           </Button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
-          <FeedPanel tripId={tripId} members={members} embedded />
+          <FeedPanel tripId={tripId} members={members} />
         </div>
         <div className="shrink-0 border-t p-3">
           <Button variant="outline" className="w-full" onClick={markAllRead}>
