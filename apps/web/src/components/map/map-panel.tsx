@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useMapConfig } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import "maplibre-gl/dist/maplibre-gl.css";
+import { useFocusedDay } from "./focused-day";
 import { isPlotted, type Plotted, toFeatureCollection, unplottedWithPlace } from "./geo-features";
 import { useMapSelection } from "./selection";
 
@@ -105,6 +106,9 @@ function MapWithList({
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const [ready, setReady] = useState(false);
   const { selectedId, select } = useMapSelection();
+  // Shared with the itinerary (PlanView): the rail-highlighted day. Null on the
+  // mobile Map tab (no provider) → the day-follow effect is inert there.
+  const { focusedDay } = useFocusedDay();
 
   const fc = useMemo(() => toFeatureCollection(plotted), [plotted]);
 
@@ -238,6 +242,26 @@ function MapWithList({
       .addTo(map);
   }, [selectedId, plotted, ready]);
 
+  // Map follows the itinerary's focused day (the deferred C.4 polish): when the
+  // focused day *changes*, frame that day's plotted pins. Deps are only
+  // [focusedDay, ready] — `plotted` is read via its ref so adding/editing an
+  // activity won't reframe; only an actual day switch does. This fires on day
+  // change, while the selection effect above flies to a single pin on select —
+  // hovering a card sets focusedDay (usually unchanged → no reframe) and selects
+  // a pin, so the pin fly-to wins for that interaction; jumping days reframes.
+  // Edge cases: a day with 0 plotted pins does nothing (no jump to a blank/world
+  // view), a single pin centers at a sensible zoom (via fitToPlotted). When
+  // focusedDay is null (mobile Map tab, no provider) we leave the boot's fit-all
+  // intact. (Scope = framing only; all pins stay visible/styled as today. A
+  // future pass could de-emphasize off-day pins.)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !focusedDay) return;
+    const ofDay = plottedRef.current.filter((a) => a.date === focusedDay);
+    if (ofDay.length === 0) return;
+    fitToPlotted(map, ofDay, 600);
+  }, [focusedDay, ready]);
+
   return (
     <div className={cn("cv-card overflow-hidden p-0", fill && "flex h-full flex-col")}>
       <div
@@ -311,14 +335,18 @@ function MapWithList({
   );
 }
 
-/** Frame all pins; for a single pin just center it at a sensible zoom. */
-function fitToPlotted(map: maplibregl.Map, plotted: Plotted[]): void {
+/**
+ * Frame a set of pins; for a single pin just center it at a sensible zoom.
+ * `duration` defaults to 0 (instant) for the boot fit; the day-follow passes a
+ * value to glide between days rather than snap.
+ */
+function fitToPlotted(map: maplibregl.Map, plotted: Plotted[], duration = 0): void {
   if (plotted.length === 1) {
     const only = plotted[0];
-    if (only) map.jumpTo({ center: [only.lng, only.lat], zoom: 12 });
+    if (only) map.easeTo({ center: [only.lng, only.lat], zoom: 12, duration });
     return;
   }
   const bounds = new maplibregl.LngLatBounds();
   for (const p of plotted) bounds.extend([p.lng, p.lat]);
-  if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 56, maxZoom: 14, duration: 0 });
+  if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 56, maxZoom: 14, duration });
 }

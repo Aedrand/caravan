@@ -27,6 +27,7 @@ import {
   useMembersById,
   useVotesByActivity,
 } from "@/components/decisions/use-decisions";
+import { useFocusedDay } from "@/components/map/focused-day";
 import { Button } from "@/components/ui/button";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
 import { useMyMember, usePresence, useTripMutation } from "@/lib/sync";
@@ -143,9 +144,18 @@ export function ItineraryBoard({
     () => new Set(days.filter((iso) => (byDate.get(iso) ?? []).length === 0)),
     [days, byDate],
   );
-  const [focusedIso, setFocusedIso] = useState<string>(() =>
-    todayInTrip ? today : (days[0] ?? ""),
-  );
+  // Focus is shared with the ambient map (via FocusedDayProvider) so it can
+  // frame the focused day's pins — the map lives across a lazy/Suspense boundary
+  // in PlanView, so a context beats prop-drilling. Outside a provider (no map,
+  // e.g. tests) this is a harmless no-op signal. The shared value starts null;
+  // seed it once to the trip's natural starting day (today-in-trip else day 1).
+  const { focusedDay, setFocusedDay } = useFocusedDay();
+  const initialFocus = todayInTrip ? today : (days[0] ?? "");
+  const focusedIso = focusedDay ?? initialFocus;
+  const setFocusedIso = setFocusedDay;
+  useEffect(() => {
+    if (focusedDay === null && initialFocus) setFocusedDay(initialFocus);
+  }, [focusedDay, initialFocus, setFocusedDay]);
   const [collapseOverride, setCollapseOverride] = useState<Record<string, boolean>>({});
   const defaultOpen = (iso: string): boolean =>
     (byDate.get(iso) ?? []).length > 0 && (!todayInTrip || iso >= today);
