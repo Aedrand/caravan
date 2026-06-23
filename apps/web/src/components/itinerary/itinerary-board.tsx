@@ -24,13 +24,14 @@ import { ActivityFooter } from "@/components/decisions/activity-footer";
 import {
   commentsFor,
   useCommentsByTarget,
+  useMemberColors,
   useMembersById,
   useVotesByActivity,
 } from "@/components/decisions/use-decisions";
 import { useFocusedDay } from "@/components/map/focused-day";
 import { useMapSelection } from "@/components/map/selection";
 import { Button } from "@/components/ui/button";
-import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
+import { FALLBACK_PERSON_COLOR } from "@/lib/person-colors";
 import { useMyMember, usePresence, useTripMutation } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { ActivityCard } from "./activity-card";
@@ -114,12 +115,8 @@ export function ItineraryBoard({
   const presence = usePresence();
   const reportView = presence.reportView;
 
-  const colors = useMemo(() => {
-    const active = snapshot.members
-      .filter((m) => m.status === "active")
-      .sort((a, b) => a.joinedAt - b.joinedAt);
-    return personColors(active);
-  }, [snapshot.members]);
+  // Stable join-order color map, shared with the feed + Track A surfaces.
+  const colors = useMemberColors(snapshot.members);
 
   // Which activity each *other* online member is editing right now (PD-5).
   const editingHints = useMemo(() => {
@@ -310,7 +307,14 @@ export function ItineraryBoard({
                 </Button>
               )}
               {canEdit && (
-                <Button size="sm" className="shrink-0" onClick={() => openCreate(days[0] ?? null)}>
+                // Desktop-only: on mobile the thumb FAB is the sole "add" path,
+                // so this would otherwise be a second control with the same
+                // accessible name at narrow viewports.
+                <Button
+                  size="sm"
+                  className="hidden shrink-0 lg:inline-flex"
+                  onClick={() => openCreate(days[0] ?? null)}
+                >
                   <Plus aria-hidden />
                   Add activity
                 </Button>
