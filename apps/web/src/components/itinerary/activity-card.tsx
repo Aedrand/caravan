@@ -1,6 +1,7 @@
 import type { Activity } from "@caravan/shared";
 import { ExternalLink, Map as MapIcon, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { isPlotted } from "@/components/map/geo-features";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -22,6 +23,8 @@ export function ActivityCard({
   editingBy,
   flash,
   footer,
+  selected = false,
+  onSelect,
 }: {
   activity: Activity;
   canEdit: boolean;
@@ -34,16 +37,24 @@ export function ActivityCard({
   flash?: boolean;
   /** Track A: votes + comments rail rendered under the card body (PD-2/PD-4). */
   footer?: ReactNode;
+  /** This card is the highlighted one on the ambient map (Track C selection). */
+  selected?: boolean;
+  /** Toggle this activity's pin on the map. Only meaningful when it's plotted. */
+  onSelect?: () => void;
 }) {
   const meta = CATEGORY_META[activity.category];
   const timeRange = formatTimeRange(activity.startTime, activity.endTime);
   const hasLinks = Boolean(activity.placeName) || Boolean(activity.linkUrl);
+  // The title doubles as the "show on map" trigger — but only when there's a pin
+  // to fly to. Unplotted activities keep a plain (non-interactive) title.
+  const selectable = Boolean(onSelect) && isPlotted(activity);
 
   return (
     <article
       className={cn(
         "cv-card flex gap-3 p-3 transition-[outline-color] duration-500 sm:p-4",
         flash && "outline outline-2 outline-offset-2",
+        selected && "ring-2 ring-[var(--accent-strong)]",
       )}
       style={flash ? { outlineColor: "var(--accent-strong)" } : undefined}
     >
@@ -59,7 +70,21 @@ export function ActivityCard({
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <h4 className="font-display font-bold leading-snug">{activity.title}</h4>
+            <h4 className="font-display font-bold leading-snug">
+              {selectable ? (
+                <button
+                  type="button"
+                  onClick={onSelect}
+                  aria-pressed={selected}
+                  title={selected ? "Hide on map" : "Show on map"}
+                  className="rounded-sm text-left outline-none transition-colors hover:text-[var(--accent-strong)] focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                >
+                  {activity.title}
+                </button>
+              ) : (
+                activity.title
+              )}
+            </h4>
             {timeRange && <p className="mt-0.5 text-sm text-muted-foreground">{timeRange}</p>}
             {editingBy && (
               <p

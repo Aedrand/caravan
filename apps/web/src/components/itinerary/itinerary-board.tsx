@@ -28,6 +28,7 @@ import {
   useVotesByActivity,
 } from "@/components/decisions/use-decisions";
 import { useFocusedDay } from "@/components/map/focused-day";
+import { useMapSelection } from "@/components/map/selection";
 import { Button } from "@/components/ui/button";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
 import { useMyMember, usePresence, useTripMutation } from "@/lib/sync";
@@ -150,6 +151,11 @@ export function ItineraryBoard({
   // e.g. tests) this is a harmless no-op signal. The shared value starts null;
   // seed it once to the trip's natural starting day (today-in-trip else day 1).
   const { focusedDay, setFocusedDay } = useFocusedDay();
+  // Shared with the ambient map too: clicking an activity's title highlights its
+  // pin (and flies to it); clicking a pin highlights the card. Toggling the
+  // already-selected one clears it. No-op signal outside a provider (tests).
+  const { selectedId, select } = useMapSelection();
+  const toggleSelect = (id: string) => select(id === selectedId ? null : id);
   const initialFocus = todayInTrip ? today : (days[0] ?? "");
   const focusedIso = focusedDay ?? initialFocus;
   const setFocusedIso = setFocusedDay;
@@ -359,6 +365,8 @@ export function ItineraryBoard({
                   canEdit={canEdit}
                   editingHints={editingHints}
                   flashing={flashing}
+                  selectedId={selectedId}
+                  onSelectActivity={toggleSelect}
                   onAdd={() => openCreate(iso)}
                   onEdit={openEdit}
                   onDelete={remove}
@@ -415,6 +423,8 @@ function DayBlock({
   canEdit,
   editingHints,
   flashing,
+  selectedId,
+  onSelectActivity,
   onAdd,
   onEdit,
   onDelete,
@@ -431,6 +441,8 @@ function DayBlock({
   canEdit: boolean;
   editingHints: Map<string, EditingHint>;
   flashing: Set<string>;
+  selectedId: string | null;
+  onSelectActivity: (id: string) => void;
   onAdd: () => void;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
@@ -506,6 +518,8 @@ function DayBlock({
                   canEdit={canEdit}
                   editingBy={editingHints.get(activity.id)}
                   flash={flashing.has(activity.id)}
+                  selected={activity.id === selectedId}
+                  onSelect={() => onSelectActivity(activity.id)}
                   onEdit={onEdit}
                   onDelete={onDelete}
                   footer={renderFooter(activity)}

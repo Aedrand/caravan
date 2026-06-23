@@ -16,6 +16,8 @@ export function SortableActivityCard({
   editingBy,
   flash,
   footer,
+  selected,
+  onSelect,
 }: {
   activity: Activity;
   canEdit: boolean;
@@ -24,6 +26,8 @@ export function SortableActivityCard({
   editingBy?: { name: string; color: string };
   flash?: boolean;
   footer?: ReactNode;
+  selected?: boolean;
+  onSelect?: () => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: activity.id,
@@ -40,6 +44,8 @@ export function SortableActivityCard({
         editingBy={editingBy}
         flash={flash}
         footer={footer}
+        selected={selected}
+        onSelect={onSelect}
       />
     );
   }
@@ -58,6 +64,8 @@ export function SortableActivityCard({
         editingBy={editingBy}
         flash={flash}
         footer={footer}
+        selected={selected}
+        onSelect={onSelect}
         dragHandle={
           <button
             type="button"

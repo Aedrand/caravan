@@ -13,9 +13,10 @@ import { useMapSelection } from "./selection";
 /**
  * Ambient trip map (C.3, TD-5). MapLibre GL + the host-configured tiles
  * (OpenFreeMap by default — keyless, CDN-served), pins for every activity with
- * coordinates, native GeoJSON clustering, and bidirectional highlight against
- * the list below. Activities without coordinates surface in an "unplotted"
- * affordance rather than silently vanishing (PD-1: unplotted is normal).
+ * coordinates, native GeoJSON clustering, and bidirectional highlight with the
+ * itinerary (click a pin → its card highlights; click a card's title → fly to
+ * its pin). Activities without coordinates surface in an "unplotted" affordance
+ * rather than silently vanishing (PD-1: unplotted is normal).
  */
 
 const SOURCE_ID = "activities";
@@ -23,7 +24,7 @@ const SOURCE_ID = "activities";
 /**
  * `fill` renders the map as a height-filling pane (the trip workspace's ambient
  * split) instead of a self-contained section: no own heading, the card grows to
- * its container, the place list becomes a capped scroll region under the map.
+ * its container. The unplotted affordance, when present, caps to a scroll region.
  */
 export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; fill?: boolean }) {
   const { activities } = snapshot;
@@ -67,12 +68,12 @@ export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; f
     );
   }
 
-  if (fill) return <MapWithList plotted={plotted} unplotted={unplotted} fill />;
+  if (fill) return <MapView plotted={plotted} unplotted={unplotted} fill />;
 
   return (
     <section className="flex flex-col gap-3">
       <MapHeading count={plotted.length} />
-      <MapWithList plotted={plotted} unplotted={unplotted} />
+      <MapView plotted={plotted} unplotted={unplotted} />
     </section>
   );
 }
@@ -91,7 +92,7 @@ function MapHeading({ count }: { count: number }) {
   );
 }
 
-function MapWithList({
+function MapView({
   plotted,
   unplotted,
   fill = false,
@@ -282,55 +283,35 @@ function MapWithList({
         />
       )}
 
-      <div
-        className={cn(
-          "border-border/60 border-t p-3",
-          fill && "max-h-[40%] shrink-0 overflow-y-auto",
-        )}
-      >
-        <ul className="flex flex-col gap-1">
-          {plotted.map((a) => (
-            <li key={a.id}>
-              <button
-                type="button"
-                onClick={() => select(a.id === selectedId ? null : a.id)}
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-control px-2.5 py-1.5 text-left text-sm",
-                  a.id === selectedId ? "bg-accent text-accent-foreground" : "hover:bg-muted",
-                )}
+      {/* Plotted activities are driven from the itinerary (click a card's title
+          to fly to / highlight its pin), so no list duplicates them here — that
+          just buys back map height. We still surface the *unplotted* ones (a
+          place name that didn't geocode): the only spot that signal lives, and
+          PD-1 says unplotted is normal, not an error to hide. */}
+      {unplotted.length > 0 && (
+        <div
+          className={cn(
+            "border-border/60 border-t p-3",
+            fill && "max-h-[40%] shrink-0 overflow-y-auto",
+          )}
+        >
+          <p className="mb-1.5 flex items-center gap-1.5 font-medium text-muted-foreground text-xs">
+            <MapPinOff aria-hidden className="size-3.5" />
+            {unplotted.length} not on the map
+          </p>
+          <ul className="flex flex-wrap gap-1.5">
+            {unplotted.map((a) => (
+              <li
+                key={a.id}
+                className="rounded-pill bg-muted px-2.5 py-1 text-muted-foreground text-xs"
+                title={`${a.title} — add a searched location to pin it`}
               >
-                <MapPin aria-hidden className="size-4 shrink-0 text-[var(--accent-strong)]" />
-                <span className="min-w-0 flex-1 truncate font-medium">{a.title}</span>
-                {a.placeName && (
-                  <span className="hidden truncate text-muted-foreground text-xs sm:block sm:max-w-[40%]">
-                    {a.placeName}
-                  </span>
-                )}
-              </button>
-            </li>
-          ))}
-        </ul>
-
-        {unplotted.length > 0 && (
-          <div className="mt-3 border-border/60 border-t pt-3">
-            <p className="mb-1.5 flex items-center gap-1.5 font-medium text-muted-foreground text-xs">
-              <MapPinOff aria-hidden className="size-3.5" />
-              {unplotted.length} not on the map
-            </p>
-            <ul className="flex flex-wrap gap-1.5">
-              {unplotted.map((a) => (
-                <li
-                  key={a.id}
-                  className="rounded-pill bg-muted px-2.5 py-1 text-muted-foreground text-xs"
-                  title={`${a.title} — add a searched location to pin it`}
-                >
-                  {a.title}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
+                {a.title}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
