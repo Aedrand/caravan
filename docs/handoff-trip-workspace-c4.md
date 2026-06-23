@@ -1,19 +1,18 @@
 # Handoff — Trip-page workspace layout (C.4)
 
-_Written 2026-06-22 · branch `feat/trip-workspace-layout` (local, **not pushed / no PR**)._
+_Written 2026-06-22 · updated 2026-06-23 — **C.4 is MERGED to `main` via PR #1**. This doc is now a record of the work + the remaining follow-ups._
 
 ## TL;DR
 The trip page (`/trips/:id`) was reworked from a 6-section vertical stack into a **workspace
-shell**, implementing the Claude Design deliverable. **All 5 planned stages + a cleanup are
-done, committed on the branch, e2e-green, and passed an end-of-phase review (verdict: sound,
-no blockers).** The branch is local and unpushed. **Immediate next action: owner review →
-push + open a PR.** The only remaining C.4 item is a deferred polish (map-follows-focused-day).
+shell**, implementing the Claude Design deliverable. All 5 planned stages + a cleanup shipped,
+e2e-green, passed an end-of-phase review (sound, no blockers), and **merged to `main` via
+PR #1 on 2026-06-23**. The only remaining C.4 item is a deferred polish
+(**map-follows-focused-day**); a few optional review nits are listed below.
 
 ## Status at a glance
-- **Branch:** `feat/trip-workspace-layout`, cut from `main` at `bbfa8a5`. 10 commits, `d70db0f`..`ee0cf95`.
-- **Gates (all green):** `pnpm typecheck` (apps/web) · `pnpm lint` = `biome check .` (0 errors / 0 warnings) · `pnpm -r build` · `pnpm test:e2e` (M1 gate, specs 01–04).
+- **Merged:** PR #1 (`github.com/Aedrand/caravan/pull/1`), `feat/trip-workspace-layout` → `main` (merge commit `069e564`) on 2026-06-23 — C.4 is now on `main`.
+- **Gates (all green at merge):** `pnpm typecheck` (apps/web) · `pnpm lint` = `biome check .` (0 errors / 0 warnings) · `pnpm -r build` · `pnpm test:e2e` (M1 gate, specs 01–04).
 - **Review:** end-of-phase adversarial review = **sound, no blockers**; its one real finding (dead `FeedPanel` code) was fixed in `5cf244b`.
-- **Working tree:** clean except this handoff doc (intentionally uncommitted).
 - **Process note:** implementation was delegated to development subagents; the orchestrator did planning, verification, and commits (to preserve context).
 
 ## What we did
@@ -53,15 +52,14 @@ Design source (vendored, read-only prototype — **do not import, translate inte
 - `apps/web/src/routes/trips.$tripId.tsx` — route states (full-height skeleton/notfound/error).
 - `apps/web/src/components/map/map-panel.tsx` — gained a `fill` prop (height-filling pane).
 
-## What's next
-1. **Push the branch + open a PR** against `main` (not done yet — awaiting owner go). The 10 commit messages already read as a clean stage-by-stage story for the PR body.
-2. **Deferred — map-follows-focused-day** (recorded in `docs/plan.md`, Track C). The itinerary
+## What's next (C.4 shipped + merged — these remain)
+1. **Deferred — map-follows-focused-day** (recorded in `docs/plan.md`, Track C). The itinerary
    already tracks a "focused day" but it only drives the day-rail highlight today. Sketch:
    lift `focusedIso` from `ItineraryBoard` → `PlanView` (or a small shared context) and pass
    it to `MapPanel`, which fits/flies to the focused day's plotted activities. Map providers
    are live (keyless OpenFreeMap tiles + Photon geocoding, both reachable), so this is
    additive polish, not blocked.
-3. **Optional review nits** (not blockers; from the end-of-phase review):
+2. **Optional review nits** (not blockers; from the end-of-phase review):
    - FAB and the day-rail "Add activity" share an accessible name — unique on desktop (FAB is
      `lg:hidden`), but two exist at a mobile viewport. Consider a distinct FAB label / scoping.
    - `itinerary-board.tsx` re-derives member colors inline; could reuse `useMemberColors`
@@ -71,7 +69,7 @@ Design source (vendored, read-only prototype — **do not import, translate inte
    - Near-duplicate "No ideas yet" copy across `ideas-panel.tsx` and the Plan pointer.
 
 ## How to resume
-- **Switch:** `git switch feat/trip-workspace-layout`.
+- **It's on `main`:** `git switch main && git pull` (C.4 merged via PR #1; the `feat/trip-workspace-layout` branch can be deleted).
 - **Run it:** `pnpm dev` → http://localhost:5173 (Vite; API/WS on :3000; uses the persistent
   dev DB `apps/server/data/caravan.db` — the owner's account is there). For a clean slate, run
   the built server with a temp DATA_DIR:
