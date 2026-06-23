@@ -19,41 +19,86 @@ import { useMapSelection } from "./selection";
 
 const SOURCE_ID = "activities";
 
-export function MapPanel({ snapshot }: { snapshot: TripSnapshot }) {
+/**
+ * `fill` renders the map as a height-filling pane (the trip workspace's ambient
+ * split) instead of a self-contained section: no own heading, the card grows to
+ * its container, the place list becomes a capped scroll region under the map.
+ */
+export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; fill?: boolean }) {
   const { activities } = snapshot;
   const plotted = useMemo(() => activities.filter(isPlotted), [activities]);
   const unplotted = useMemo(() => unplottedWithPlace(activities), [activities]);
 
-  if (activities.length === 0) return null;
+  if (activities.length === 0) {
+    if (!fill) return null;
+    return (
+      <div className="cv-card flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
+        <MapPinOff aria-hidden className="size-6 text-muted-foreground" />
+        <p className="font-display font-bold">The map appears here</p>
+        <p className="max-w-xs text-muted-foreground text-sm">
+          Add a place to an activity and it'll drop a pin.
+        </p>
+      </div>
+    );
+  }
+
+  if (plotted.length === 0) {
+    const empty = (
+      <div
+        className={cn(
+          "cv-card flex flex-col items-center gap-2 p-8 text-center",
+          fill && "h-full justify-center",
+        )}
+      >
+        <MapPinOff aria-hidden className="size-6 text-muted-foreground" />
+        <p className="font-display font-bold">Nothing pinned yet</p>
+        <p className="max-w-sm text-muted-foreground text-sm">
+          Add a location to an activity and pick a search result — it'll drop a pin here.
+        </p>
+      </div>
+    );
+    if (fill) return empty;
+    return (
+      <section className="flex flex-col gap-3">
+        <MapHeading count={plotted.length} />
+        {empty}
+      </section>
+    );
+  }
+
+  if (fill) return <MapWithList plotted={plotted} unplotted={unplotted} fill />;
 
   return (
     <section className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <MapPin aria-hidden className="size-5 text-[var(--accent-strong)]" />
-        <h2 className="font-display font-bold text-xl">Map</h2>
-        {plotted.length > 0 && (
-          <span className="font-medium text-muted-foreground text-sm">
-            {plotted.length} {plotted.length === 1 ? "place" : "places"}
-          </span>
-        )}
-      </div>
-
-      {plotted.length === 0 ? (
-        <div className="cv-card flex flex-col items-center gap-2 p-8 text-center">
-          <MapPinOff aria-hidden className="size-6 text-muted-foreground" />
-          <p className="font-display font-bold">Nothing pinned yet</p>
-          <p className="max-w-sm text-muted-foreground text-sm">
-            Add a location to an activity and pick a search result — it'll drop a pin here.
-          </p>
-        </div>
-      ) : (
-        <MapWithList plotted={plotted} unplotted={unplotted} />
-      )}
+      <MapHeading count={plotted.length} />
+      <MapWithList plotted={plotted} unplotted={unplotted} />
     </section>
   );
 }
 
-function MapWithList({ plotted, unplotted }: { plotted: Plotted[]; unplotted: Activity[] }) {
+function MapHeading({ count }: { count: number }) {
+  return (
+    <div className="flex items-center gap-2">
+      <MapPin aria-hidden className="size-5 text-[var(--accent-strong)]" />
+      <h2 className="font-display font-bold text-xl">Map</h2>
+      {count > 0 && (
+        <span className="font-medium text-muted-foreground text-sm">
+          {count} {count === 1 ? "place" : "places"}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function MapWithList({
+  plotted,
+  unplotted,
+  fill = false,
+}: {
+  plotted: Plotted[];
+  unplotted: Activity[];
+  fill?: boolean;
+}) {
   const mapConfig = useMapConfig();
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -194,11 +239,11 @@ function MapWithList({ plotted, unplotted }: { plotted: Plotted[]; unplotted: Ac
   }, [selectedId, plotted, ready]);
 
   return (
-    <div className="cv-card overflow-hidden p-0">
+    <div className={cn("cv-card overflow-hidden p-0", fill && "flex h-full flex-col")}>
       <div
         ref={containerRef}
         role="application"
-        className="h-[320px] w-full sm:h-[400px]"
+        className={cn("w-full", fill ? "min-h-0 flex-1" : "h-[320px] sm:h-[400px]")}
         aria-label="Map of trip activities"
       />
       {mapConfig.data && (
@@ -206,11 +251,19 @@ function MapWithList({ plotted, unplotted }: { plotted: Plotted[]; unplotted: Ac
         <p
           // biome-ignore lint/security/noDangerouslySetInnerHtml: attribution is server-built from a fixed provider table, not user input
           dangerouslySetInnerHTML={{ __html: mapConfig.data.attribution }}
-          className="border-border/60 border-t bg-muted/40 px-3 py-1.5 text-[11px] text-muted-foreground leading-tight [&_a]:underline"
+          className={cn(
+            "border-border/60 border-t bg-muted/40 px-3 py-1.5 text-[11px] text-muted-foreground leading-tight [&_a]:underline",
+            fill && "shrink-0",
+          )}
         />
       )}
 
-      <div className="border-border/60 border-t p-3">
+      <div
+        className={cn(
+          "border-border/60 border-t p-3",
+          fill && "max-h-[40%] shrink-0 overflow-y-auto",
+        )}
+      >
         <ul className="flex flex-col gap-1">
           {plotted.map((a) => (
             <li key={a.id}>

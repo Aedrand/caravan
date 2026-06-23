@@ -56,6 +56,16 @@ export function formatDayLabel(iso: string): string {
   });
 }
 
+/** "Mon 23" — compact, for the day-jump rail chips. */
+export function formatDayShort(iso: string): string {
+  return parseIso(iso).toLocaleDateString(undefined, { weekday: "short", day: "numeric" });
+}
+
+/** Today as a calendar-local ISO `YYYY-MM-DD` (matches the day-bucket keys). */
+export function todayIso(): string {
+  return toIso(new Date());
+}
+
 /** 1-based day number relative to the trip start, or null if before it / undated trip. */
 export function dayNumber(iso: string, startDate: string | null): number | null {
   if (!startDate) return null;
