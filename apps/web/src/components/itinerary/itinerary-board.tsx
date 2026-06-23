@@ -309,6 +309,29 @@ export function ItineraryBoard({
             onDragEnd={handleDragEnd}
             onDragCancel={() => setActiveId(null)}
           >
+            {/* Ideas moved to Decide — Plan keeps a compact pointer. Sits at the
+                top so it's seen even on a long trip you'd otherwise scroll past. */}
+            <button
+              type="button"
+              onClick={onOpenDecide}
+              className="mb-2 flex w-full items-center gap-3 rounded-card border bg-accent-soft px-4 py-3 text-left shadow-control transition-colors hover:bg-accent"
+            >
+              <Lightbulb aria-hidden className="size-5 shrink-0 text-[var(--accent-strong)]" />
+              <span className="min-w-0 flex-1">
+                <span className="block font-display font-bold">
+                  {ideaCount > 0
+                    ? `${ideaCount} ${ideaCount === 1 ? "idea" : "ideas"} the group's floating`
+                    : "No ideas yet"}
+                </span>
+                <span className="block text-sm text-muted-foreground">
+                  {ideaCount > 0
+                    ? "Vote on them in Decide — top picks become days"
+                    : "Float a place the group can vote on"}
+                </span>
+              </span>
+              <span className="shrink-0 font-body text-sm font-bold">Open Decide →</span>
+            </button>
+
             <div className="flex flex-col gap-1.5">
               {days.map((iso) => (
                 <DayBlock
@@ -333,28 +356,6 @@ export function ItineraryBoard({
                 />
               ))}
             </div>
-
-            {/* Ideas moved to Decide — Plan keeps a compact pointer. */}
-            <button
-              type="button"
-              onClick={onOpenDecide}
-              className="mt-3 flex w-full items-center gap-3 rounded-card border bg-accent-soft px-4 py-3 text-left shadow-control transition-colors hover:bg-accent"
-            >
-              <Lightbulb aria-hidden className="size-5 shrink-0 text-[var(--accent-strong)]" />
-              <span className="min-w-0 flex-1">
-                <span className="block font-display font-bold">
-                  {ideaCount > 0
-                    ? `${ideaCount} ${ideaCount === 1 ? "idea" : "ideas"} the group's floating`
-                    : "No ideas yet"}
-                </span>
-                <span className="block text-sm text-muted-foreground">
-                  {ideaCount > 0
-                    ? "Vote on them in Decide — top picks become days"
-                    : "Float a place the group can vote on"}
-                </span>
-              </span>
-              <span className="shrink-0 font-body text-sm font-bold">Open Decide →</span>
-            </button>
 
             {/* No drop animation: our reorder lands via the async activity.move
                 optimistic update, so the default settle would animate the overlay
