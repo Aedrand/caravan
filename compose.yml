@@ -18,6 +18,11 @@ services:
       # Optional: pre-seed the admin account on first boot.
       # ADMIN_EMAIL: ""
       # ADMIN_PASSWORD: ""
+      # Optional: opt-in continuous backup to object storage via Litestream.
+      # Uncomment + set a replica URL and credentials. See docs/self-hosting/backups.md.
+      # LITESTREAM_REPLICA_URL: "s3://my-bucket/caravan"   # or Backblaze B2, MinIO, Tigris…
+      # AWS_ACCESS_KEY_ID: ""
+      # AWS_SECRET_ACCESS_KEY: ""
 
 volumes:
   caravan-data:

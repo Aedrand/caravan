@@ -1,0 +1,41 @@
+# Litestream configuration for Caravan (TD-4) — OPT-IN streaming backup.
+#
+# This file is copied to /etc/litestream.yml in the image and is only used when
+# LITESTREAM_REPLICA_URL is set (see docker-entrypoint.sh). Litestream expands
+# ${VAR} references against the environment before parsing, so the two variables
+# below are filled in at container start:
+#
+#   DATA_DIR              → defaults to /app/data in the image
+#   LITESTREAM_REPLICA_URL → e.g. s3://my-bucket/caravan   (you set this)
+#
+# Object-storage credentials are read straight from the standard environment
+# variables and do NOT need to be listed here:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY  (S3, Backblaze B2, MinIO, Tigris…)
+#
+# Reference: https://litestream.io/reference/config/
+
+dbs:
+  # The SQLite database Caravan writes to. ${DATA_DIR} matches the server's
+  # config (apps/server/src/config.ts → dbPath = ${DATA_DIR}/caravan.db).
+  - path: ${DATA_DIR}/caravan.db
+
+    replica:
+      # Destination for replication. Provided via env so one image works for
+      # any backend (S3, B2, MinIO, Tigris, etc.).
+      url: ${LITESTREAM_REPLICA_URL}
+
+      # How often new WAL frames are shipped to the replica. 1s is the default
+      # and gives an effective RPO of ~1s; raise it (e.g. 10s) to cut request
+      # counts on metered object stores at the cost of a slightly larger
+      # potential data-loss window.
+      sync-interval: 1s
+
+# Full-database snapshots. Litestream restores from the most recent snapshot
+# plus the WAL written since, so periodic snapshots bound restore time and let
+# old WAL segments be reclaimed. Defaults shown explicitly for clarity.
+snapshot:
+  # Take a fresh snapshot on this cadence.
+  interval: 24h
+  # Keep snapshots (and the WAL behind them) for this long, then prune from the
+  # replica. 72h tolerates a couple of missed snapshots before the chain is cut.
+  retention: 72h
