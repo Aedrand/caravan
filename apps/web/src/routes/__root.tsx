@@ -31,6 +31,19 @@ function RootLayout() {
       <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-10 sm:px-6 lg:px-8">
         <Outlet />
       </main>
+      <footer className="border-t border-border/70">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-4 text-xs text-muted-foreground sm:px-6 lg:px-8">
+          <span>Caravan v{__APP_VERSION__}</span>
+          <a
+            href="https://github.com/Aedrand/caravan"
+            target="_blank"
+            rel="noreferrer noopener"
+            className="rounded-control outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          >
+            GitHub
+          </a>
+        </div>
+      </footer>
     </div>
   );
 }

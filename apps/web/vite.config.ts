@@ -3,8 +3,17 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import pkg from "./package.json" with { type: "json" };
+
+// release-please bumps package.json on each release; surface it in the UI footer.
+// "0.0.0" is the un-released placeholder, so show a friendlier "dev" until a real
+// version is cut.
+const appVersion = pkg.version && pkg.version !== "0.0.0" ? pkg.version : "dev";
 
 export default defineConfig({
+  define: {
+    __APP_VERSION__: JSON.stringify(appVersion),
+  },
   plugins: [
     // Must come before the React plugin so route files are transformed first
     tanstackRouter({
