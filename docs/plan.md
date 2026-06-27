@@ -1,6 +1,6 @@
 # Caravan — End-to-End Implementation Plan
 
-Drafted 2026-06-10; **ratified by the owner 2026-06-11** (all decisions ACCEPTED — see `decisions.md`; TD-7 modified: OAuth 2.1 ships with v1.3). **Build status: M0 + M1 COMPLETE (M1 closed 2026-06-19)** — walking skeleton, full collaborative itinerary (create/edit/reorder), presence, attributed feed, and the two-browser gate all landed and CI-green. Contracts frozen. **Fan-out Tracks A/B/C integrated to `main` 2026-06-20** (`f114142`) — group decisions, expenses + settlement, and maps/places, built in parallel (worktree agents) and merged with one unified migration (0003); repo-wide green (190 tests) + in-browser verified. **Next: the trip-page workspace layout (C.4 + Track E) is with Claude Design** (brief: `docs/design/trip-page-layout-brief.md`). Companion reading order: `../PROJECT.md` → `decisions.md` → this file.
+Drafted 2026-06-10; **ratified by the owner 2026-06-11** (all decisions ACCEPTED — see `decisions.md`; TD-7 modified: OAuth 2.1 ships with v1.3). **Build status: M0 + M1 COMPLETE (M1 closed 2026-06-19)** — walking skeleton, full collaborative itinerary (create/edit/reorder), presence, attributed feed, and the two-browser gate all landed and CI-green. Contracts frozen. **Fan-out Tracks A/B/C integrated to `main` 2026-06-20** (`f114142`) — group decisions, expenses + settlement, and maps/places, built in parallel (worktree agents) and merged with one unified migration (0003); repo-wide green (190 tests) + in-browser verified. C.4 trip-page workspace layout MERGED to `main` 2026-06-23 (PR #1; only the map-follows-focused-day follow-up remains). **Track D ops & admin cluster (D.3 admin panel, D.4 Litestream, D.5 docs, D.6 release-please + security headers/rate-limiting) shipped to `main` 2026-06-27** — D.1 email + D.2 digest deferred. Companion reading order: `../PROJECT.md` → `decisions.md` → this file.
 
 **This plan is built for parallel execution.** After a deliberately serial foundation (M0–M1) establishes the contracts, the work fans out into independent tracks with disjoint file ownership, designed so multiple implementation agents (or people) can run concurrently without colliding. §5 defines the execution model; every task is tagged `[P]` (parallel-safe) or `[S]` (serial/foundation).
 
@@ -85,7 +85,7 @@ M0 Walking skeleton [S]
      ├─ Track A: Decisions (votes/polls/comments)        [P] ─┐
      ├─ Track B: Expenses & settlement                   [P]  ├─ M6 v1.0 hardening & release [S]
      ├─ Track C: Map & places                            [P]  │
-     ├─ Track D: Self-host polish (email/admin/docs/ops) [P]  │
+     ├─ Track D: Self-host polish (ops/admin/docs ✅; email/digest ⏳) [P]  │
      └─ Track E: Design & polish pass (continuous)       [P] ─┘
          M6 ─┬─ M7 House AI (v1.1)        [P with M8]
              └─ M8 PWA + push (v1.2)      [P with M7]
@@ -130,12 +130,12 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 | Payments + min-transaction settlement | PD-8 | B.2–B.4 |
 | Booking link-outs only | PD-12 | 1.7 (`link_url` + link-out buttons) |
 | Consumer-grade UI, states, responsive | — | E.1–E.4 |
-| Notifications: invites / digest / push | PD-7 | D.1, D.2, M8 |
+| Notifications: invites / digest / push | PD-7 | D.1, D.2 ⏳ (deferred), M8 |
 | Offline read + installable PWA | PD-6 | M8 |
 | House AI (chat, NL edits, conflicts, budgets, per-trip toggle) | TD-6 | M7 |
 | Personal AI (tools, permissions, audit, OAuth) | PD-11, TD-7 | M9 |
 | AI surfaces independently optional (both/either/none) | TD-6, TD-7 | M7 (env key), M9 (`personal_ai_enabled` toggle) |
-| One-command self-host, backups, admin | TD-3, TD-4 | 0.7–0.9, D.3–D.6 |
+| One-command self-host, backups, admin | TD-3, TD-4 | 0.7–0.9, D.3–D.6 ✅ |
 | Export, trip-from-prompt, mentions, scratchpad | PD-12 | §9 backlog (deliberate) |
 
 ### M0 — Walking skeleton `[S]` (foundation; some internal parallelism)
@@ -214,14 +214,16 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 
 ### Track D — Self-host polish `[P]` (≈ M5)
 
-| # | Task | Size |
-|---|---|---|
-| D.1 | SMTP email: nodemailer + react-email; invite + membership emails; graceful unconfigured path (PD-7) | M |
-| D.2 | Daily digest: job via the 0.9 registry, per-trip batching, opt-out prefs | M |
-| D.3 | Admin panel — scope: writable (registration toggle, instance name, **theme picker per TD-10**: presets + custom hues, light/dark), read-only (members/trips/disk usage), backup button (`VACUUM INTO` → snapshot download), admin-role route guard | M |
-| D.4 | Litestream opt-in (entrypoint co-process), backup/restore + upgrade/rollback docs incl. when-to-enable guidance and S3/B2 cost note (TD-4) | S |
-| D.5 | Docs: install guide (compose + `docker run`), Caddy/Traefik examples, config reference (generated from env module), CONTRIBUTING + DCO, demo seed script | M |
-| D.6 | release-please + version surfacing in UI footer; security headers, rate limiting middleware | S |
+> 🟡 **Ops & admin cluster (D.3–D.6) shipped to `main` 2026-06-27.** Admin panel (`/admin`: settings + overview + `VACUUM INTO` backup, `requireAdmin` guard), opt-in Litestream streaming backup (default path unchanged when unset; auto-restore on empty volume), full self-host docs (install/config/reverse-proxy/backups + CONTRIBUTING/DCO + demo seed), and release-please + footer version + security-headers & rate-limiting middleware. Shared foundation in `258a3ca`; review-remediation pass in `b0aea2f`. All gates green at landing (typecheck server+web, biome, `pnpm -r build`, e2e M1 gate 5/5, 105/105 server unit). **D.1/D.2 (email + digest) deferred this pass** — see below.
+
+| # | Task | Size | Status |
+|---|---|---|---|
+| D.1 | SMTP email: nodemailer + react-email; invite + membership emails; graceful unconfigured path (PD-7) | M | ⏳ Deferred (not started 2026-06-27) — the only remaining Track D notification work; nothing depends on it yet |
+| D.2 | Daily digest: job via the 0.9 registry, per-trip batching, opt-out prefs | M | ⏳ Deferred (not started 2026-06-27) — depends on D.1 |
+| D.3 | Admin panel — scope: writable (registration toggle, instance name, **theme picker per TD-10**: presets + custom hues, light/dark), read-only (members/trips/disk usage), backup button (`VACUUM INTO` → snapshot download), admin-role route guard | M | ✅ Done 2026-06-27 (`42e68e4`) — `/admin` page + nav link (admins only); `GET/PUT /api/admin/settings` (instance name, registration toggle, theme preset = two-axis style×theme per TD-11), `GET /api/admin/overview` (users/trips/active-members/DB+WAL bytes), `GET /api/admin/backup` (`VACUUM INTO` → download), `requireAdmin()` route guard |
+| D.4 | Litestream opt-in (entrypoint co-process), backup/restore + upgrade/rollback docs incl. when-to-enable guidance and S3/B2 cost note (TD-4) | S | ✅ Done 2026-06-27 (`cdd7897`) — `docker-entrypoint.sh` co-process (default path unchanged when `LITESTREAM_REPLICA_URL` unset; auto-restore on empty volume), `litestream.yml`, Dockerfile install (v0.5.12, multi-arch), compose note, `docs/self-hosting/backups.md` |
+| D.5 | Docs: install guide (compose + `docker run`), Caddy/Traefik examples, config reference (generated from env module), CONTRIBUTING + DCO, demo seed script | M | ✅ Done 2026-06-27 (`ad58956`) — `README.md` quick-start, `docs/self-hosting/{install,configuration,reverse-proxy,backups}.md` (config reference generated from `config.ts`; Caddy/Traefik + WS), `CONTRIBUTING.md` + DCO (`.github/workflows/dco.yml`), demo seed (`apps/server/src/scripts/seed.ts`, `pnpm --filter @caravan/server seed`) |
+| D.6 | release-please + version surfacing in UI footer; security headers, rate limiting middleware | S | ✅ Done 2026-06-27 (`8acc772`, `6355b5c`, `b0aea2f`) — release-please automation (`release-please-config.json` + `release-please.yml`; `release.yml` made a reusable `workflow_call`), app version in the web footer (non-trip layout), security-headers middleware (nosniff, X-Frame-Options SAMEORIGIN, Referrer-Policy, Permissions-Policy, HSTS in prod), rate-limiting middleware (general `/api` 300/min + POST auth strict 20/min, IP-keyed with `TRUST_PROXY`-gated x-forwarded-for, periodic prune) |
 
 ### Track E — Design & polish `[P]` (continuous through fan-out)
 
