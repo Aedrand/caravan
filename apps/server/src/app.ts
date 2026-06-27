@@ -5,11 +5,14 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { Hono } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { Auth } from "./auth";
+import { requireAdmin } from "./auth/admin";
 import { type AuthedEnv, requireUser } from "./auth/session";
 import type { Config } from "./config";
+import { rateLimit } from "./core/rate-limit";
 import { createSyncRoutes } from "./core/sync";
 import type { TripRooms } from "./core/ws";
 import type { Db } from "./db";
+import { createAdminRoutes } from "./features/admin/routes";
 import { createExpensesRoutes } from "./features/expenses/routes";
 import { createGeoRoutes } from "./features/geo/routes";
 import { createInviteRoutes } from "./features/trips/invite-routes";
@@ -43,12 +46,24 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
     .use("*", requireUser(auth))
     .route("/", createGeoRoutes({ db, config, logger }));
 
+  // Instance admin (Track D): session-gated AND admin-only. D.3 fills in the router.
+  const admin = new Hono<AuthedEnv>()
+    .use("*", requireUser(auth))
+    .use("*", requireAdmin())
+    .route("/", createAdminRoutes({ db }));
+
   const api = new Hono()
     .get("/health", (c) => c.json({ status: "ok", service: "caravan" }))
     .route("/trips", trips)
     .route("/geo", geo)
+    .route("/admin", admin)
     // Invite door: GET info is public; accept gates itself on a session.
     .route("/invites", createInviteRoutes({ db, rooms, logger, requireUser: requireUser(auth) }));
+
+  // Rate limiting (D.6) is disabled under NODE_ENV=test so the unit suite and the
+  // Playwright M1 gate (which fire many requests fast from one IP) never trip it;
+  // dev/prod defaults (300/min general, 20/min auth) stay well clear of normal use.
+  const rateLimitEnabled = config.nodeEnv !== "test";
 
   const app = new Hono()
     .use("*", async (c, next) => {
@@ -64,6 +79,36 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
         "request",
       );
     })
+    // Safe response headers on everything. No strict CSP here on purpose: the SPA
+    // pulls MapLibre + external tiles (OpenFreeMap), Photon geocoding, and WS, so a
+    // wrong policy would break the map. A real (report-only first) CSP is a follow-up.
+    .use("*", async (c, next) => {
+      await next();
+      c.header("X-Content-Type-Options", "nosniff");
+      c.header("X-Frame-Options", "SAMEORIGIN");
+      c.header("Referrer-Policy", "strict-origin-when-cross-origin");
+      c.header("X-DNS-Prefetch-Control", "off");
+      c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    })
+    // Stricter limiter for the auth surface (brute-force guard); must precede the
+    // /api/auth/* handler below so it actually wraps it.
+    .use(
+      "/api/auth/*",
+      rateLimit({
+        limit: config.rateLimit.authMax,
+        windowMs: config.rateLimit.windowMs,
+        enabled: rateLimitEnabled,
+      }),
+    )
+    // General limiter for the rest of the API.
+    .use(
+      "/api/*",
+      rateLimit({
+        limit: config.rateLimit.max,
+        windowMs: config.rateLimit.windowMs,
+        enabled: rateLimitEnabled,
+      }),
+    )
     // Better Auth owns /api/auth/* (sign-up, sign-in, session, sign-out, …)
     .on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw))
     .route("/api", api)

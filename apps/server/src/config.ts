@@ -43,6 +43,16 @@ const EnvSchema = z.object({
   MAPTILER_KEY: z.string().min(1).optional(),
   /** Stadia key — alternative keyed tile styles. */
   STADIA_KEY: z.string().min(1).optional(),
+
+  // --- Operations: replication & rate limiting (Track D) -----------------------
+  /** Litestream replica target (D.4). Surfaced for the Docker entrypoint; the app itself doesn't read it. */
+  LITESTREAM_REPLICA_URL: z.string().optional(),
+  /** Rate-limit window length in ms (D.6). */
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(60000),
+  /** Max requests per window per client for /api. Generous so normal use + the M1 e2e gate never trip it. */
+  RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
+  /** Stricter per-window cap for /api/auth/* (sign-in/up brute-force guard). */
+  RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(20),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -74,6 +84,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       tileProvider: parsed.TILE_PROVIDER,
       maptilerKey: parsed.MAPTILER_KEY,
       stadiaKey: parsed.STADIA_KEY,
+    },
+    /** Surfaced for D.4's Docker entrypoint; the app process itself ignores it. */
+    litestreamReplicaUrl: parsed.LITESTREAM_REPLICA_URL,
+    rateLimit: {
+      windowMs: parsed.RATE_LIMIT_WINDOW_MS,
+      max: parsed.RATE_LIMIT_MAX,
+      authMax: parsed.RATE_LIMIT_AUTH_MAX,
     },
   };
 }
