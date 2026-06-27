@@ -65,6 +65,16 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
   // dev/prod defaults (300/min general, 20/min auth) stay well clear of normal use.
   const rateLimitEnabled = config.nodeEnv !== "test";
 
+  // Strict brute-force guard for the auth surface — applied ONLY to credential
+  // POSTs (sign-in/sign-up/…). Better Auth polls GET /api/auth/get-session on
+  // every page load, so counting reads against the strict cap would 429 normal
+  // use; those fall under the general /api limiter instead.
+  const authLimiter = rateLimit({
+    limit: config.rateLimit.authMax,
+    windowMs: config.rateLimit.windowMs,
+    enabled: rateLimitEnabled,
+  });
+
   const app = new Hono()
     .use("*", async (c, next) => {
       const start = performance.now();
@@ -90,15 +100,10 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
       c.header("X-DNS-Prefetch-Control", "off");
       c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
     })
-    // Stricter limiter for the auth surface (brute-force guard); must precede the
-    // /api/auth/* handler below so it actually wraps it.
-    .use(
-      "/api/auth/*",
-      rateLimit({
-        limit: config.rateLimit.authMax,
-        windowMs: config.rateLimit.windowMs,
-        enabled: rateLimitEnabled,
-      }),
+    // Stricter limiter for the auth surface (brute-force guard); POST-only so it
+    // wraps credential submissions but not the frequent get-session reads.
+    .use("/api/auth/*", (c, next) =>
+      c.req.method === "POST" ? authLimiter(c, next) : next(),
     )
     // General limiter for the rest of the API.
     .use(
