@@ -15,6 +15,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RegisterRouteImport } from './routes/register'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as TripsTripIdRouteImport } from './routes/trips.$tripId'
 import { Route as JoinTokenRouteImport } from './routes/join.$token'
@@ -27,6 +28,11 @@ const RegisterRoute = RegisterRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRoute = AdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -47,6 +53,7 @@ const JoinTokenRoute = JoinTokenRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/join/$token': typeof JoinTokenRoute
@@ -54,6 +61,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/join/$token': typeof JoinTokenRoute
@@ -62,6 +70,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/admin': typeof AdminRoute
   '/login': typeof LoginRoute
   '/register': typeof RegisterRoute
   '/join/$token': typeof JoinTokenRoute
@@ -69,12 +78,25 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/register' | '/join/$token' | '/trips/$tripId'
+  fullPaths:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/register'
+    | '/join/$token'
+    | '/trips/$tripId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/register' | '/join/$token' | '/trips/$tripId'
+  to:
+    | '/'
+    | '/admin'
+    | '/login'
+    | '/register'
+    | '/join/$token'
+    | '/trips/$tripId'
   id:
     | '__root__'
     | '/'
+    | '/admin'
     | '/login'
     | '/register'
     | '/join/$token'
@@ -83,6 +105,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AdminRoute: typeof AdminRoute
   LoginRoute: typeof LoginRoute
   RegisterRoute: typeof RegisterRoute
   JoinTokenRoute: typeof JoinTokenRoute
@@ -103,6 +126,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -131,6 +161,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AdminRoute: AdminRoute,
   LoginRoute: LoginRoute,
   RegisterRoute: RegisterRoute,
   JoinTokenRoute: JoinTokenRoute,
