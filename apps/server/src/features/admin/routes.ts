@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { count, eq } from "drizzle-orm";
@@ -42,9 +43,12 @@ function readTheme(db: Db): ThemeSetting | null {
 }
 
 function readSettings(db: Db) {
+  // An empty/whitespace stored value means "unset" — normalise it to null so the
+  // client sees a clean cleared state (older rows may still hold "").
+  const name = getSetting(db, "instance_name")?.trim();
   return {
     registrationOpen: isRegistrationOpen(db),
-    instanceName: getSetting(db, "instance_name") ?? null,
+    instanceName: name ? name : null,
     theme: readTheme(db),
   };
 }
@@ -80,7 +84,17 @@ export function createAdminRoutes(deps: { db: Db }) {
         }
 
         const { instanceName, registrationOpen, theme } = parsed.data;
-        setSetting(db, "instance_name", instanceName);
+        // The form posts every field together, so an empty name means "clear it",
+        // not "reject the save". Delete the row rather than storing "" — that keeps
+        // the setting genuinely unset and GET returns null.
+        const trimmedName = instanceName.trim();
+        if (trimmedName) {
+          setSetting(db, "instance_name", trimmedName);
+        } else {
+          db.delete(schema.instanceSettings)
+            .where(eq(schema.instanceSettings.key, "instance_name"))
+            .run();
+        }
         setSetting(db, "registration_open", registrationOpen ? "true" : "false");
         setSetting(db, "theme", JSON.stringify(theme));
 
@@ -112,9 +126,10 @@ export function createAdminRoutes(deps: { db: Db }) {
       // The DB is small at this scale, so we buffer the temp file, delete it,
       // then return the bytes — no stream/unlink race.
       .get("/backup", (c) => {
-        const tmpPath = path.join(dataDir, "caravan-backup.tmp.db");
-        // A stale temp from a crashed prior run would make VACUUM INTO fail.
-        if (existsSync(tmpPath)) unlinkSync(tmpPath);
+        // Unique per request: a fixed path lets two concurrent backups clobber
+        // each other (and race the finally unlink). VACUUM INTO requires the
+        // target not to exist, which a fresh UUID guarantees.
+        const tmpPath = path.join(dataDir, `caravan-backup-${randomUUID()}.tmp.db`);
         try {
           // Single-quoted SQL string literal; escape any embedded quote.
           db.$client.exec(`VACUUM INTO '${tmpPath.replace(/'/g, "''")}'`);

@@ -73,6 +73,15 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
     limit: config.rateLimit.authMax,
     windowMs: config.rateLimit.windowMs,
     enabled: rateLimitEnabled,
+    trustProxy: config.trustProxy,
+  });
+
+  // General limiter for the rest of the API.
+  const generalLimiter = rateLimit({
+    limit: config.rateLimit.max,
+    windowMs: config.rateLimit.windowMs,
+    enabled: rateLimitEnabled,
+    trustProxy: config.trustProxy,
   });
 
   const app = new Hono()
@@ -99,21 +108,17 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
       c.header("Referrer-Policy", "strict-origin-when-cross-origin");
       c.header("X-DNS-Prefetch-Control", "off");
       c.header("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+      // HSTS only in production: dev/test run over plain HTTP and pinning HTTPS
+      // there would lock the browser out of localhost.
+      if (config.nodeEnv === "production") {
+        c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+      }
     })
     // Stricter limiter for the auth surface (brute-force guard); POST-only so it
     // wraps credential submissions but not the frequent get-session reads.
-    .use("/api/auth/*", (c, next) =>
-      c.req.method === "POST" ? authLimiter(c, next) : next(),
-    )
+    .use("/api/auth/*", (c, next) => (c.req.method === "POST" ? authLimiter(c, next) : next()))
     // General limiter for the rest of the API.
-    .use(
-      "/api/*",
-      rateLimit({
-        limit: config.rateLimit.max,
-        windowMs: config.rateLimit.windowMs,
-        enabled: rateLimitEnabled,
-      }),
-    )
+    .use("/api/*", generalLimiter)
     // Better Auth owns /api/auth/* (sign-up, sign-in, session, sign-out, …)
     .on(["GET", "POST"], "/api/auth/*", (c) => auth.handler(c.req.raw))
     .route("/api", api)
@@ -137,7 +142,16 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
     logger.info({ webDist: config.webDist }, "no web build found — dev mode, Vite serves the SPA");
   }
 
-  return app;
+  // Both limiters keep an in-memory Map keyed by client; under many unique IPs it
+  // would grow unbounded. Exposed here so index.ts can register a periodic prune
+  // via the job registry. Attached to the app so the return stays the Hono
+  // instance (tests + the node-server adapter use `app.fetch`/`app.request`).
+  return Object.assign(app, {
+    pruneRateLimiters() {
+      authLimiter.limiter.prune();
+      generalLimiter.limiter.prune();
+    },
+  });
 }
 
 export type App = ReturnType<typeof createApp>;

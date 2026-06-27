@@ -15,6 +15,9 @@ services:
     environment:
       # Full public URL — set when serving behind a reverse proxy / domain.
       BASE_URL: "http://localhost:3000"
+      # Set TRUST_PROXY=true when running behind a reverse proxy so X-Forwarded-For
+      # is honored for rate-limit client identity. Leave off for a directly-exposed port.
+      # TRUST_PROXY: "true"
       # Optional: pre-seed the admin account on first boot.
       # ADMIN_EMAIL: ""
       # ADMIN_PASSWORD: ""

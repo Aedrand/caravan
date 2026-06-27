@@ -41,6 +41,10 @@ async function main() {
   rooms.startHeartbeat();
   const app = createApp({ config, db: db.db, logger, auth, rooms });
 
+  // Reclaim expired rate-limit windows so the keyed Map stays bounded under many
+  // unique client IPs (the limiters prune lazily on hit, but idle keys linger).
+  jobs.register("rate-limit-prune", "*/10 * * * *", () => app.pruneRateLimiters());
+
   // noServer is required — the Hono adapter handles the HTTP upgrade itself.
   const wss = new WebSocketServer({ noServer: true });
   const server = serve(

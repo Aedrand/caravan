@@ -3,12 +3,12 @@ import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
-import pkg from "./package.json" with { type: "json" };
+// release-please bumps the ROOT package.json on each release (not this one), so
+// read the version from there to surface it in the UI footer. "0.0.0" is the
+// un-released placeholder, so show a friendlier "dev" until a real version is cut.
+import rootPkg from "../../package.json" with { type: "json" };
 
-// release-please bumps package.json on each release; surface it in the UI footer.
-// "0.0.0" is the un-released placeholder, so show a friendlier "dev" until a real
-// version is cut.
-const appVersion = pkg.version && pkg.version !== "0.0.0" ? pkg.version : "dev";
+const appVersion = rootPkg.version && rootPkg.version !== "0.0.0" ? rootPkg.version : "dev";
 
 export default defineConfig({
   define: {

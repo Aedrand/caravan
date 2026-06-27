@@ -25,6 +25,7 @@ generated from it. If the two ever disagree, the schema wins — open an issue.
 | `LOG_LEVEL` | enum: `fatal` \| `error` \| `warn` \| `info` \| `debug` \| `trace` | `info` | Pino log verbosity. |
 | `SECRET_KEY` | string (min 32 chars) | auto-generated → `DATA_DIR/secret_key` | Session/JWT signing key. Leave unset and Caravan generates one on first boot and persists it (mode `600`). Set it explicitly only if you want to manage it externally. **Rotating it invalidates all sessions.** |
 | `WEB_DIST` | string (path) | `../web/dist` (image: `/app/apps/web/dist`) | Location of the built SPA, served statically in production. The image sets this correctly; you should not need to change it. |
+| `TRUST_PROXY` | boolean | `false` | Whether to honour the `X-Forwarded-For` header for client identity (used by the rate limiter). Set `true` **only** when behind a trusted reverse proxy so `X-Forwarded-For` is honored; leaving it on for a directly-exposed port lets clients spoof the header and dodge rate limits. |
 
 ## Admin bootstrap
 

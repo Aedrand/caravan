@@ -64,14 +64,18 @@ export class FixedWindowLimiter {
 }
 
 /**
- * Best-effort client key: the first hop of `x-forwarded-for` when set (we sit
- * behind the user's reverse proxy in prod), otherwise the socket remote address,
- * else a shared fallback. An authenticated user id is folded in when present so
- * a signed-in user isn't penalised for sharing a NAT'd IP.
+ * Best-effort client key. By default we key by the socket remote address only:
+ * a bare-port client controls `x-forwarded-for`, so trusting it unconditionally
+ * lets anyone spoof a fresh key and bypass the limit. Only when `trustProxy` is
+ * true (set when Caravan runs behind a trusted reverse proxy) do we honour the
+ * first `x-forwarded-for` hop. An authenticated user id is folded in when present
+ * so a signed-in user isn't penalised for sharing a NAT'd IP.
  */
-export function clientKey(c: Parameters<MiddlewareHandler>[0]): string {
-  const forwarded = c.req.header("x-forwarded-for");
-  let ip = forwarded?.split(",")[0]?.trim();
+export function clientKey(c: Parameters<MiddlewareHandler>[0], trustProxy = false): string {
+  let ip: string | undefined;
+  if (trustProxy) {
+    ip = c.req.header("x-forwarded-for")?.split(",")[0]?.trim();
+  }
   if (!ip) {
     try {
       ip = getConnInfo(c).remote.address;
@@ -84,23 +88,32 @@ export function clientKey(c: Parameters<MiddlewareHandler>[0]): string {
   return userId ? `${base}|${userId}` : base;
 }
 
+/** A rate-limit middleware that also exposes its limiter so callers can prune it. */
+export interface RateLimitMiddleware extends MiddlewareHandler {
+  /** The underlying limiter — register a periodic `prune()` to bound memory. */
+  limiter: FixedWindowLimiter;
+}
+
 /**
  * Build a Hono middleware enforcing `limit` requests per `windowMs` per client.
  * `enabled: false` makes it a no-op (used in NODE_ENV=test so the suite and the
  * Playwright M1 gate, which fire many requests from one IP, are never limited).
+ * The returned function carries its `limiter` so a job can periodically prune it.
  */
 export function rateLimit(opts: {
   limit: number;
   windowMs: number;
   enabled?: boolean;
+  trustProxy?: boolean;
   now?: () => number;
-}): MiddlewareHandler {
+}): RateLimitMiddleware {
   const enabled = opts.enabled ?? true;
+  const trustProxy = opts.trustProxy ?? false;
   const limiter = new FixedWindowLimiter(opts.limit, opts.windowMs, opts.now);
 
-  return async (c, next) => {
+  const middleware: MiddlewareHandler = async (c, next) => {
     if (!enabled) return next();
-    const decision = limiter.hit(clientKey(c));
+    const decision = limiter.hit(clientKey(c, trustProxy));
     if (!decision.allowed) {
       c.header("Retry-After", String(decision.retryAfterSeconds));
       return c.json(
@@ -115,4 +128,6 @@ export function rateLimit(opts: {
     }
     return next();
   };
+
+  return Object.assign(middleware, { limiter });
 }

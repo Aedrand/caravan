@@ -53,6 +53,15 @@ const EnvSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300),
   /** Stricter per-window cap for /api/auth/* (sign-in/up brute-force guard). */
   RATE_LIMIT_AUTH_MAX: z.coerce.number().int().positive().default(20),
+  /**
+   * Honour `X-Forwarded-For` for client identity (rate-limit keying). Leave OFF
+   * unless Caravan sits behind a trusted reverse proxy — a direct client can
+   * forge the header to dodge the limiter. Accepts true/1/yes.
+   */
+  TRUST_PROXY: z
+    .enum(["true", "false", "1", "0", "yes", "no"])
+    .default("false")
+    .transform((v) => v === "true" || v === "1" || v === "yes"),
 });
 
 export type Config = ReturnType<typeof loadConfig>;
@@ -92,6 +101,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       max: parsed.RATE_LIMIT_MAX,
       authMax: parsed.RATE_LIMIT_AUTH_MAX,
     },
+    /** Trust X-Forwarded-For for client identity — only behind a trusted proxy. */
+    trustProxy: parsed.TRUST_PROXY,
   };
 }
 
