@@ -16,6 +16,8 @@ Drafted autonomously 2026-06-10 while the owner was away; **ratified by the owne
 
 **Status:** ✅ ACCEPTED (owner ratified 2026-06-11; proposed 2026-06-10) · Resolves PROJECT.md open question: *itinerary data structure*
 
+> **Amended 2026-06-28 (PD-13, PD-15):** the "days are *derived*, there is no Day entity" and "hybrid block-document rejected for v1" clauses are **superseded** — days become first-class and items become typed (notes/checklists), inside a continuous-canvas workspace. The structured-records core of this decision still holds.
+
 **Decision:** Activities are typed, structured records (title, date, time, location, category, notes) — not collaborative freeform text blocks. Days are *derived* from activity dates plus the trip's date range; there is no Day entity. Undated activities live in an "Ideas" pool per trip.
 
 **Why:** Nearly every differentiating feature depends on structure: map plotting needs coordinates, conflict detection needs times, votes/comments need entities to attach to, expenses link to activities, and the AI tool surface ("add an activity", "move dinner to 8pm") needs typed operations. Freeform text makes all of those hard and only improves prose-editing, which is not the core job. Freeform expression still has homes: the per-activity `notes` field, comments, and (later, v1.x) an optional trip-level scratchpad page.
@@ -29,6 +31,8 @@ Drafted autonomously 2026-06-10 while the owner was away; **ratified by the owne
 ### PD-2: Activity lifecycle and voting mechanics
 
 **Status:** ✅ ACCEPTED (owner, 2026-06-11; proposed 2026-06-10) · Resolves: *vote/poll mechanics*
+
+> **Extended 2026-06-28 (PD-13):** an idea can also be a note or checklist, and ideas can live in user-defined lists (Food/Activities/Day Trips). The undated-vs-dated spine here is preserved.
 
 **Decision:**
 - An activity is either in the **Ideas pool** (undated) or **on the itinerary** (dated). Promoting an idea = giving it a date. Demoting = removing the date. No separate "candidate vs. locked" state machine in v1.
@@ -178,6 +182,48 @@ Per-user, per-trip preference: digest on/off, push on/off. **No notification eve
 
 ---
 
+### PD-13: Trip planning model v2 — typed items, first-class days, idea lists, cost
+
+**Status:** ✅ ACCEPTED (owner ratified 2026-06-28, enhancement walkthrough) · Supersedes part of PD-1; extends PD-2 · Detail: `design/trip-workspace-v2-brief.md` (D1, D2, D7, D10, D11)
+
+**Decision:**
+- **Typed items (D1):** the activity entity gains a `type` discriminator (`activity | note | checklist | flight | lodging`; `image` later), reusing the row's votes/comments/feed/sync/positioning/permissions. An idea is still an undated item; **note + checklist ship first**.
+- **First-class days (D2):** a lazily-created `days` table keyed by `(tripId, date)` holds per-day metadata (subtitle now; cover/route-mode/pinned-note later) — replacing the derived-only model so per-day edits are independent (no whole-field LWW clobber).
+- **Idea lists (D10):** user-defined, reorderable trip-level lists (e.g. Food/Activities/Day Trips), **one per idea**, holding mixed item types — distinct from itinerary days.
+- **Activity cost (D7):** items carry an **estimated cost** (planning/budget), distinct from logged expenses, with a convert-estimate→split-expense flow and a planned-vs-actual budget rollup.
+- **Wall-clock times (D11):** times are entered/displayed as printed, stored `enteredLocalTime + place` (timezone-*ready*); no timezone machinery for now.
+
+**Why:** the planning surface evolves from rigid activity-CRUD toward a flexible canvas; reusing the item row keeps the collaborative machinery free; first-class days are required for subtitles/bookings and avoid whole-field last-write-wins.
+
+**Supersedes:** PD-1's "days derived / no Day entity" + "hybrid block-document rejected for v1". **Defers:** `image` items + file attachments (upload subsystem — brief D6 — local-FS-default architecture documented, deferred).
+
+---
+
+### PD-14: Bookings as first-class records with derived day anchors
+
+**Status:** ✅ ACCEPTED (owner ratified 2026-06-28) · Detail: brief D3 · Supersedes the in-app "link-out-only" booking posture
+
+**Decision:** Flights and hotels are item types (PD-13) entered **once** (hotel: place + check-in/out date+time; flight: depart/arrive place + date+time). From each, the app **derives** both timeline entries (hotel check-in/check-out; flight depart/arrive) and per-day **home-base anchors** — every day **starts** at the hotel for `[check-in+1 … check-out]` and **ends** at it for `[check-in … check-out−1]`; flights bookend the chain. Anchors feed auto-routing (TD-13) so each day has known start/end points. Wall-clock times; multi-day flights via a later arrival date.
+
+**Why:** the owner's goal is to enter lodging/flights **once** and have daily routes prepopulate without re-entering where each day starts and stops.
+
+**Supersedes:** "link-outs are the only booking story" for *in-app records*; external booking-site link-outs still stand (TD-5).
+
+---
+
+### PD-15: Trip-canvas workspace shell + Plan View v2
+
+**Status:** ✅ ACCEPTED (owner ratified 2026-06-28) · Detail: brief D5, D9 · UX/IA; supersedes the C.4 tabbed shell as the target
+
+**Decision:**
+- **Workspace shell (D9):** the trip becomes **one continuously-scrolling canvas** — overview → itinerary (days) → ideas/lists → money → group — with a **synced index** (table-of-contents / scrollspy) that unifies today's vertical tab rail + day-jump rail. An **overview / front page** (what-needs-attention from open polls, unsettled expenses, unplotted places, over-budget, recent feed + a freeform bulletin) sits at the head.
+- **Plan View v2 (D5):** the itinerary section is an **order-driven progression rail** (compact rows, inline edit, numbered stops synced to the map pins, travel-times between stops, day home-base anchors, inline day notes/checklists) — not today's chunky card stack and not a rigid clock-grid.
+- **Scope:** **desktop-first**; **mobile UX is its own design review later**; specced with the design agent before build. House-style: describe in our **own terms — no competitor names** (clean-room, PROJECT.md).
+
+**Why:** the 2026-06-28 notes converge on a flexible, continuous canvas with low-friction navigation and a real landing/overview surface.
+
+---
+
 ## Technical decisions
 
 > Research agents are in flight (see `research/raw/`). Entries below will be filled in from their findings; placeholders mark the decision surface so reviewers can see the full shape of what's being decided.
@@ -267,6 +313,8 @@ The pattern is proven at far larger scale than ours (Linear: LWW for all structu
 ### TD-5: Maps, geocoding & places — MapLibre + OpenFreeMap + Photon, key-optional upgrades
 
 **Status:** ✅ ACCEPTED (owner ratified 2026-06-11; proposed 2026-06-10) · Research: `research/raw/maps-places.md` (R3, 30 sources)
+
+> **Extended 2026-06-28 (TD-13):** the geo proxy now sends a `lang` param (instance default `en`; Photon returns Latin/English OSM names where `name:en` exists — no Google needed), and a **parallel keyless-default routing proxy** is added for real travel-time routes. In-app booking *records* (flights/hotels) are now in scope (PD-14); external booking link-outs still stand.
 
 **Decision:**
 - **Renderer:** MapLibre GL JS (pin the v5 line; v6 is in pre-release — migrate deliberately later). React binding: **`@vis.gl/react-maplibre`** (the vis.gl package purpose-built for MapLibre). Clustering via MapLibre's native GeoJSON clustering — no extra library.
@@ -389,3 +437,15 @@ The pattern is proven at far larger scale than ours (Linear: LWW for all structu
 - **Permissions (PD-8):** `editor` role to create money records; creator-or-owner to edit/delete (enforced in `apply()`, not just the registry role). Participant/payer/payee membership ids are validated against the trip — **ghosts allowed** (PD-9) so balances survive departures; strangers rejected.
 
 **Integrator note (action required):** the `expenses` / `expense_shares` / `payments` tables were **added to `db/schema.ts` only** — per the fan-out anti-collision rule, `pnpm db:generate` was NOT run and no `drizzle/` migration was committed. The integrator must generate the migration at merge. Tests create the tables via `features/expenses/test-tables.ts` (kept in sync with the schema) until that migration lands.
+
+---
+
+### TD-13: Routing engine + proxy; geocoding language (Trip Workspace v2)
+
+**Status:** ✅ ACCEPTED (owner ratified 2026-06-28) · Detail: `design/trip-workspace-v2-brief.md` (D4, D8) · Extends TD-5
+
+**Decision:**
+- **Routing (D4):** real, in-app routes with **travel times** via a **routing proxy** mirroring the geo proxy — keyless public default, provider-configurable (self-host or keyed), **cached by ordered-waypoints + mode**. **Multi-modal engine** (Valhalla-class — one dataset does walk + drive), **not** single-profile OSRM. Mode = a trip-level default with a **per-day override** (stored on the `days` table, PD-13). Real road routing accepts the same no-SLA caveat as Photon on its default public instance. **Out of scope:** schedule-based public-transit routing (needs a GTFS engine / OpenTripPlanner).
+- **Geocoding language (D8):** the geo proxy sends a `lang` param (**instance default `en`**) on forward + reverse. Verified: Photon's keyless `lang=en` returns Latin/English OSM names where `name:en` exists (`金龍山 浅草寺` → `Sensō-ji, Tokyo`) — **no Google/translation pipeline needed**. Keyed providers (Geoapify/LocationIQ, already wired) cover more languages. Also improves the pending Japan geocode. **Full UI localization stays out of scope.**
+
+**Why:** the owner chose real auto-routing (not crow-flies lines) and English place names out of the box — both keyless-first, consistent with TD-5's key-optional posture. The day **anchors** from PD-14 supply each day's route endpoints.

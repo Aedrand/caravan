@@ -1,6 +1,6 @@
 # Caravan — End-to-End Implementation Plan
 
-Drafted 2026-06-10; **ratified by the owner 2026-06-11** (all decisions ACCEPTED — see `decisions.md`; TD-7 modified: OAuth 2.1 ships with v1.3). **Build status: M0 + M1 COMPLETE (M1 closed 2026-06-19)** — walking skeleton, full collaborative itinerary (create/edit/reorder), presence, attributed feed, and the two-browser gate all landed and CI-green. Contracts frozen. **Fan-out Tracks A/B/C integrated to `main` 2026-06-20** (`f114142`) — group decisions, expenses + settlement, and maps/places, built in parallel (worktree agents) and merged with one unified migration (0003); repo-wide green (190 tests) + in-browser verified. C.4 trip workspace MERGED to `main` 2026-06-23 (PR #1); its deferred map-follows-focused-day + click-to-focus follow-ups landed too. **Track D COMPLETE on `main` 2026-06-27** — ops & admin cluster (D.3 admin panel, D.4 Litestream, D.5 docs, D.6 release-please + security headers/rate-limiting) plus the email backbone (D.1 SMTP invite/membership email, D.2 daily digest); email verified E2E via a Mailpit catcher. **Track E COMPLETE on `main` 2026-06-28** (`7da7cdd`..`9176cc3`) — design polish E.2 (state primitives + expenses error state) / E.3 (responsive: drag-handle, settlement, poll rows) / E.4 (a11y: feed-drawer focus trap, split-tab ARIA, WCAG-AA contrast); visually verified. All via orchestrated multi-agent passes, direct-to-main, all gates green. **NEXT = M6 (v1.0 hardening & release) — see `handoff.md` for live state + the immediate geocoding task.** Companion reading order: `../PROJECT.md` → `decisions.md` → `handoff.md` → this file.
+Drafted 2026-06-10; **ratified by the owner 2026-06-11** (all decisions ACCEPTED — see `decisions.md`; TD-7 modified: OAuth 2.1 ships with v1.3). **Build status: M0 + M1 COMPLETE (M1 closed 2026-06-19)** — walking skeleton, full collaborative itinerary (create/edit/reorder), presence, attributed feed, and the two-browser gate all landed and CI-green. Contracts frozen. **Fan-out Tracks A/B/C integrated to `main` 2026-06-20** (`f114142`) — group decisions, expenses + settlement, and maps/places, built in parallel (worktree agents) and merged with one unified migration (0003); repo-wide green (190 tests) + in-browser verified. C.4 trip workspace MERGED to `main` 2026-06-23 (PR #1); its deferred map-follows-focused-day + click-to-focus follow-ups landed too. **Track D COMPLETE on `main` 2026-06-27** — ops & admin cluster (D.3 admin panel, D.4 Litestream, D.5 docs, D.6 release-please + security headers/rate-limiting) plus the email backbone (D.1 SMTP invite/membership email, D.2 daily digest); email verified E2E via a Mailpit catcher. **Track E COMPLETE on `main` 2026-06-28** (`7da7cdd`..`9176cc3`) — design polish E.2 (state primitives + expenses error state) / E.3 (responsive: drag-handle, settlement, poll rows) / E.4 (a11y: feed-drawer focus trap, split-tab ARIA, WCAG-AA contrast); visually verified. All via orchestrated multi-agent passes, direct-to-main, all gates green. **NEXT = Trip Workspace v2 (owner-prioritized 2026-06-28; precedes M6) — see `design/trip-workspace-v2-brief.md` + `handoff.md` for live state.** Its first step (geocoding `lang=en`) also unblocks the pending Japan geocode; M6 (v1.0 hardening & release) follows the v2 build. Companion reading order: `../PROJECT.md` → `decisions.md` → `handoff.md` → this file.
 
 **This plan is built for parallel execution.** After a deliberately serial foundation (M0–M1) establishes the contracts, the work fans out into independent tracks with disjoint file ownership, designed so multiple implementation agents (or people) can run concurrently without colliding. §5 defines the execution model; every task is tagged `[P]` (parallel-safe) or `[S]` (serial/foundation).
 
@@ -18,6 +18,8 @@ A single Docker container that a tech-savvy friend runs (`docker compose up`), s
 | **v1.1** | House AI (TD-6) | NL edit applied by AI, visibly attributed, on a budget-capped key; everything still works with AI unconfigured |
 | **v1.2** | PWA offline-read + web push (PD-6/PD-7) | Itinerary readable in airplane mode; poll-closing push lands on a phone |
 | **v1.3** | Personal AI: MCP + PAT **+ OAuth 2.1** (TD-7, owner decision 2026-06-11), audit UI | Claude Desktop *and* claude.ai web read & (with opt-in) write a trip, attributed and audit-logged |
+
+> **2026-06-28 — v1.0 scope extended (PD-13/14/15, TD-13).** The **Trip Workspace v2** build (`design/trip-workspace-v2-brief.md`) is the current priority and **precedes M6**; v1.0 ships with it. The upload subsystem (hero image / image-ideas / file attachments) and full UI localization remain out of v1.0.
 
 North-star qualities (tested, not aspirational): the **two-browser test** (TD-9) stays green from M1 forever; container cold-start to usable < 10 s; fresh-clone contributor to running dev environment < 10 min.
 
@@ -235,6 +237,24 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 | E.2 | Empty/loading/error states for every feature surface (work with A–D as they land) | M | ✅ Done 2026-06-28 — shared `EmptyState`/`Skeleton`/`ErrorState` (`components/ui/`) adopted across dashboard/admin/settings/trip-route/itinerary/map/ideas/polls/members/feed/join; expenses gained loading+empty+**error** (was missing); map + place-autocomplete error affordances |
 | E.3 | Responsive pass: in-trip mobile ergonomics (today view, thumb reach, bottom nav) | M | ✅ Done 2026-06-28 — drag handle 20→32px, poll rows `min-h-11`, expense settlement rows stack/no-clip @375px, dialog mobile padding+scroll; verified at 390px (Plan/Money/Decide) atop the C.4 mobile shell |
 | E.4 | Accessibility: keyboard paths (incl. dnd), focus management, contrast audit | M | ✅ Done 2026-06-28 — feed-drawer focus trap+restore (verified) + `aria-modal`/`h2`; expense split-tab ARIA tablist (roving tabindex+arrows+`tabpanel`); vote focus ring; feed `aria-live`+`aria-relevant=additions`+`aria-busy`; **contrast `--ink-soft` → WCAG-AA 4.5:1** both themes. (dnd KeyboardSensor already wired) |
+
+### Trip Workspace v2 `[S]` — CURRENT PRIORITY (precedes M6)
+
+> Promoted 2026-06-28 from `design/trip-workspace-v2-brief.md` (owner: "anything we decided here has priority"). Ratified in PD-13/14/15 + TD-13. Evolves the planning surface into a continuous **trip-canvas**: typed items, first-class days, enter-once bookings that anchor each day, real auto-routing, Plan View v2, a synced-index workspace shell + overview, idea lists, and activity cost estimates. **Desktop-first; mobile UX is its own later design review.** Phases (brief §7), dependency-ordered:
+
+| # | Phase | Notes |
+|---|---|---|
+| V2.0 | Quick wins (no deps) | geocoding `lang=en` (TD-13) — **also unblocks the pending Japan geocode**; "Friday, May 1st" day labels; map day-layer toggle |
+| V2.1 | Design pass | `ui-interface-designer` specs Plan View v2 (D5) + workspace shell/overview (D9) together — same surface |
+| V2.2 | Data-model foundation | typed items (D1), `days` table (D2), idea lists (D10), `estimatedCost` (D7) — schema + mutations + sync; **gates the rest** |
+| V2.3 | Plan View v2 build | rail, compact rows + inline edit, numbering + numbered pins, "added by", day notes/checklists, subtitles; idea lists + freeform idea types on Decide |
+| V2.4 | Bookings + day anchors | wall-clock flight/lodging entry → derived bookend entries + per-day anchors (PD-14) |
+| V2.5 | Routing | proxy + multi-modal engine, route lines, travel-times, modes (TD-13) — consumes V2.4 anchors as day endpoints |
+| V2.6 | Money | convert-estimate→split-expense + planned-vs-actual budget (D7); surface "needs attention" in the overview |
+| V2.7 | Workspace shell | continuous scroll + synced index wrapping it all (D9); Plan View v2 becomes a section within it |
+| — | Deferred | upload subsystem (D6) → hero image / image-ideas / file attachments; mobile design review |
+
+Then v1.0 hardening (M6) runs over the v2-inclusive app.
 
 ### M6 — v1.0 hardening & release `[S]`
 

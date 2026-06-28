@@ -4,11 +4,11 @@ _Written 2026-06-28. Supersedes `handoff-trip-workspace-c4.md` (now historical).
 
 ## TL;DR
 
-Caravan is **feature-complete and polished for v1.0**. On top of M0/M1 + fan-out Tracks A/B/C + the C.4 trip workspace, this session shipped **all of Track D (self-host & ops + email)** and **all of Track E (design polish)** to `main`, each via an orchestrated multi-agent pass (foundation → parallel worktree agents → adversarial review → remediation), landed **direct to `main`** (owner's call) with every gate green. `main` is at **`f7ff96a`** (+ this handoff commit).
+Caravan is **feature-complete and polished for v1.0**. On top of M0/M1 + fan-out Tracks A/B/C + the C.4 trip workspace, this session shipped **all of Track D (self-host & ops + email)** and **all of Track E (design polish)** to `main`, each via an orchestrated multi-agent pass (foundation → parallel worktree agents → adversarial review → remediation), landed **direct to `main`** (owner's call) with every gate green. **Update 2026-06-28:** v1.0 scope now also includes the owner-prioritized **Trip Workspace v2** initiative (design brief + PD-13/14/15, TD-13 — see _Immediate next_).
 
-**Immediate next task (owner asked):** geocode the **Japan 2026** test trip's places so the map lights up (they're imported as text-only / unplotted — see "Test data" below).
+**Immediate next:** the **Trip Workspace v2** initiative is the owner-prioritized next thrust (precedes M6) — full design record + decisions in [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) (ratified PD-13/14/15, TD-13). Its first phase (V2.0: geocoding `lang=en`) also fixes/unblocks geocoding the **Japan 2026** test trip's text-only places (see "Test data" below).
 
-**Roadmap next:** **M6 — v1.0 hardening & release**.
+**Roadmap next:** **Trip Workspace v2** (the new priority — see the brief), then **M6 — v1.0 hardening & release** over the v2-inclusive app.
 
 ## What shipped this session (all on `main`)
 
@@ -32,16 +32,20 @@ The persistent dev DB (`apps/server/data/caravan.db`, Test Admin = `test@testing
 
 > The import was a one-off script (`apps/server/src/scripts/import-japan.ts`, since deleted) modeled on `seed.ts` — it used `executeMutation` so versioning + feed events are correct. If you need to re-import or geocode, follow the same pipeline (don't hand-write the DB while the dev server holds it open).
 
-## Immediate next: geocode the Japan trip
+## Trip Workspace v2 (the new priority) + the Japan geocode
 
-Goal: give the ~50 Japanese places real `lat`/`lng` so they pin on the map. Approach options:
+The owner-prioritized next thrust is **Trip Workspace v2** — see [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) for the full design record (11 decisions, data model, sequenced build plan) and `plan.md` (the phased milestone). Phase **V2.0** starts with the keyless `lang=en` geocoding fix (TD-13) — exactly what the Japan geocode needs.
+
+### Geocoding the Japan trip (now folded into V2.0)
+
+Goal: give the ~50 Japanese places real `lat`/`lng` so they pin on the map — **passing `lang=en`** so names come back Latin/English where OSM has them (`金龍山 浅草寺` → `Sensō-ji`). Approach options:
 - The app has a server-side geo proxy (`apps/server/src/core/geo.ts`) over **Photon** (keyless) — forward-geocode each `place_name`, take the top hit, and `activity.update` the activity with `place: { name, address, lat, lng, provider: "photon" }` through the mutation pipeline.
 - Expect a few misses/ambiguities (Japanese names, generic spots like "Akihabara"); log/skip those rather than pin them wrong. Confirm reachability first (Photon public instance has no SLA — TD-5).
 - Stop the dev server before a bulk script run, then restart (same reason as the import).
 
-## Roadmap next: M6 — v1.0 hardening & release
+## Roadmap after v2: M6 — v1.0 hardening & release
 
-From `plan.md` §M6: integration QA across tracks · full design sweep (conform every surface to the E.1 language) · full E2E suite green · perf budget (snapshot < 100 ms @ 500 activities; bundle audit) · security pass (invite token entropy, session fixation, rate limits, headers) · load sanity (10 concurrent editors) · README screenshots + demo instance · tag `v1.0.0` → GHCR → awesome-selfhosted.
+(Trip Workspace v2 runs first — see above + the brief.) From `plan.md` §M6: integration QA across tracks · full design sweep (conform every surface to the E.1 language) · full E2E suite green · perf budget (snapshot < 100 ms @ 500 activities; bundle audit) · security pass (invite token entropy, session fixation, rate limits, headers) · load sanity (10 concurrent editors) · README screenshots + demo instance · tag `v1.0.0` → GHCR → awesome-selfhosted.
 
 **Re-enable release-please when cutting v1.0** (it's deferred): (1) restore the `push: [main]` trigger in `.github/workflows/release-please.yml`; (2) enable repo Settings → Actions → "Allow GitHub Actions to create and approve pull requests" (`gh api -X PUT repos/Aedrand/caravan/actions/permissions/workflow -F can_approve_pull_request_reviews=true`); (3) bump `.github/.release-please-manifest.json` off the `0.0.0` sentinel (else it proposes 1.0.0). Full checklist is in plan §M6 + the workflow header.
 
