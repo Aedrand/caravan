@@ -1,18 +1,28 @@
 # Handoff — current state (Trip Workspace v2 queued)
 
-_Updated 2026-06-28 (enhancement-triage session). Supersedes `handoff-trip-workspace-c4.md` (now historical). This is the live "where we are / what's next / how to resume" note._
+_Updated 2026-06-28 (Trip Workspace V2.0 quick-wins build session). Supersedes `handoff-trip-workspace-c4.md` (now historical). This is the live "where we are / what's next / how to resume" note._
 
 ## TL;DR
 
 Caravan is **feature-complete for the original v1.0 scope** — M0/M1 + fan-out Tracks A/B/C + the C.4 trip workspace + all of Track D (self-host/ops + email) and Track E (design polish), all on `main` with gates green.
 
-**This session (2026-06-28):** triaged the owner's manual-testing enhancement notes into the **Trip Workspace v2** initiative — a full design record + ratified decisions (PD-13/14/15, TD-13) + a phased build plan — now the **owner-prioritized next thrust, ahead of M6**. Also did a precautionary docs pass (see _Docs hygiene_). `main` is at **`5a0d8ab`**.
+**This session (2026-06-28):** shipped the **Trip Workspace V2.0 quick wins** direct to `main` (`26103f5`) — geocoding `lang=en`, date-first "Friday, May 1st" day labels, and the map day-layer toggle — via an orchestrated 3-agent parallel pass; all gates green (web+server typecheck, biome, geo unit 16/16, build, e2e 5/5). **Confirmed the Japan 2026 geocode is already complete** (done earlier the same day): 53/55 places pinned with Latin names (Sensō-ji, Tokyo Tower, …); the 2 unpinned rows are the round-trip flights — not single-point places (D3 booking work). `main` is at **`26103f5`**.
 
-**Immediate next:** the **Trip Workspace v2** initiative is the owner-prioritized next thrust (precedes M6) — full design record + decisions in [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) (ratified PD-13/14/15, TD-13). Its first phase (V2.0: geocoding `lang=en`) also fixes/unblocks geocoding the **Japan 2026** test trip's text-only places (see "Test data" below).
+**Immediate next:** **V2.1 — the design pass** (`ui-interface-designer`): spec **Plan View v2** (the connected progression rail) + the **workspace shell** (continuous scroll + synced index + overview) *together*, before building — they're the same surface (brief §7 step 1).
 
-**Roadmap next:** **Trip Workspace v2** (the new priority — see the brief), then **M6 — v1.0 hardening & release** over the v2-inclusive app.
+**Roadmap next:** finish **Trip Workspace v2** (V2.1 → V2.7 — see the brief), then **M6 — v1.0 hardening & release** over the v2-inclusive app.
 
-## This session (2026-06-28 — enhancement triage → Trip Workspace v2)
+## This session (2026-06-28 — Trip Workspace V2.0 quick wins shipped)
+
+The **V2.0 independent quick wins** (brief §7 step 0) shipped direct to `main` in one commit (`26103f5`), built by an orchestrated 3-agent parallel pass (disjoint files: server `geo` · web `itinerary` · web `map`); the orchestrator integrated + ran the gate sweep, then ff-merged the worktree branch and removed it.
+- **D8 / TD-13 — geocoding language:** new `GEOCODING_LANGUAGE` env (default `en`) threaded into the geo proxy (`core/geo.ts` — Photon/Geoapify `lang`, LocationIQ/Nominatim `accept-language`, guarded so empty sends nothing) and folded into the cache keys so a language change never serves stale names. +4 unit tests. Returns Latin/English OSM names where a `name:en` tag exists.
+- **D2 (labels) — date-first day labels:** `formatDayLabel` now reads "Friday, May 1st"; the day header makes the date the headline with a muted "Day N" companion; the activity-form day picker + empty-day footer follow. Rail chips stay compact.
+- **Map day-layer toggle:** a per-day show/hide pin filter (a `toolbar` of chips, shown when pins span ≥2 days, with an "All" reset + an "Ideas" chip for undated pins). Filters at the **GeoJSON data level** (not a MapLibre layer filter) so cluster counts recompute correctly.
+- **Gates:** web+server typecheck, biome, geo unit 16/16, build, e2e 5/5 — all green.
+
+**Japan geocode — found already complete** (correcting the prior "next task" note): the dev DB already has 53/55 Japan activities pinned via Photon with Latin names; the 2 without coordinates are the round-trip flights (no single place to pin). No re-geocode was run — re-running would only risk churning good data.
+
+## Previous session (2026-06-28 — enhancement triage → Trip Workspace v2)
 
 The owner brought 21 manual-testing enhancement ideas; walked them one-card-at-a-time into a coherent design and captured it:
 - **Design record (source of truth):** [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) — 11 decisions (D1–D11), data model, sequenced build plan.
@@ -38,30 +48,29 @@ Repo hygiene scan done (no secrets/DB/env tracked; `.gitignore` hardened for age
 
 The persistent dev DB (`apps/server/data/caravan.db`, Test Admin = `test@testing.com`, role admin) has two trips:
 - **Dolomites 2026** — small itinerary (Rome/Florence/Paris pins) used for map verification.
-- **Japan 2026** (`7a196dfbceb3982dbbf6bfc39e06a9d2`) — **55 activities across Oct 1–11 2026**, imported from the owner's "Japan 2025" trip-export PDF (shifted onto the 2026 trip; day 1→Oct 1). Categories/times/notes carried over. **Places are text-only (unplotted) — geocoding is the next task.**
+- **Japan 2026** (`7a196dfbceb3982dbbf6bfc39e06a9d2`) — **55 activities across Oct 1–11 2026**, imported from the owner's "Japan 2025" trip-export PDF (shifted onto the 2026 trip; day 1→Oct 1). Categories/times/notes carried over. **Places are geocoded** — 53/55 pinned via Photon with `lang=en` Latin names (Sensō-ji, Tokyo Tower, …); the 2 unplotted rows are the round-trip flights (no single place to pin — D3 booking work).
 
 > The import was a one-off script (`apps/server/src/scripts/import-japan.ts`, since deleted) modeled on `seed.ts` — it used `executeMutation` so versioning + feed events are correct. If you need to re-import or geocode, follow the same pipeline (don't hand-write the DB while the dev server holds it open).
 
-## Trip Workspace v2 (the new priority) + the Japan geocode
+## Trip Workspace v2 (the current priority)
 
 **Read first:** [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) (full design record) + `plan.md`'s **Trip Workspace v2** milestone (the V2.0–V2.7 phase table) + PD-13/14/15 & TD-13 in `decisions.md`.
 
 **The build sequence (brief §7 / plan):**
-- **V2.0 — quick wins (no deps):** geocoding `lang=en` (also unblocks the Japan geocode below); "Friday, May 1st" day labels; map day-layer toggle.
+- **V2.0 — quick wins (no deps) — ✅ SHIPPED (`26103f5`):** geocoding `lang=en` (Japan geocode confirmed done); date-first "Friday, May 1st" day labels; map day-layer toggle.
 - **V2.1 — design pass:** spec **Plan View v2** (the connected progression rail) + the **workspace shell** (continuous scroll + synced index + overview) *together* with the design agent before building — they're the same surface.
 - **V2.2 — data-model foundation:** typed items (`type` discriminator on the activity row), first-class `days` table, idea lists, activity `estimatedCost` — schema + mutations + sync. **Gates the rest.**
 - **V2.3 → V2.7:** Plan View v2 build → bookings + day anchors → routing (multi-modal proxy + travel-times) → money (convert-estimate-to-expense + budget) → workspace shell.
 
 **Scope guardrails (from the decisions):** **desktop-first** — *mobile UX is its own later design review, not now*. **Deferred:** the file/image upload subsystem (so hero image, image-type ideas, and file attachments wait). **Out of scope:** full UI localization, public-transit routing. Reuse the existing activity row + sync/feed/permissions (PD-13) — don't build parallel machinery per type.
 
-**Good first move:** knock out the **V2.0** quick wins (independent; one of them — `lang=en` — clears the Japan geocode), then start the **V2.1** design pass.
+**Next move:** start the **V2.1** design pass (V2.0 shipped — see "This session" above).
 
-### Geocoding the Japan trip (now folded into V2.0)
+### Geocoding the Japan trip — ✅ DONE
 
-Goal: give the ~50 Japanese places real `lat`/`lng` so they pin on the map — **passing `lang=en`** so names come back Latin/English where OSM has them (`金龍山 浅草寺` → `Sensō-ji`). Approach options:
-- The app has a server-side geo proxy (`apps/server/src/core/geo.ts`) over **Photon** (keyless) — forward-geocode each `place_name`, take the top hit, and `activity.update` the activity with `place: { name, address, lat, lng, provider: "photon" }` through the mutation pipeline.
-- Expect a few misses/ambiguities (Japanese names, generic spots like "Akihabara"); log/skip those rather than pin them wrong. Confirm reachability first (Photon public instance has no SLA — TD-5).
-- Stop the dev server before a bulk script run, then restart (same reason as the import).
+All pinnable Japan places are geocoded (53/55) via the **Photon** geo proxy with **`lang=en`**, so names are Latin/English where OSM has them (`金龍山 浅草寺` → `Sensō-ji`) and coordinates are correct. The 2 rows without coordinates are the round-trip flights (no single place to pin — that's D3 booking work, not geocoding). New place searches now also return English names via `lang=en`.
+
+> If you ever need to (re)geocode a trip's text-only places: forward-geocode each `place_name` through the server geo proxy (`apps/server/src/core/geo.ts`, Photon keyless, now `lang=en`), take the top hit, and `activity.update` with `place: { name, address, lat, lng, provider: "photon" }` through the mutation pipeline (model on `seed.ts` / `executeMutation`). **Stop the dev server first** (it holds the DB open), and log/skip misses rather than pin them wrong (Photon public has no SLA — TD-5).
 
 ## Roadmap after v2: M6 — v1.0 hardening & release
 
