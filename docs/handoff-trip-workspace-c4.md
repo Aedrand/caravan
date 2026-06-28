@@ -2,6 +2,8 @@
 
 _Written 2026-06-22 · updated 2026-06-23 — **C.4 is MERGED to `main` via PR #1**. This doc is now a record of the work + the remaining follow-ups._
 
+> ⏭️ **Superseded for current state by [`handoff.md`](handoff.md) (2026-06-28).** C.4's deferred follow-ups (map-follows-focused-day, click-to-focus) and Tracks D + E all shipped since — see the live handoff. This file is kept as the C.4-phase record.
+
 ## TL;DR
 The trip page (`/trips/:id`) was reworked from a 6-section vertical stack into a **workspace
 shell**, implementing the Claude Design deliverable. All 5 planned stages + a cleanup shipped,

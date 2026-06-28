@@ -7,6 +7,13 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
+## 2026-06-28 — Manual-testing notes (owner)
+
+Quick, unstructured jots from a hands-on pass — drop a line as things come up;
+we'll expand / promote the keepers later.
+
+- _…_
+
 ## 2026-06-11 — Admin console & instance identity (owner)
 
 > **Partially promoted (2026-06-11):** per-instance theming is now **TD-10**
