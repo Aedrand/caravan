@@ -1,28 +1,30 @@
-# Handoff — current state (Trip Workspace v2 queued)
+# Handoff — current state (Trip Workspace v2 — Plan View v2 shipped)
 
-_Updated 2026-06-28 (Trip Workspace V2.0 quick-wins build session). Supersedes `handoff-trip-workspace-c4.md` (now historical). This is the live "where we are / what's next / how to resume" note._
+_Updated 2026-06-28 (Trip Workspace V2.1→V2.3 build session: design pass + data-model foundation + Plan View v2). Supersedes `handoff-trip-workspace-c4.md` (now historical). This is the live "where we are / what's next / how to resume" note._
 
 ## TL;DR
 
 Caravan is **feature-complete for the original v1.0 scope** — M0/M1 + fan-out Tracks A/B/C + the C.4 trip workspace + all of Track D (self-host/ops + email) and Track E (design polish), all on `main` with gates green.
 
-**This session (2026-06-28):** shipped the **Trip Workspace V2.0 quick wins** direct to `main` (`26103f5`) — geocoding `lang=en`, date-first "Friday, May 1st" day labels, and the map day-layer toggle — via an orchestrated 3-agent parallel pass; all gates green (web+server typecheck, biome, geo unit 16/16, build, e2e 5/5). **Confirmed the Japan 2026 geocode is already complete** (done earlier the same day): 53/55 places pinned with Latin names (Sensō-ji, Tokyo Tower, …); the 2 unpinned rows are the round-trip flights — not single-point places (D3 booking work). `main` is at **`26103f5`**.
+**This session (2026-06-28):** shipped **Trip Workspace V2.1 → V2.3** direct to `main`, all pushed to origin — the **design pass** (`f41308c`), the **data-model foundation** (`db99c9e`), and **Plan View v2** (`e721ca8`). The planning surface now renders the order-driven **progression rail** with numbered map pins, inline note/checklist rows, est-cost chips, and drag-to-resequence, on the new typed-item / first-class-days / idea-lists data model. Gates green throughout (typecheck/biome, 259 unit, build, e2e 5/5). `main` is at **`e721ca8`**.
 
-**Immediate next:** **V2.1 — the design pass** (`ui-interface-designer`): spec **Plan View v2** (the connected progression rail) + the **workspace shell** (continuous scroll + synced index + overview) *together*, before building — they're the same surface (brief §7 step 1).
+**Immediate next:** **V2.4 — bookings + day anchors:** wall-clock flight/lodging entry → derived bookend check-in/out entries + per-day home-base anchors (PD-14); this lands the flight/lodging columns deferred from V2.2 (the enum value + create-guard already exist).
 
-**Roadmap next:** finish **Trip Workspace v2** (V2.1 → V2.7 — see the brief), then **M6 — v1.0 hardening & release** over the v2-inclusive app.
+**Roadmap next:** finish **Trip Workspace v2** (V2.4 → V2.7 — see the brief: routing → money → workspace shell), then **M6 — v1.0 hardening & release** over the v2-inclusive app.
 
-## This session (2026-06-28 — Trip Workspace V2.0 quick wins shipped)
+## This session (2026-06-28 — Trip Workspace V2.1 → V2.3 shipped)
 
-The **V2.0 independent quick wins** (brief §7 step 0) shipped direct to `main` in one commit (`26103f5`), built by an orchestrated 3-agent parallel pass (disjoint files: server `geo` · web `itinerary` · web `map`); the orchestrator integrated + ran the gate sweep, then ff-merged the worktree branch and removed it.
-- **D8 / TD-13 — geocoding language:** new `GEOCODING_LANGUAGE` env (default `en`) threaded into the geo proxy (`core/geo.ts` — Photon/Geoapify `lang`, LocationIQ/Nominatim `accept-language`, guarded so empty sends nothing) and folded into the cache keys so a language change never serves stale names. +4 unit tests. Returns Latin/English OSM names where a `name:en` tag exists.
-- **D2 (labels) — date-first day labels:** `formatDayLabel` now reads "Friday, May 1st"; the day header makes the date the headline with a muted "Day N" companion; the activity-form day picker + empty-day footer follow. Rail chips stay compact.
-- **Map day-layer toggle:** a per-day show/hide pin filter (a `toolbar` of chips, shown when pins span ≥2 days, with an "All" reset + an "Ideas" chip for undated pins). Filters at the **GeoJSON data level** (not a MapLibre layer filter) so cluster counts recompute correctly.
-- **Gates:** web+server typecheck, biome, geo unit 16/16, build, e2e 5/5 — all green.
+Three v2 phases shipped direct to `main` (all pushed to origin), each behind a green gate sweep:
 
-**Japan geocode — found already complete** (correcting the prior "next task" note): the dev DB already has 53/55 Japan activities pinned via Photon with Latin names; the 2 without coordinates are the round-trip flights (no single place to pin). No re-geocode was run — re-running would only risk churning good data.
+- **V2.1 — design pass — ✅ `f41308c`:** ratified the workspace design via rendered HTML mockups in the owner's claude.ai/design "Caravan Design System" project. Decisions: **left index rail** (240px scrollspy TOC) · **two-line progression rail** · **hero-band overview** (trip identity + planned-vs-actual budget bar) · eager-mount/lazy-renderer. Final spec committed: [`docs/design/trip-workspace-v2-plan-and-shell-spec.md`](design/trip-workspace-v2-plan-and-shell-spec.md). **Build split:** V2.3 builds the rail inside today's tabbed shell; V2.7 wraps it in the left-rail shell.
+- **V2.2 — data-model foundation — ✅ `db99c9e`:** typed items (`type` discriminator activity\|note\|checklist\|flight\|lodging + checklist-items JSON + `estimatedCostMinor` + `listId`), first-class `days` table, `idea_lists`; mutations `checklist.toggle`/`day.upsert`/`ideaList.create|update|reorder|delete`; days + idea lists in the snapshot; migration **0005** (additive; validated on the real dev DB). **Flight/lodging columns deferred to V2.4** (enum value + create-guard only). Gates: 249 unit + e2e 5/5 green. **Gates the rest.**
+- **V2.3 — Plan View v2 — ✅ `e721ca8`:** the order-driven **progression rail** — two-line rows, numbered square stamps (hollow when unplotted) synced to **numbered map pins**, inline note/checklist rows (checklist toggles), est-cost chips, inline-editable day subtitle, "N stops · ~$est" summary, drag-to-resequence; **idea lists + freeform note/checklist idea types** on Decide; the typed-item form dialog. Built inside today's tabbed shell via an orchestrated foundation + 3-surface-agent pass. **Deferred:** travel-time labels + 🏨 home-base anchors (V2.4 bookings), walk/drive route-mode toggle (V2.5 routing), category-tint pins + drag-between-lists (follow-on polish). Gates: typecheck/biome, 259 unit, build, e2e 5/5 green.
 
-## Previous session (2026-06-28 — enhancement triage → Trip Workspace v2)
+## Previous session (2026-06-28 — Trip Workspace V2.0 quick wins shipped)
+
+The **V2.0 independent quick wins** (brief §7 step 0) shipped direct to `main` in one commit (`26103f5`), via an orchestrated 3-agent parallel pass (disjoint files: server `geo` · web `itinerary` · web `map`): **geocoding `lang=en`** (`GEOCODING_LANGUAGE` env threaded into `core/geo.ts` + cache keys → Latin/English OSM names; +4 unit tests), **date-first "Friday, May 1st" day labels** (`formatDayLabel`, day header + form picker), and the **map day-layer toggle** (per-day pin filter at the GeoJSON data level so clusters recompute). Gates green (geo unit 16/16, build, e2e 5/5). **Japan geocode confirmed already complete** — 53/55 activities pinned via Photon with Latin names; the 2 unpinned rows are the round-trip flights (no single place to pin — D3 booking work).
+
+## Earlier (2026-06-28 — enhancement triage → Trip Workspace v2)
 
 The owner brought 21 manual-testing enhancement ideas; walked them one-card-at-a-time into a coherent design and captured it:
 - **Design record (source of truth):** [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) — 11 decisions (D1–D11), data model, sequenced build plan.
@@ -54,17 +56,19 @@ The persistent dev DB (`apps/server/data/caravan.db`, Test Admin = `test@testing
 
 ## Trip Workspace v2 (the current priority)
 
-**Read first:** [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) (full design record) + `plan.md`'s **Trip Workspace v2** milestone (the V2.0–V2.7 phase table) + PD-13/14/15 & TD-13 in `decisions.md`.
+**Read first:** [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) (full design record) + [`docs/design/trip-workspace-v2-plan-and-shell-spec.md`](design/trip-workspace-v2-plan-and-shell-spec.md) (V2.1 ratified Plan View v2 + shell spec) + `plan.md`'s **Trip Workspace v2** milestone (the V2.0–V2.7 phase table) + PD-13/14/15 & TD-13 in `decisions.md`.
 
 **The build sequence (brief §7 / plan):**
 - **V2.0 — quick wins (no deps) — ✅ SHIPPED (`26103f5`):** geocoding `lang=en` (Japan geocode confirmed done); date-first "Friday, May 1st" day labels; map day-layer toggle.
-- **V2.1 — design pass:** spec **Plan View v2** (the connected progression rail) + the **workspace shell** (continuous scroll + synced index + overview) *together* with the design agent before building — they're the same surface.
-- **V2.2 — data-model foundation:** typed items (`type` discriminator on the activity row), first-class `days` table, idea lists, activity `estimatedCost` — schema + mutations + sync. **Gates the rest.**
-- **V2.3 → V2.7:** Plan View v2 build → bookings + day anchors → routing (multi-modal proxy + travel-times) → money (convert-estimate-to-expense + budget) → workspace shell.
+- **V2.1 — design pass — ✅ SHIPPED (`f41308c`):** ratified via rendered HTML mockups — left index rail (240px scrollspy TOC), two-line progression rail, hero-band overview (planned-vs-actual budget bar), eager-mount/lazy-renderer. Spec: `docs/design/trip-workspace-v2-plan-and-shell-spec.md`. Build split: V2.3 builds the rail in today's tabbed shell, V2.7 wraps it in the left-rail shell.
+- **V2.2 — data-model foundation — ✅ SHIPPED (`db99c9e`):** typed items (`type` discriminator + checklist-items + `estimatedCostMinor` + `listId`), first-class `days` table, idea lists; `checklist.toggle`/`day.upsert`/`ideaList.*` mutations; migration 0005 (additive). Flight/lodging columns deferred to V2.4. **Gated the rest.**
+- **V2.3 — Plan View v2 — ✅ SHIPPED (`e721ca8`):** order-driven progression rail (two-line rows, numbered stamps ↔ numbered map pins, inline note/checklist rows, est-cost chips, drag-to-resequence), idea lists + freeform idea types on Decide, typed-item form dialog. Built in today's tabbed shell.
+- **V2.4 — bookings + day anchors — ⏭ NEXT:** wall-clock flight/lodging entry → derived bookend check-in/out entries + per-day home-base anchors (PD-14); lands the flight/lodging columns deferred from V2.2.
+- **V2.5 → V2.7:** routing (multi-modal proxy + travel-times) → money (convert-estimate-to-expense + planned-vs-actual budget) → workspace shell (continuous scroll + synced left-rail index wrapping it all).
 
 **Scope guardrails (from the decisions):** **desktop-first** — *mobile UX is its own later design review, not now*. **Deferred:** the file/image upload subsystem (so hero image, image-type ideas, and file attachments wait). **Out of scope:** full UI localization, public-transit routing. Reuse the existing activity row + sync/feed/permissions (PD-13) — don't build parallel machinery per type.
 
-**Next move:** start the **V2.1** design pass (V2.0 shipped — see "This session" above).
+**Next move:** start the **V2.4** bookings + day anchors build (V2.1–V2.3 shipped — see "This session" above).
 
 ### Geocoding the Japan trip — ✅ DONE
 
