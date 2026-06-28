@@ -1,16 +1,26 @@
-# Handoff — current state (post Tracks D + E)
+# Handoff — current state (Trip Workspace v2 queued)
 
-_Written 2026-06-28. Supersedes `handoff-trip-workspace-c4.md` (now historical). This is the live "where we are / what's next / how to resume" note._
+_Updated 2026-06-28 (enhancement-triage session). Supersedes `handoff-trip-workspace-c4.md` (now historical). This is the live "where we are / what's next / how to resume" note._
 
 ## TL;DR
 
-Caravan is **feature-complete and polished for v1.0**. On top of M0/M1 + fan-out Tracks A/B/C + the C.4 trip workspace, this session shipped **all of Track D (self-host & ops + email)** and **all of Track E (design polish)** to `main`, each via an orchestrated multi-agent pass (foundation → parallel worktree agents → adversarial review → remediation), landed **direct to `main`** (owner's call) with every gate green. **Update 2026-06-28:** v1.0 scope now also includes the owner-prioritized **Trip Workspace v2** initiative (design brief + PD-13/14/15, TD-13 — see _Immediate next_).
+Caravan is **feature-complete for the original v1.0 scope** — M0/M1 + fan-out Tracks A/B/C + the C.4 trip workspace + all of Track D (self-host/ops + email) and Track E (design polish), all on `main` with gates green.
+
+**This session (2026-06-28):** triaged the owner's manual-testing enhancement notes into the **Trip Workspace v2** initiative — a full design record + ratified decisions (PD-13/14/15, TD-13) + a phased build plan — now the **owner-prioritized next thrust, ahead of M6**. Also did a precautionary docs pass (see _Docs hygiene_). `main` is at **`5a0d8ab`**.
 
 **Immediate next:** the **Trip Workspace v2** initiative is the owner-prioritized next thrust (precedes M6) — full design record + decisions in [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) (ratified PD-13/14/15, TD-13). Its first phase (V2.0: geocoding `lang=en`) also fixes/unblocks geocoding the **Japan 2026** test trip's text-only places (see "Test data" below).
 
 **Roadmap next:** **Trip Workspace v2** (the new priority — see the brief), then **M6 — v1.0 hardening & release** over the v2-inclusive app.
 
-## What shipped this session (all on `main`)
+## This session (2026-06-28 — enhancement triage → Trip Workspace v2)
+
+The owner brought 21 manual-testing enhancement ideas; walked them one-card-at-a-time into a coherent design and captured it:
+- **Design record (source of truth):** [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) — 11 decisions (D1–D11), data model, sequenced build plan.
+- **Ratified decisions** in `docs/decisions.md`: **PD-13** (typed items via a `type` discriminator on the activity row + first-class `days` table + user-defined idea lists + per-activity cost estimates), **PD-14** (enter-once flight/hotel bookings → derived check-in/out entries + per-day home-base anchors; wall-clock times), **PD-15** (continuous-scroll workspace shell + synced index + overview; Plan View v2 = order-driven progression rail), **TD-13** (real multi-modal routing proxy with travel-times; geocoding `lang=en`). These **amend PD-1** (days are now first-class, not derived) and extend PD-2.
+- **Plan:** `docs/plan.md` has the phased **Trip Workspace v2** milestone (V2.0–V2.7), marked current priority (precedes M6).
+- Commits: `dfd8824` (enhancement inbox) → `0c7e8bc` (brief) → `10c1a6f` (decisions/plan/handoff) → `5a0d8ab` (precautionary docs pass).
+
+## What shipped previously (Tracks D + E, all on `main`)
 
 | Area | Commits | Notes |
 |---|---|---|
@@ -34,7 +44,17 @@ The persistent dev DB (`apps/server/data/caravan.db`, Test Admin = `test@testing
 
 ## Trip Workspace v2 (the new priority) + the Japan geocode
 
-The owner-prioritized next thrust is **Trip Workspace v2** — see [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) for the full design record (11 decisions, data model, sequenced build plan) and `plan.md` (the phased milestone). Phase **V2.0** starts with the keyless `lang=en` geocoding fix (TD-13) — exactly what the Japan geocode needs.
+**Read first:** [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md) (full design record) + `plan.md`'s **Trip Workspace v2** milestone (the V2.0–V2.7 phase table) + PD-13/14/15 & TD-13 in `decisions.md`.
+
+**The build sequence (brief §7 / plan):**
+- **V2.0 — quick wins (no deps):** geocoding `lang=en` (also unblocks the Japan geocode below); "Friday, May 1st" day labels; map day-layer toggle.
+- **V2.1 — design pass:** spec **Plan View v2** (the connected progression rail) + the **workspace shell** (continuous scroll + synced index + overview) *together* with the design agent before building — they're the same surface.
+- **V2.2 — data-model foundation:** typed items (`type` discriminator on the activity row), first-class `days` table, idea lists, activity `estimatedCost` — schema + mutations + sync. **Gates the rest.**
+- **V2.3 → V2.7:** Plan View v2 build → bookings + day anchors → routing (multi-modal proxy + travel-times) → money (convert-estimate-to-expense + budget) → workspace shell.
+
+**Scope guardrails (from the decisions):** **desktop-first** — *mobile UX is its own later design review, not now*. **Deferred:** the file/image upload subsystem (so hero image, image-type ideas, and file attachments wait). **Out of scope:** full UI localization, public-transit routing. Reuse the existing activity row + sync/feed/permissions (PD-13) — don't build parallel machinery per type.
+
+**Good first move:** knock out the **V2.0** quick wins (independent; one of them — `lang=en` — clears the Japan geocode), then start the **V2.1** design pass.
 
 ### Geocoding the Japan trip (now folded into V2.0)
 
@@ -55,7 +75,7 @@ Goal: give the ~50 Japanese places real `lat`/`lng` so they pin on the map — *
 - **Gates:** `cd apps/web && pnpm typecheck`; `cd apps/server && pnpm typecheck`; root `pnpm lint`; root `pnpm -r build` **then** root `pnpm test:e2e` (build first — `test:e2e` is a root script; it spins its own prod server on :3456 with a temp DB).
 - **Seed a fresh dev DB:** `cd apps/server && pnpm seed` (demo trip; Ada/Bao/Cleo demo users).
 
-## Gotchas learned this session (orchestration + code)
+## Gotchas (orchestration + code, from the Tracks D/E build era)
 
 - **Agent `isolation: "worktree"` branches from the repo BASE commit, not the current branch HEAD** — worktree agents must `git reset --hard <feature-branch>` onto the foundation first (they did). Integrate disjoint-file worktree branches with `git cherry-pick` (clean, linear).
 - A **foundation pass owning shared files** (config / `app.ts` / schema / shared primitives) before fan-out is what makes parallel worktrees collision-free. Same shape worked for D and E.
@@ -64,8 +84,12 @@ Goal: give the ~50 Japanese places real `lat`/`lng` so they pin on the map — *
 - **Background subagents can't prompt for tool permissions**; the classifier also blocks auto-writing `.claude/settings.local.json`. Run write-capable agents in the foreground (the session auto-allows Edit/Write/Bash), or have the owner pre-authorize.
 - Pre-existing: Playwright `dragTo` can't drive dnd-kit (e2e moves activities via the dialog); `getByText`/`getByRole(name)` are substring + case-insensitive (nav clicks use `exact: true`).
 
+## Docs hygiene
+
+External-product names are intentionally kept **out of the repo** (a precautionary owner preference). Research files under `docs/research/raw/` refer to external projects only as generic **"Competitor A–H"** placeholders — **do not reintroduce product names** in docs, code comments, or commit messages. Map/geo *providers* and booking *link-out* targets are tech/features (not external products) and are fine to name.
+
 ## Pointers
 
-- **Plan + status:** `docs/plan.md` (task tables carry ✅/status notes; §M6 is next). **Decisions:** `docs/decisions.md`. **Self-host docs:** `docs/self-hosting/{install,configuration,reverse-proxy,backups}.md`.
+- **Start here for v2:** `docs/design/trip-workspace-v2-brief.md`. **Plan + status:** `docs/plan.md` (Trip Workspace v2 is the current priority, then §M6). **Decisions:** `docs/decisions.md` (PD-13/14/15, TD-13). **Self-host docs:** `docs/self-hosting/{install,configuration,reverse-proxy,backups}.md`.
 - **Idea inbox:** `docs/enhancements.md` (owner logs ideas here; promote into plan/decisions deliberately).
 - Cross-session status also lives in the auto-memory (`caravan-planning-status`).
