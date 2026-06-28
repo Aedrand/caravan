@@ -11,8 +11,11 @@ import type {
   Role,
 } from "@caravan/shared";
 import { and, asc, desc, eq, gt, lt } from "drizzle-orm";
+import type { Config } from "../config";
 import type { Db } from "../db";
 import { schema } from "../db";
+import type { Logger } from "../logger";
+import type { EmailService } from "../services/email";
 import { hasRole } from "./permissions";
 import {
   serializeActivity,
@@ -56,6 +59,20 @@ type MemberRow = typeof schema.tripMembers.$inferSelect;
 /** Drizzle's transaction handle type, extracted from the Db signature. */
 export type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
+/**
+ * Email dependencies a handler needs to fire a transactional send (D.1). Threaded
+ * through `ExecuteDeps` onto `MutationCtx` so handlers read them from `ctx` rather
+ * than a module global — keeping every app instance's email wiring its own (no
+ * cross-instance state bleed in tests). Absent in callers that don't send mail
+ * (e.g. seed scripts, mutation unit tests); even when present, sendMail no-ops
+ * until SMTP is configured.
+ */
+export interface EmailCtx {
+  email: EmailService;
+  config: Pick<Config, "baseUrl">;
+  logger: Logger;
+}
+
 export interface MutationCtx {
   /** Transaction-scoped database handle — all writes are atomic with the feed event. */
   tx: Tx;
@@ -63,6 +80,8 @@ export interface MutationCtx {
   member: MemberRow;
   actor: Actor;
   now: number;
+  /** Email wiring for handlers that send transactional mail (D.1); undefined when unwired. */
+  email?: EmailCtx;
 }
 
 export interface ApplyOutcome<T extends MutationType> {
@@ -96,6 +115,8 @@ export interface ExecuteDeps {
   db: Db;
   /** Called after commit with the recorded event + post-image (WS fan-out — M1.3). */
   broadcast?: (tripId: string, event: FeedEvent, entity: EntityPostImage | null) => void;
+  /** Email wiring for handlers that send transactional mail (D.1); omitted when unwired. */
+  email?: EmailCtx;
 }
 
 /**
@@ -233,7 +254,10 @@ export function executeMutation(
       throw new MutationError(403, "insufficient_role", `requires ${handler.role} role`);
     }
 
-    const outcome = handler.apply({ tx, trip, member, actor, now }, mutation.payload);
+    const outcome = handler.apply(
+      { tx, trip, member, actor, now, email: deps.email },
+      mutation.payload,
+    );
 
     const version = trip.version + 1;
     tx.update(schema.trips)

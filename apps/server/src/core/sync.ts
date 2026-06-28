@@ -16,7 +16,13 @@ import type { Db } from "../db";
 import { schema } from "../db";
 import type { Logger } from "../logger";
 import { getActiveMember } from "./membership";
-import { eventsBefore, eventsSince, executeMutation, MutationError } from "./mutations";
+import {
+  type EmailCtx,
+  eventsBefore,
+  eventsSince,
+  executeMutation,
+  MutationError,
+} from "./mutations";
 import {
   serializeActivity,
   serializeComment,
@@ -50,6 +56,12 @@ export interface SyncDeps {
   rooms: ReturnType<typeof createTripRooms>;
   logger: Logger;
   upgradeWebSocket: typeof nodeUpgradeWebSocket;
+  /**
+   * Email wiring for mutation handlers that send transactional mail (D.1).
+   * Threaded onto each executeMutation call's context; optional so callers that
+   * don't send mail can omit it (sendMail no-ops until SMTP is configured).
+   */
+  email?: EmailCtx;
 }
 
 const SinceSchema = z.coerce.number().int().nonnegative();
@@ -65,7 +77,7 @@ function clampLimit(raw: string | undefined): number {
   return Math.min(n, MAX_FEED_LIMIT);
 }
 
-export function createSyncRoutes({ db, rooms, logger, upgradeWebSocket }: SyncDeps) {
+export function createSyncRoutes({ db, rooms, logger, upgradeWebSocket, email }: SyncDeps) {
   /**
    * Trip + active-membership gate for every sync route. Runs BEFORE the WS
    * upgrade too: cookies ride the upgrade request, so auth and membership
@@ -117,7 +129,7 @@ export function createSyncRoutes({ db, rooms, logger, upgradeWebSocket }: SyncDe
 
         try {
           const response = executeMutation(
-            { db, broadcast: rooms.broadcastEvent },
+            { db, broadcast: rooms.broadcastEvent, email },
             {
               tripId: c.get("trip").id,
               actor: { userId: c.get("user").id, type: "user" },

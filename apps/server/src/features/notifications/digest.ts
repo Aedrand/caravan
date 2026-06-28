@@ -1,6 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import type { Config } from "../../config";
-import { getDigestEnabled } from "../../core/notification-prefs";
+import { getDigestOptedOut } from "../../core/notification-prefs";
 import type { Db } from "../../db";
 import { schema } from "../../db";
 import type { Logger } from "../../logger";
@@ -54,8 +54,9 @@ function tripRecipients(db: Db, tripId: string): Recipient[] {
  *
  * Efficiency: one pass over feed_events for the whole instance (grouped by
  * trip), then one members+users query per *active* trip — no per-member or
- * per-event lookups. The rendered body is identical for every recipient of a
- * trip, so it's rendered once per trip and reused across sends.
+ * per-event lookups. Digest opt-outs are fetched once up front (one query for
+ * the whole instance) rather than per recipient. The rendered body is identical
+ * for every recipient of a trip, so it's rendered once per trip and reused.
  */
 export async function runDailyDigest(deps: DigestDeps): Promise<void> {
   const { db, logger, config, email } = deps;
@@ -71,6 +72,10 @@ export async function runDailyDigest(deps: DigestDeps): Promise<void> {
     logger.info("daily digest: no trips with recent activity");
     return;
   }
+
+  // Opt-outs in one query for the whole instance; "not in the set" = opted in
+  // (default), matching getDigestEnabled's no-row-means-enabled semantics.
+  const optedOut = getDigestOptedOut(db);
 
   let tripsSent = 0;
   let emailsSent = 0;
@@ -103,7 +108,7 @@ export async function runDailyDigest(deps: DigestDeps): Promise<void> {
       let sentForThisTrip = false;
       for (const recipient of recipients) {
         try {
-          if (!getDigestEnabled(db, recipient.userId)) continue;
+          if (optedOut.has(recipient.userId)) continue;
           // Nice-to-have: don't email someone whose only "news" is their own
           // actions — there's nothing new for them to catch up on.
           if (everyEventBy(events, recipient.memberId)) continue;

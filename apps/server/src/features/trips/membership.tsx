@@ -1,10 +1,12 @@
 import { createId } from "@caravan/shared";
 import { and, eq } from "drizzle-orm";
-import type { Config } from "../../config";
-import { type MutationCtx, MutationError, registerMutation } from "../../core/mutations";
+import {
+  type EmailCtx,
+  type MutationCtx,
+  MutationError,
+  registerMutation,
+} from "../../core/mutations";
 import { schema } from "../../db";
-import type { Logger } from "../../logger";
-import type { EmailService } from "../../services/email";
 import { renderEmail } from "../../services/email";
 import { InviteEmail } from "../../services/email/templates/invite";
 import { OwnershipTransferEmail } from "../../services/email/templates/ownership-transfer";
@@ -19,26 +21,12 @@ import { generateInviteToken } from "./invites";
  * Handlers run inside the (synchronous better-sqlite3) mutation transaction, so
  * a send fired with `void` only runs its async body AFTER the transaction
  * commits — a clean post-commit, non-blocking seam that can't fail the write.
+ *
+ * The email wiring rides on `ctx.email` (threaded from createApp through the
+ * mutation pipeline). It's undefined for callers that don't send mail (seed
+ * scripts, unit tests), in which case the sends below are skipped; even when
+ * present, sendMail no-ops until SMTP is configured.
  */
-
-/**
- * Boot-time email dependencies for membership sends, set once from the app
- * factory (createApp). Optional everywhere: when unset (e.g. unit tests that
- * never call the setter) sends are skipped, and even when set, sendMail no-ops
- * when SMTP isn't configured.
- */
-interface MembershipEmailDeps {
-  email: EmailService;
-  config: Pick<Config, "baseUrl">;
-  logger: Logger;
-}
-
-let emailDeps: MembershipEmailDeps | undefined;
-
-/** Wire the email service into the membership handlers (called from createApp). */
-export function setMembershipEmailDeps(deps: MembershipEmailDeps): void {
-  emailDeps = deps;
-}
 
 /**
  * Fire-and-forget a rendered email post-commit. Renders are wrapped so a
@@ -46,7 +34,7 @@ export function setMembershipEmailDeps(deps: MembershipEmailDeps): void {
  * swallows transport errors and no-ops when email is disabled.
  */
 function sendRendered(
-  deps: MembershipEmailDeps,
+  deps: EmailCtx,
   to: string,
   subject: string,
   element: Parameters<typeof renderEmail>[0],
@@ -103,17 +91,17 @@ registerMutation("invite.create", {
     // D.1: when a recipient was given, email them the join link. Capture the
     // inviter name inside the transaction; the actual render/send is deferred
     // past commit by sendRendered (better-sqlite3 is synchronous).
-    if (payload.email && emailDeps) {
+    if (payload.email && ctx.email) {
       const inviterName = memberName(ctx, ctx.member.userId);
       sendRendered(
-        emailDeps,
+        ctx.email,
         payload.email,
         `You're invited to ${ctx.trip.name} on Caravan`,
         <InviteEmail
           tripName={ctx.trip.name}
           inviterName={inviterName}
           inviteRole={payload.role}
-          joinUrl={`${emailDeps.config.baseUrl}/join/${token}`}
+          joinUrl={`${ctx.email.config.baseUrl}/join/${token}`}
         />,
       );
     }
@@ -248,16 +236,16 @@ registerMutation("trip.transferOwnership", {
       .from(schema.user)
       .where(eq(schema.user.id, target.userId))
       .get();
-    if (newOwner?.email && emailDeps) {
+    if (newOwner?.email && ctx.email) {
       sendRendered(
-        emailDeps,
+        ctx.email,
         newOwner.email,
         `You're now the owner of ${ctx.trip.name}`,
         <OwnershipTransferEmail
           tripName={ctx.trip.name}
           newOwnerName={newOwner.name}
           previousOwnerName={memberName(ctx, ctx.member.userId)}
-          tripUrl={`${emailDeps.config.baseUrl}/trips/${ctx.trip.id}`}
+          tripUrl={`${ctx.email.config.baseUrl}/trips/${ctx.trip.id}`}
         />,
       );
     }

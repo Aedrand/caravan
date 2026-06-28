@@ -88,12 +88,16 @@ export function describeEvent(event: FeedEvent): string {
       return "reopened the trip";
     case "trip.transferOwnership":
       return `handed off ownership to ${str("toName", "someone")}`;
+    // Membership lines are actor-prefixed by summarizeLine, so these are verb
+    // phrases only (no re-stating the actor) — mirroring the in-app feed copy.
+    case "member.join":
+      return "joined the trip";
     case "member.leave":
-      return `${str("name", "Someone")} left the trip`;
+      return "left the trip";
     case "member.remove":
       return `removed ${str("name", "a member")}`;
     case "member.setRole":
-      return `made ${str("name", "a member")} ${str("role", "a different role")}`;
+      return `changed ${str("name", "a member")}'s role to ${str("role", "a different role")}`;
     case "invite.create":
       return "created an invite link";
     case "invite.revoke":

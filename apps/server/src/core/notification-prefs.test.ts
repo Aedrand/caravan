@@ -4,7 +4,7 @@ import path from "node:path";
 import { afterEach, expect, test } from "vitest";
 import { createDb, schema } from "../db";
 import { runMigrations } from "../db/migrate";
-import { getDigestEnabled, setDigestEnabled } from "./notification-prefs";
+import { getDigestEnabled, getDigestOptedOut, setDigestEnabled } from "./notification-prefs";
 
 const tempDirs: string[] = [];
 
@@ -45,4 +45,26 @@ test("setDigestEnabled upserts and getDigestEnabled reflects it", () => {
   // Second write updates the same row (PK on user_id) rather than failing.
   setDigestEnabled(db, "u1", true);
   expect(getDigestEnabled(db, "u1")).toBe(true);
+});
+
+test("getDigestOptedOut returns only opted-out users (bulk, same default as getDigestEnabled)", () => {
+  const { db } = tempDb();
+  seedUser(db, "out1");
+  seedUser(db, "out2");
+  seedUser(db, "in1");
+
+  // Empty until someone explicitly opts out — a missing row defaults to enabled.
+  expect(getDigestOptedOut(db).size).toBe(0);
+
+  setDigestEnabled(db, "out1", false);
+  setDigestEnabled(db, "out2", false);
+  setDigestEnabled(db, "in1", true); // an explicit opt-IN row must NOT appear
+
+  const optedOut = getDigestOptedOut(db);
+  expect(optedOut.has("out1")).toBe(true);
+  expect(optedOut.has("out2")).toBe(true);
+  expect(optedOut.has("in1")).toBe(false);
+  // A user with no row at all is enabled by default, so absent from the set.
+  expect(optedOut.has("nobody")).toBe(false);
+  expect(optedOut.size).toBe(2);
 });

@@ -17,7 +17,6 @@ import { createExpensesRoutes } from "./features/expenses/routes";
 import { createGeoRoutes } from "./features/geo/routes";
 import { createNotificationPrefsRoutes } from "./features/notifications/prefs-routes";
 import { createInviteRoutes } from "./features/trips/invite-routes";
-import { setMembershipEmailDeps } from "./features/trips/membership";
 import { createTripsRoutes } from "./features/trips/routes";
 import type { Logger } from "./logger";
 import { createEmailService, type EmailService } from "./services/email";
@@ -42,10 +41,12 @@ export interface AppDeps {
  * and the typed `hc` client can be derived from `AppType`.
  */
 export function createApp({ config, db, logger, auth, rooms, email }: AppDeps) {
-  // Wire the email gateway into the membership mutation handlers (D.1). They run
-  // inside the synchronous mutation transaction and fire the send post-commit;
-  // sendMail no-ops when SMTP is unconfigured, so this is safe on every instance.
-  setMembershipEmailDeps({ email: email ?? createEmailService(config, logger), config, logger });
+  // Email wiring for mutation handlers that send transactional mail (D.1). Built
+  // once here and threaded onto each mutation's context via the sync routes, so
+  // every app instance carries its own (no module-global state bleed in tests).
+  // A disabled service is built from config when none is injected; sendMail
+  // no-ops when SMTP is unconfigured, so this is safe on every instance.
+  const emailCtx = { email: email ?? createEmailService(config, logger), config, logger };
 
   // Trip workspace: CRUD (M1.1) + the sync contract surface (M1.3) behind one
   // session gate — sub-apps assume c.get("user") and do their own membership checks.
@@ -53,7 +54,7 @@ export function createApp({ config, db, logger, auth, rooms, email }: AppDeps) {
     .use("*", requireUser(auth))
     .route("/", createTripsRoutes({ db, logger }))
     .route("/", createExpensesRoutes({ db }))
-    .route("/", createSyncRoutes({ db, rooms, logger, upgradeWebSocket }));
+    .route("/", createSyncRoutes({ db, rooms, logger, upgradeWebSocket, email: emailCtx }));
 
   // Geo proxy (Track C): session-gated; keeps geocoder keys + rate limit server-side.
   const geo = new Hono<AuthedEnv>()

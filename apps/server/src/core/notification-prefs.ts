@@ -18,6 +18,22 @@ export function getDigestEnabled(db: Db, userId: string): boolean {
   return row?.digestEnabled ?? true;
 }
 
+/**
+ * The set of user ids who have opted OUT of the daily digest, in one query — for
+ * the digest job, which would otherwise call getDigestEnabled once per recipient
+ * (N+1). Same semantics as getDigestEnabled: a user absent from the set defaults
+ * to enabled (only rows with digestEnabled = false land here), so callers treat
+ * "not in the set" as opted in.
+ */
+export function getDigestOptedOut(db: Db): Set<string> {
+  const rows = db
+    .select({ userId: schema.notificationPrefs.userId })
+    .from(schema.notificationPrefs)
+    .where(eq(schema.notificationPrefs.digestEnabled, false))
+    .all();
+  return new Set(rows.map((r) => r.userId));
+}
+
 /** Set the user's digest opt-in, upserting the prefs row and bumping updatedAt. */
 export function setDigestEnabled(db: Db, userId: string, enabled: boolean): void {
   const now = Date.now();

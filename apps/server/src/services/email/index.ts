@@ -32,6 +32,19 @@ export function isEmailEnabled(config: EmailConfig): boolean {
   return Boolean(config.smtp.host && config.smtp.from);
 }
 
+/**
+ * Strip CR/LF and other control characters from a header value (header-injection
+ * hardening). Subjects are built from user-controlled data (e.g. `trip.name`), so
+ * an embedded `\r\n` could otherwise smuggle extra headers into the message. Also
+ * collapses the surrounding whitespace a stripped newline would leave behind.
+ */
+export function sanitizeHeader(value: string): string {
+  // C0 control chars (\x00-\x1F, includes \r and \n) + DEL (\x7F) collapse to a
+  // single space, so a stripped CRLF doesn't fuse the words around it; then trim.
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: deliberately stripping control chars (CR/LF et al.) for header safety
+  return value.replace(/[\x00-\x1F\x7F]+/g, " ").trim();
+}
+
 /** Build a nodemailer transport from SMTP config. Caller guarantees host is set. */
 function buildTransport(smtp: SmtpConfig): Transporter {
   return nodemailer.createTransport({
@@ -68,7 +81,9 @@ export function createEmailService(config: Pick<Config, "smtp">, logger: Logger)
         await transport.sendMail({
           from: config.smtp.from,
           to: opts.to,
-          subject: opts.subject,
+          // Sanitize the (user-derived) subject so an embedded CRLF can't inject
+          // extra headers. `to` is a validated email and `from` is trusted config.
+          subject: sanitizeHeader(opts.subject),
           html: opts.html,
           text: opts.text,
         });

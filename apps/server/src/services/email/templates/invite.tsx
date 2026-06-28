@@ -24,8 +24,8 @@ export function InviteEmail({ tripName, inviterName, inviteRole, joinUrl }: Invi
     <EmailLayout preview={preview}>
       <Text style={heading}>You're invited to a trip</Text>
       <Text style={paragraph}>
-        {inviterName} invited you to join <strong>{tripName}</strong> on Caravan as a{" "}
-        <strong>{inviteRole}</strong>. Caravan is where the group plans the trip together —
+        {inviterName} invited you to join <strong>{tripName}</strong> on Caravan with the{" "}
+        <strong>{inviteRole}</strong> role. Caravan is where the group plans the trip together —
         itinerary, decisions, and who owes who.
       </Text>
       <Section style={buttonWrap}>

@@ -1,7 +1,7 @@
 import { Text } from "@react-email/components";
 import pino from "pino";
 import { expect, test } from "vitest";
-import { createEmailService, isEmailEnabled, renderEmail } from "./index";
+import { createEmailService, isEmailEnabled, renderEmail, sanitizeHeader } from "./index";
 import { EmailLayout } from "./templates/layout";
 
 const silentLogger = pino({ level: "silent" });
@@ -48,4 +48,18 @@ test("sendMail is a no-op (never throws) when email is disabled", async () => {
   await expect(
     email.sendMail({ to: "a@b.com", subject: "hi", html: "<p>hi</p>" }),
   ).resolves.toBeUndefined();
+});
+
+test("sanitizeHeader strips CRLF (and other control chars) to block header injection", () => {
+  // The classic injection: a newline that smuggles a second header into the message.
+  expect(sanitizeHeader("Trip\r\nBcc: victim@example.com")).toBe("Trip Bcc: victim@example.com");
+  // Bare \n and \r, tabs, and a NUL are all neutralized; the result has no control chars.
+  const clean = sanitizeHeader("A\nB\rC\tD\u0000E");
+  expect(clean).toBe("A B C D E");
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: asserting the result is free of control chars
+  expect(/[\x00-\x1F\x7F]/.test(clean)).toBe(false);
+  // A plain subject is left intact (modulo trimmed edges).
+  expect(sanitizeHeader("Iceland Ring Road: what changed today")).toBe(
+    "Iceland Ring Road: what changed today",
+  );
 });

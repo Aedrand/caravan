@@ -18,7 +18,10 @@ test("InviteEmail renders the trip, inviter, role, and join link", async () => {
   expect(html).toContain("Caravan");
   expect(html).toContain("Patagonia 2026");
   expect(html).toContain("Ada");
+  // Role is worded to avoid the "a editor" article slip — reads "the editor role".
   expect(html).toContain("editor");
+  expect(html).toContain("role");
+  expect(html).not.toContain("as a editor");
   expect(html).toContain(joinUrl);
 
   // Plain-text fallback keeps the link usable in clients that strip HTML.
