@@ -11,7 +11,18 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 Quick, unstructured jots from a hands-on pass — drop a line as things come up;
 we'll expand / promote the keepers later. Grouped by surface for triage; every
-item is the owner's verbatim note. Nothing here is scoped yet.
+item is the owner's verbatim note.
+
+> **✅ TRIAGED 2026-06-28 → [`docs/design/trip-workspace-v2-brief.md`](design/trip-workspace-v2-brief.md).**
+> All 21 notes were walked through with the owner and promoted into design
+> decisions (D1–D11): typed freeform items, first-class days, enter-once
+> bookings that anchor each day, real auto-routing, Plan View v2 (a connected
+> progression rail), a continuous-scroll workspace shell + synced index +
+> overview, idea lists, activity cost estimates, and a keyless `lang=en`
+> place-name fix. Deferred: the upload subsystem (hero image, image-ideas, file
+> attachments). Out of scope: full UI localization. The raw notes are kept
+> below for provenance; the brief is the source of truth, and its §6 lists the
+> `decisions.md` amendments still to apply.
 
 **Plan / itinerary view**
 
