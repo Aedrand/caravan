@@ -238,6 +238,8 @@ Every commitment in `PROJECT.md`/`product-brief.md` and where it lands:
 
 Integration QA across tracks · **full design sweep** (the stage-2 visual pass: consistency audit across every surface, layout/positioning/density refinements, E.3/E.4 finishing — E.1 established the language, this conforms the whole app to it) · full E2E suite green · perf budget (snapshot < 100 ms at 500-activity trip; bundle audit) · security pass (invite token entropy, session fixation, rate limits, headers) · load sanity (10 concurrent editors) · README screenshots + demo instance · tag v1.0.0 → GHCR → awesome-selfhosted submission.
 
+> ⚑ **Re-enable release automation here.** `release-please` was deferred during Track D (it failed on every push pre-v1.0 on 2026-06-27 — the repo setting blocked Actions from opening its PR) and is now **manual-only** (`.github/workflows/release-please.yml`, `on: workflow_dispatch`; config files kept). To cut v1.0: (1) restore its `push: { branches: [main] }` trigger; (2) enable repo Settings → Actions → "Allow GitHub Actions to create and approve pull requests" (`gh api -X PUT repos/Aedrand/caravan/actions/permissions/workflow -F can_approve_pull_request_reviews=true`); (3) bump `.github/.release-please-manifest.json` off the `0.0.0` sentinel to the intended version. The full checklist also lives in the workflow header.
+
 ### M7 — House AI (v1.1) `[P with M8]`
 
 | # | Task | Size |

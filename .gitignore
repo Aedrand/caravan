@@ -26,3 +26,6 @@ test-results/
 .DS_Store
 *.log
 .claude/settings.local.json
+# transient agent/tool scratch (subagent git worktrees, Playwright MCP snapshots)
+.claude/worktrees/
+.playwright-mcp/
