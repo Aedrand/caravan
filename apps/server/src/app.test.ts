@@ -55,3 +55,18 @@ test("GET /api/geo/search requires a session", async () => {
   const res = await app.request("/api/geo/search?q=lisbon");
   expect(res.status).toBe(401);
 });
+
+// Track D: notification prefs mount under /api/me and are session-gated.
+test("GET /api/me/notification-prefs requires a session", async () => {
+  const res = await app.request("/api/me/notification-prefs");
+  expect(res.status).toBe(401);
+});
+
+test("PUT /api/me/notification-prefs requires a session", async () => {
+  const res = await app.request("/api/me/notification-prefs", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ digestEnabled: false }),
+  });
+  expect(res.status).toBe(401);
+});

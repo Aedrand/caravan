@@ -15,6 +15,7 @@ import type { Db } from "./db";
 import { createAdminRoutes } from "./features/admin/routes";
 import { createExpensesRoutes } from "./features/expenses/routes";
 import { createGeoRoutes } from "./features/geo/routes";
+import { createNotificationPrefsRoutes } from "./features/notifications/prefs-routes";
 import { createInviteRoutes } from "./features/trips/invite-routes";
 import { createTripsRoutes } from "./features/trips/routes";
 import type { Logger } from "./logger";
@@ -52,11 +53,18 @@ export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
     .use("*", requireAdmin())
     .route("/", createAdminRoutes({ db }));
 
+  // Current-user surface (Track D): session-gated, keyed to c.get("user").
+  // Holds notification preferences (D.2); future per-user settings join here.
+  const me = new Hono<AuthedEnv>()
+    .use("*", requireUser(auth))
+    .route("/", createNotificationPrefsRoutes({ db }));
+
   const api = new Hono()
     .get("/health", (c) => c.json({ status: "ok", service: "caravan" }))
     .route("/trips", trips)
     .route("/geo", geo)
     .route("/admin", admin)
+    .route("/me", me)
     // Invite door: GET info is public; accept gates itself on a session.
     .route("/invites", createInviteRoutes({ db, rooms, logger, requireUser: requireUser(auth) }));
 

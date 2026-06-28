@@ -44,6 +44,26 @@ const EnvSchema = z.object({
   /** Stadia key — alternative keyed tile styles. */
   STADIA_KEY: z.string().min(1).optional(),
 
+  // --- Transactional email (D.1) + daily digest (D.2). All optional: email is
+  // OFF until SMTP_HOST and SMTP_FROM are both set, so the default is no email. ---
+  /** SMTP server host. Email is considered configured only when this (and SMTP_FROM) are set. */
+  SMTP_HOST: z.string().min(1).optional(),
+  /** SMTP server port. 587 (STARTTLS) is the common submission port. */
+  SMTP_PORT: z.coerce.number().int().positive().default(587),
+  /** SMTP auth username (optional — some relays accept unauthenticated submission). */
+  SMTP_USER: z.string().optional(),
+  /** SMTP auth password. */
+  SMTP_PASS: z.string().optional(),
+  /** Use an implicit TLS connection (port 465). Leave false for STARTTLS on 587. Accepts true/1/yes. */
+  SMTP_SECURE: z
+    .enum(["true", "false", "1", "0", "yes", "no"])
+    .default("false")
+    .transform((v) => v === "true" || v === "1" || v === "yes"),
+  /** From address on outgoing mail (e.g. "Caravan <trips@example.com>"). Required for email to be on. */
+  SMTP_FROM: z.string().min(1).optional(),
+  /** Cron pattern for the daily digest job (D.2); default 08:00 every day. */
+  DIGEST_CRON: z.string().min(1).default("0 8 * * *"),
+
   // --- Operations: replication & rate limiting (Track D) -----------------------
   /** Litestream replica target (D.4). Surfaced for the Docker entrypoint; the app itself doesn't read it. */
   LITESTREAM_REPLICA_URL: z.string().optional(),
@@ -94,6 +114,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       maptilerKey: parsed.MAPTILER_KEY,
       stadiaKey: parsed.STADIA_KEY,
     },
+    smtp: {
+      host: parsed.SMTP_HOST,
+      port: parsed.SMTP_PORT,
+      user: parsed.SMTP_USER,
+      pass: parsed.SMTP_PASS,
+      secure: parsed.SMTP_SECURE,
+      from: parsed.SMTP_FROM,
+    },
+    /** Cron pattern for the daily digest job (D.2). */
+    digestCron: parsed.DIGEST_CRON,
     /** Surfaced for D.4's Docker entrypoint; the app process itself ignores it. */
     litestreamReplicaUrl: parsed.LITESTREAM_REPLICA_URL,
     rateLimit: {

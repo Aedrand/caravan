@@ -72,6 +72,8 @@ export const inviteLinks = sqliteTable("invite_links", {
   role: text("role", { enum: ["editor", "viewer"] })
     .notNull()
     .default("editor"),
+  /** Optional recipient an invite was sent to (D.1); null for share-link invites. */
+  email: text("email"),
   expiresAt: integer("expires_at"),
   revokedAt: integer("revoked_at"),
   /** Membership id of the creator (no FK by design — history outlives roles). */
@@ -328,3 +330,21 @@ export const payments = sqliteTable(
   },
   (t) => [index("payments_trip").on(t.tripId)],
 );
+
+// ---------------------------------------------------------------------------
+// Track D — notifications (email backbone D.1/D.2). Per-user delivery prefs;
+// the digest reads digestEnabled to decide who gets the daily batch.
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-user notification preferences (D.2). One row per Better Auth user; the
+ * absence of a row means "all defaults" (digest on), so writers upsert lazily.
+ */
+export const notificationPrefs = sqliteTable("notification_prefs", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  /** Opt-out flag for the daily digest email; defaults on. */
+  digestEnabled: integer("digest_enabled", { mode: "boolean" }).notNull().default(true),
+  updatedAt: integer("updated_at").notNull(),
+});

@@ -10,9 +10,11 @@ import { createDb } from "./db";
 import { runMigrations } from "./db/migrate";
 // Side-effect: register every feature's mutation handlers with the pipeline.
 import "./features";
+import { runDailyDigest } from "./features/notifications/digest";
 // Track A: temporary DDL until the integrator generates the migration (anti-collision rule 1).
 import { findValidInvite } from "./features/trips/invites";
 import { createLogger } from "./logger";
+import { createEmailService } from "./services/email";
 
 /** Boot order (TD-4): config → logger → DB + migrations (fail-fast) → auth → serve. */
 async function main() {
@@ -36,6 +38,13 @@ async function main() {
   });
   await ensureAdminUser({ auth, db: db.db, config, logger });
 
+  const email = createEmailService(config, logger);
+  if (email.enabled) {
+    logger.info({ smtpHost: config.smtp.host }, "email enabled");
+  } else {
+    logger.info("email disabled — SMTP not configured (SMTP_HOST/SMTP_FROM)");
+  }
+
   const jobs = createJobRegistry(logger);
   const rooms = createTripRooms(logger);
   rooms.startHeartbeat();
@@ -44,6 +53,12 @@ async function main() {
   // Reclaim expired rate-limit windows so the keyed Map stays bounded under many
   // unique client IPs (the limiters prune lazily on hit, but idle keys linger).
   jobs.register("rate-limit-prune", "*/10 * * * *", () => app.pruneRateLimiters());
+
+  // Daily digest (D.2): per-trip activity summary email. Stubbed for now; safe to
+  // schedule since sendMail no-ops when email is disabled.
+  jobs.register("daily-digest", config.digestCron, () =>
+    runDailyDigest({ db: db.db, logger, config, email }),
+  );
 
   // noServer is required — the Hono adapter handles the HTTP upgrade itself.
   const wss = new WebSocketServer({ noServer: true });
