@@ -58,13 +58,24 @@ test("unplottedWithPlace: named-but-uncoordinated only", () => {
   expect(out).toEqual([named]);
 });
 
-test("toFeatureCollection: one Point feature per plotted activity, id+title in props", () => {
+test("toFeatureCollection: one Point feature per plotted activity, id+title+category in props", () => {
   const fc = toFeatureCollection([{ ...activity({ title: "Belém" }), lat: 38.7, lng: -9.2 }]);
   expect(fc.type).toBe("FeatureCollection");
   expect(fc.features).toHaveLength(1);
   const f = fc.features[0];
   expect(f?.geometry).toEqual({ type: "Point", coordinates: [-9.2, 38.7] }); // GeoJSON is [lng, lat]
-  expect(f?.properties).toMatchObject({ title: "Belém" });
+  // `category` rides on every feature so the pin tint (map-panel's token bridge)
+  // can `match` on it; `activity()` defaults the category to "other".
+  expect(f?.properties).toMatchObject({ title: "Belém", category: "other" });
+});
+
+test("toFeatureCollection: carries each activity's category for the pin tint", () => {
+  const fc = toFeatureCollection([
+    { ...activity({ id: fid("1"), title: "Ramen", category: "food" }), lat: 1, lng: 2 },
+    { ...activity({ id: fid("2"), title: "Hotel", category: "lodging" }), lat: 3, lng: 4 },
+  ]);
+  expect(fc.features[0]?.properties?.category).toBe("food");
+  expect(fc.features[1]?.properties?.category).toBe("lodging");
 });
 
 test("toFeatureCollection: no `number` property when no lookup is supplied", () => {

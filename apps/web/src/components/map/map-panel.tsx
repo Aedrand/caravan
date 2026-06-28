@@ -16,6 +16,7 @@ import {
   toFeatureCollection,
   unplottedWithPlace,
 } from "./geo-features";
+import { pinColorExpression, readPinTints } from "./pin-tint";
 import { useMapSelection } from "./selection";
 
 /**
@@ -247,7 +248,12 @@ function MapView({
         source: SOURCE_ID,
         filter: ["!", ["has", "point_count"]],
         paint: {
-          "circle-color": "#c05621",
+          // Tint each pin by its activity category via the JS token bridge (paint
+          // can't read CSS vars): a `match` on the feature's `category` → the
+          // resolved `--cat-*` color, falling back to the legacy orange. The
+          // theme-reactivity effect below re-reads + re-applies this on theme
+          // change so pins track the active color theme. See pin-tint.ts.
+          "circle-color": pinColorExpression(readPinTints()),
           // A touch larger than the v1 radius (8) so the stop number reads on the
           // marker; still comfortably below the cluster min radius (16) so the
           // pin/cluster hierarchy holds.
@@ -259,8 +265,11 @@ function MapView({
       // The per-day stop number, rendered ON each pin so the map and the rail are
       // cross-referenceable (pin ② ↔ rail stop ②, §C.6). A `symbol` layer over
       // the circle `pins` — the same source/feature, filtered to individual
-      // (non-cluster) pins that carry a `number`. Literal palette values (paint
-      // can't read CSS vars; matches the cluster-count + pin colors above).
+      // (non-cluster) pins that carry a `number`. The circle below it is now
+      // category-tinted, so the white number gets a translucent dark halo to stay
+      // legible on lighter tints (e.g. the gold lodging pin). Literal palette
+      // values — paint can't read CSS vars, and white+dark-halo reads on every
+      // tint in both color themes.
       map.addLayer({
         id: "pin-numbers",
         type: "symbol",
@@ -275,7 +284,12 @@ function MapView({
           "text-allow-overlap": true,
           "text-ignore-placement": true,
         },
-        paint: { "text-color": "#fffbf1" },
+        paint: {
+          "text-color": "#fffbf1",
+          "text-halo-color": "rgba(40,30,18,0.55)",
+          "text-halo-width": 1.3,
+          "text-halo-blur": 0.3,
+        },
       });
 
       // Pin click → select + popup (bidirectional highlight, half 1). Bind both
@@ -365,6 +379,29 @@ function MapView({
     if (ofDay.length === 0) return;
     fitToPlotted(map, ofDay, 600);
   }, [focusedDay, ready]);
+
+  // Re-tint pins when the active color theme changes. The two-axis theming
+  // (TD-11) lives on `<html>`'s `data-theme` (color) attribute; MapLibre paint
+  // can't read CSS vars, so the rest of the UI re-themes automatically but the
+  // map can't — we mirror that here by re-reading the resolved `--cat-*` tokens
+  // and pushing a fresh `match` onto the pins layer. `data-style` is the
+  // STRUCTURE axis (no hue change), so we watch `data-theme` only. The initial
+  // tint is set at addLayer; `retint()` also runs once here to cover a theme flip
+  // between boot and `ready`.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const root = document.documentElement;
+    const retint = () => {
+      if (map.getLayer("pins")) {
+        map.setPaintProperty("pins", "circle-color", pinColorExpression(readPinTints(root)));
+      }
+    };
+    retint();
+    const observer = new MutationObserver(retint);
+    observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, [ready]);
 
   return (
     <div className={cn("cv-card overflow-hidden p-0", fill && "flex h-full flex-col")}>

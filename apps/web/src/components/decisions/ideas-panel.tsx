@@ -9,7 +9,11 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  type DragOverEvent,
+  DragOverlay,
+  type DragStartEvent,
   KeyboardSensor,
+  MeasuringStrategy,
   PointerSensor,
   useSensor,
   useSensors,
@@ -35,8 +39,12 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { useIdeaLists, useMyMember, useTripMutation } from "@/lib/sync";
 import { ActivityFooter } from "./activity-footer";
-import { IdeaCard } from "./idea-card";
-import { IdeaListSection, SortableIdeaListSection } from "./idea-list-section";
+import { DraggableIdeaCard, IdeaCard } from "./idea-card";
+import {
+  DroppableUnlistedSection,
+  SortableIdeaListSection,
+  UNLISTED_DROP_ID,
+} from "./idea-list-section";
 import {
   commentsFor,
   useCommentsByTarget,
@@ -69,6 +77,14 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
   const [dialog, setDialog] = useState<DialogState>(null);
   const [creatingList, setCreatingList] = useState(false);
   const [listDraft, setListDraft] = useState("");
+  // Cross-list idea drag (V2.3): what's lifted, and which section it's over.
+  // `dropTargetKey` is a list id, `UNLISTED_DROP_ID`, or null (not over a new
+  // home); it drives the section highlight + reads back on drop.
+  const [activeDrag, setActiveDrag] = useState<{
+    id: string;
+    type: "idea" | "list-section";
+  } | null>(null);
+  const [dropTargetKey, setDropTargetKey] = useState<string | null>(null);
 
   const days = useMemo(
     () => deriveDays(trip.startDate, trip.endDate, activities),
@@ -113,6 +129,19 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
     return { byList: byListMap, unlisted: unlistedArr };
   }, [ideas, ideaLists]);
 
+  // Valid card-drop targets: any real list id (over.id from a section's sortable
+  // node) plus the Unlisted sentinel. Anything else read off `over` is ignored.
+  const listIdSet = useMemo(() => new Set(ideaLists.map((l) => l.id)), [ideaLists]);
+  const resolveDropKey = useCallback(
+    (overId: string): string | null =>
+      overId === UNLISTED_DROP_ID ? UNLISTED_DROP_ID : listIdSet.has(overId) ? overId : null,
+    [listIdSet],
+  );
+
+  // The lifted idea (for the drag overlay) — only while an idea, not a list, drags.
+  const activeIdea =
+    activeDrag?.type === "idea" ? (ideas.find((i) => i.id === activeDrag.id) ?? null) : null;
+
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
@@ -146,9 +175,60 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
     setCreatingList(false);
   }
 
+  function handleDragStart(event: DragStartEvent) {
+    const type = event.active.data.current?.type === "idea" ? "idea" : "list-section";
+    setActiveDrag({ id: String(event.active.id), type });
+    setDropTargetKey(null);
+  }
+
+  // Track the hovered section for the highlight — only for idea drags, and never
+  // the card's own list (that drop is a no-op, so it shouldn't light up).
+  function handleDragOver(event: DragOverEvent) {
+    if (event.active.data.current?.type !== "idea" || !event.over) {
+      setDropTargetKey(null);
+      return;
+    }
+    const key = resolveDropKey(String(event.over.id));
+    const idea = ideas.find((i) => i.id === String(event.active.id));
+    const currentKey = idea?.listId ?? UNLISTED_DROP_ID;
+    setDropTargetKey(key === null || key === currentKey ? null : key);
+  }
+
+  // One DndContext, two interactions: branch on the dragged thing's type so a
+  // card move and a list reorder never get confused (TD: data.type).
+  function handleDragEnd(event: DragEndEvent) {
+    const isIdea = event.active.data.current?.type === "idea";
+    setActiveDrag(null);
+    setDropTargetKey(null);
+    if (isIdea) reassignIdea(event);
+    else reorderLists(event);
+  }
+
+  function handleDragCancel() {
+    setActiveDrag(null);
+    setDropTargetKey(null);
+  }
+
+  // Reassign an idea to the dropped-on list (or Unlisted → null). Ideas stay
+  // vote-sorted within a list, so we only change `listId` — never a position.
+  function reassignIdea(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over) return;
+    const idea = ideas.find((i) => i.id === String(active.id));
+    if (!idea) return;
+    const key = resolveDropKey(String(over.id));
+    if (key === null) return;
+    const targetListId = key === UNLISTED_DROP_ID ? null : key;
+    if ((idea.listId ?? null) === targetListId) return; // dropped on its own list → no-op
+    void mutateAsync("activity.update", {
+      activityId: idea.id,
+      patch: { listId: targetListId },
+    }).catch(() => {});
+  }
+
   // Reorder lists: drop into the new slot, then index between the new neighbors
   // (mirrors the itinerary board's activity.move via positionBetween).
-  function handleListDragEnd(event: DragEndEvent) {
+  function reorderLists(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
     const from = ideaLists.findIndex((l) => l.id === active.id);
@@ -175,14 +255,24 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
   );
 
   // One group's ideas as a vote-sorted list, with a per-list "Most wanted" badge
-  // on the leader once it's actually pulled ahead on votes.
-  const renderIdeas = (sorted: Activity[]): ReactNode => {
+  // on the leader once it's actually pulled ahead on votes. `draggable` wires the
+  // cross-list grip — set only inside the DndContext (lists/Unlisted), not the
+  // flat no-lists view where there's nowhere to drag to.
+  const renderIdeas = (sorted: Activity[], draggable = false): ReactNode => {
     const topVotes = sorted[0] ? (votesByActivity.get(sorted[0].id)?.length ?? 0) : 0;
     return (
       <ul className="flex flex-col gap-3">
         {sorted.map((activity, rank) => {
           const votes = votesByActivity.get(activity.id)?.length ?? 0;
           const mostWanted = rank === 0 && sorted.length > 1 && votes > 0 && votes === topVotes;
+          const cardProps = {
+            activity,
+            canEdit,
+            onEdit: openEdit,
+            onDelete: remove,
+            onToggleChecklistItem: toggleChecklistItem,
+            footer: renderFooter(activity),
+          };
           return (
             <li key={activity.id} className="relative">
               {mostWanted && (
@@ -190,14 +280,11 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
                   Most wanted
                 </span>
               )}
-              <IdeaCard
-                activity={activity}
-                canEdit={canEdit}
-                onEdit={openEdit}
-                onDelete={remove}
-                onToggleChecklistItem={toggleChecklistItem}
-                footer={renderFooter(activity)}
-              />
+              {draggable && canEdit ? (
+                <DraggableIdeaCard {...cardProps} />
+              ) : (
+                <IdeaCard {...cardProps} />
+              )}
             </li>
           );
         })}
@@ -209,6 +296,14 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
     <p className="text-sm italic text-muted-foreground">
       No ideas here yet.
       {canEdit ? " Add one with “+ Idea,” or assign an idea to this list." : ""}
+    </p>
+  );
+
+  // Shown in an empty Unlisted bucket that only appears mid-drag, so the hint is
+  // a drop affordance rather than idle copy.
+  const unlistedDropHint = (
+    <p className="text-sm italic text-muted-foreground">
+      Drop an idea here to take it off its list.
     </p>
   );
 
@@ -325,52 +420,78 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
               renderIdeas(sortByVotes(ideas))
             )
           ) : (
-            <>
-              <DndContext
-                sensors={sensors}
-                collisionDetection={closestCenter}
-                onDragEnd={handleListDragEnd}
-              >
+            // One DndContext drives both list-section reorder and cross-list
+            // idea-card moves; handlers branch on the dragged item's data.type.
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              // Always re-measure droppables so the Unlisted bucket, which only
+              // mounts once an idea drag begins, is registered as a live target.
+              measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+              onDragCancel={handleDragCancel}
+            >
+              <div className="flex flex-col gap-4">
                 <SortableContext
                   items={ideaLists.map((l) => l.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  <div className="flex flex-col gap-4">
-                    {ideaLists.map((list) => {
-                      const sorted = sortByVotes(byList.get(list.id) ?? []);
-                      return (
-                        <SortableIdeaListSection
-                          key={list.id}
-                          list={list}
-                          name={list.name}
-                          count={sorted.length}
-                          canEdit={canEdit}
-                          onRename={(name) => void renameList(list.id, name).catch(() => {})}
-                          onDelete={() => void deleteList(list.id).catch(() => {})}
-                          onAddIdea={canEdit ? () => openCreate("activity", list.id) : undefined}
-                        >
-                          {sorted.length === 0 ? emptyListHint : renderIdeas(sorted)}
-                        </SortableIdeaListSection>
-                      );
-                    })}
-                  </div>
+                  {ideaLists.map((list) => {
+                    const sorted = sortByVotes(byList.get(list.id) ?? []);
+                    return (
+                      <SortableIdeaListSection
+                        key={list.id}
+                        list={list}
+                        name={list.name}
+                        count={sorted.length}
+                        canEdit={canEdit}
+                        isDropTarget={activeDrag?.type === "idea" && dropTargetKey === list.id}
+                        onRename={(name) => void renameList(list.id, name).catch(() => {})}
+                        onDelete={() => void deleteList(list.id).catch(() => {})}
+                        onAddIdea={canEdit ? () => openCreate("activity", list.id) : undefined}
+                      >
+                        {sorted.length === 0 ? emptyListHint : renderIdeas(sorted, true)}
+                      </SortableIdeaListSection>
+                    );
+                  })}
                 </SortableContext>
-              </DndContext>
 
-              {/* Unlisted — the home for ideas with no list (incl. those whose
-                  list was just deleted). Hidden when empty to avoid clutter. */}
-              {unlistedSorted.length > 0 && (
-                <IdeaListSection
-                  name="Unlisted"
-                  count={unlistedSorted.length}
-                  canEdit={canEdit}
-                  unlisted
-                  onAddIdea={canEdit ? () => openCreate("activity", null) : undefined}
-                >
-                  {renderIdeas(unlistedSorted)}
-                </IdeaListSection>
-              )}
-            </>
+                {/* Unlisted — the home for ideas with no list (incl. those whose
+                    list was just deleted). Hidden when empty, but revealed mid-drag
+                    so a card always has somewhere to land to clear its list. */}
+                {(unlistedSorted.length > 0 || activeDrag?.type === "idea") && (
+                  <DroppableUnlistedSection
+                    count={unlistedSorted.length}
+                    canEdit={canEdit}
+                    isDropTarget={dropTargetKey === UNLISTED_DROP_ID}
+                    onAddIdea={canEdit ? () => openCreate("activity", null) : undefined}
+                  >
+                    {unlistedSorted.length === 0
+                      ? unlistedDropHint
+                      : renderIdeas(unlistedSorted, true)}
+                  </DroppableUnlistedSection>
+                )}
+              </div>
+
+              {/* Lifted card follows the cursor; the source dims in place. No drop
+                  animation — the reassign lands via the optimistic activity.update,
+                  so the default settle would snap the overlay back first. */}
+              <DragOverlay dropAnimation={null}>
+                {activeIdea ? (
+                  <div className="cursor-grabbing">
+                    <IdeaCard
+                      activity={activeIdea}
+                      canEdit={false}
+                      onEdit={() => {}}
+                      onDelete={() => {}}
+                      onToggleChecklistItem={() => {}}
+                    />
+                  </div>
+                ) : null}
+              </DragOverlay>
+            </DndContext>
           )}
         </>
       )}

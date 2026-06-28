@@ -220,6 +220,13 @@
   --cat-sight-soft: var(--hue-success-soft);
   --cat-lodging: var(--hue-accent);
   --cat-lodging-soft: var(--hue-accent-soft);
+  /* Rounds out the `--cat-*` family for the remaining activity categories so the
+     map pin tint (a JS token bridge — paint can't read CSS vars) has one token
+     per category. These alias the same semantics CATEGORY_META already uses for
+     activity/shopping/other, keeping pins consistent with the itinerary glyphs. */
+  --cat-activity: var(--info);
+  --cat-shopping: var(--primary);
+  --cat-other: var(--muted-foreground);
 
   /* --- composite structural recipe (cross-axis) --- */
   --border-interactive: var(--border-w) solid var(--border-color);

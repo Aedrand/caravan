@@ -1,4 +1,5 @@
 import type { IdeaList } from "@caravan/shared";
+import { useDroppable } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -20,8 +21,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 
 const NAME_MAX = 80;
+
+/**
+ * Droppable id for the derived **Unlisted** bucket — the one drop target that
+ * isn't a real `idea_lists` row. Dropping a card here clears its `listId`.
+ */
+export const UNLISTED_DROP_ID = "__unlisted__";
 
 /**
  * One idea-list group on the Decide / Ideas & Lists surface (D10): a collapsible
@@ -38,6 +46,7 @@ export function IdeaListSection({
   canEdit,
   unlisted = false,
   dragHandle,
+  isDropTarget = false,
   onRename,
   onDelete,
   onAddIdea,
@@ -50,6 +59,8 @@ export function IdeaListSection({
   unlisted?: boolean;
   /** Reorder grip, supplied by the sortable wrapper for real lists. */
   dragHandle?: ReactNode;
+  /** An idea card is hovering this section during a cross-list drag — ring it. */
+  isDropTarget?: boolean;
   onRename?: (name: string) => void;
   onDelete?: () => void;
   /** Opens the add-idea dialog pre-targeted to this list (`defaultListId`). */
@@ -71,7 +82,13 @@ export function IdeaListSection({
   }
 
   return (
-    <section className="cv-card overflow-hidden" aria-label={`Idea list: ${name}`}>
+    <section
+      className={cn(
+        "cv-card overflow-hidden transition-[box-shadow,background-color]",
+        isDropTarget && "bg-accent/20 ring-2 ring-[var(--accent-strong)]",
+      )}
+      aria-label={`Idea list: ${name}`}
+    >
       <header className="flex items-center gap-1.5 px-3 py-2 sm:px-4">
         {dragHandle}
         <Button
@@ -172,6 +189,8 @@ export function SortableIdeaListSection({
   name: string;
   count: number;
   canEdit: boolean;
+  /** An idea card is hovering this section during a cross-list drag. */
+  isDropTarget?: boolean;
   onRename?: (name: string) => void;
   onDelete?: () => void;
   onAddIdea?: () => void;
@@ -179,6 +198,9 @@ export function SortableIdeaListSection({
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: list.id,
+    // Tags the drag so the panel's shared DndContext tells a list reorder from an
+    // idea-card move; the same node doubles as the card drop target (id = list.id).
+    data: { type: "list-section" },
     disabled: !props.canEdit,
   });
 
@@ -205,6 +227,34 @@ export function SortableIdeaListSection({
           ) : undefined
         }
       />
+    </div>
+  );
+}
+
+/**
+ * The derived **Unlisted** bucket as an idea-card drop target. Real lists are
+ * already droppable through their `useSortable` node (id = `list.id`); Unlisted
+ * isn't sortable, so it needs its own `useDroppable` (id = `UNLISTED_DROP_ID`).
+ * Dropping a card here clears its `listId`. Not reorderable, so no handle/kebab.
+ */
+export function DroppableUnlistedSection({
+  isDropTarget,
+  ...props
+}: {
+  count: number;
+  canEdit: boolean;
+  isDropTarget?: boolean;
+  onAddIdea?: () => void;
+  children: ReactNode;
+}) {
+  const { setNodeRef } = useDroppable({
+    id: UNLISTED_DROP_ID,
+    data: { type: "list-section", listId: null },
+  });
+
+  return (
+    <div ref={setNodeRef}>
+      <IdeaListSection {...props} name="Unlisted" unlisted isDropTarget={isDropTarget} />
     </div>
   );
 }

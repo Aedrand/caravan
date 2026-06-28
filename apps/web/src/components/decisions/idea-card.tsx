@@ -1,5 +1,6 @@
 import type { Activity, ChecklistItem } from "@caravan/shared";
-import { ListChecks, MoreHorizontal, Pencil, StickyNote, Trash2 } from "lucide-react";
+import { useDraggable } from "@dnd-kit/core";
+import { GripVertical, ListChecks, MoreHorizontal, Pencil, StickyNote, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { ActivityCard } from "@/components/itinerary/activity-card";
 import { Button } from "@/components/ui/button";
@@ -37,6 +38,7 @@ export function IdeaCard({
   onEdit,
   onDelete,
   onToggleChecklistItem,
+  dragHandle,
   footer,
 }: {
   activity: Activity;
@@ -46,6 +48,9 @@ export function IdeaCard({
   /** Check/uncheck one checklist entry (D1 `checklist.toggle`). Unused for
    *  non-checklist ideas. */
   onToggleChecklistItem: (activity: Activity, item: ChecklistItem, done: boolean) => void;
+  /** Grip for cross-list drag, supplied by `DraggableIdeaCard`. Kept as a
+   *  dedicated handle so the card's votes/menu/checkboxes stay clickable. */
+  dragHandle?: ReactNode;
   footer?: ReactNode;
 }) {
   // Activity ideas are exactly today's card — full reuse keeps them in lockstep.
@@ -56,6 +61,7 @@ export function IdeaCard({
         canEdit={canEdit}
         onEdit={onEdit}
         onDelete={onDelete}
+        dragHandle={dragHandle}
         footer={footer}
       />
     );
@@ -68,6 +74,7 @@ export function IdeaCard({
 
   return (
     <article className="cv-card flex gap-3 p-3 sm:p-4">
+      {dragHandle}
       <span
         aria-hidden
         className="flex size-9 shrink-0 items-center justify-center rounded-control"
@@ -151,5 +158,59 @@ export function IdeaCard({
         {footer}
       </div>
     </article>
+  );
+}
+
+/**
+ * An `IdeaCard` made draggable across list sections (Trip Workspace v2.3). The
+ * drag only reassigns the idea's `listId` — ideas stay vote-sorted within a
+ * list, so there's no intra-list position to set. Mirrors `SortableRailRow` /
+ * `SortableIdeaListSection`: a dedicated grip handle keeps the card's votes,
+ * comments, kebab, links and checkboxes clickable; viewers get the plain card.
+ *
+ * `data.type: "idea"` lets the panel's shared `DndContext` tell a card drag from
+ * a list-section reorder. We use `useDraggable` (not `useSortable`) on purpose —
+ * the card never participates in a sortable order, just hops between droppable
+ * sections. A `DragOverlay` in the panel renders the lifted card; the source is
+ * dimmed in place.
+ */
+export function DraggableIdeaCard(props: {
+  activity: Activity;
+  canEdit: boolean;
+  onEdit: (activity: Activity) => void;
+  onDelete: (activity: Activity) => void;
+  onToggleChecklistItem: (activity: Activity, item: ChecklistItem, done: boolean) => void;
+  footer?: ReactNode;
+}) {
+  const { activity, canEdit } = props;
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
+    id: activity.id,
+    data: { type: "idea", fromListId: activity.listId ?? null },
+    disabled: !canEdit,
+  });
+
+  return (
+    <div ref={setNodeRef} className={cn(isDragging && "opacity-40")}>
+      <IdeaCard
+        {...props}
+        dragHandle={
+          canEdit ? (
+            // Widened hit area (≥24px) with the grip glyph at size-4. The
+            // KeyboardSensor wires "space to pick up, arrows to move between
+            // lists"; the edit dialog's list select is the non-drag fallback.
+            <button
+              type="button"
+              aria-label={`Move ${activity.title} to another list`}
+              title="Drag to another list, or focus and use the arrow keys"
+              className="-ml-1 flex w-6 shrink-0 cursor-grab touch-none items-start justify-center self-start pt-1 text-muted-foreground/50 outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
+              {...attributes}
+              {...listeners}
+            >
+              <GripVertical aria-hidden className="size-4" />
+            </button>
+          ) : undefined
+        }
+      />
+    </div>
   );
 }

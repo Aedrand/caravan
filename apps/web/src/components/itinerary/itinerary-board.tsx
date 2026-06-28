@@ -1,6 +1,7 @@
 import {
   type Activity,
   type ItemType,
+  type MutationPayload,
   positionBetween,
   type TripMember,
   type TripSnapshot,
@@ -232,6 +233,12 @@ export function ItineraryBoard({
   const remove = (activity: Activity) =>
     void mutateAsync("activity.delete", { activityId: activity.id }).catch(() => {});
 
+  // Inline rail-row edits (cost chip, stop time) write through the same
+  // `activity.update` pipeline the ⋯ Edit-details dialog uses — a minimal patch,
+  // optimistic. Title stays dialog-only (protects the title→pin select).
+  const updateActivity = (activityId: string, patch: MutationPayload<"activity.update">["patch"]) =>
+    void mutateAsync("activity.update", { activityId, patch }).catch(() => {});
+
   // The votes + comments rail under each card (Track A). `canEdit` gates voting
   // and commenting (viewers see tallies + threads read-only).
   const renderFooter = (activity: Activity): ReactNode => (
@@ -419,6 +426,7 @@ export function ItineraryBoard({
                   onAdd={(type) => openCreate(iso, type)}
                   onEdit={openEdit}
                   onDelete={remove}
+                  onUpdate={updateActivity}
                   onToggleChecklistItem={toggleChecklistItem}
                   renderFooter={renderFooter}
                 />
@@ -496,6 +504,7 @@ function DayBlock({
   onAdd,
   onEdit,
   onDelete,
+  onUpdate,
   onToggleChecklistItem,
   renderFooter,
 }: {
@@ -522,6 +531,7 @@ function DayBlock({
   onAdd: (type?: ItemType) => void;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
+  onUpdate: (activityId: string, patch: MutationPayload<"activity.update">["patch"]) => void;
   onToggleChecklistItem: (activityId: string, itemId: string, done: boolean) => void;
   renderFooter: (activity: Activity) => ReactNode;
 }) {
@@ -628,6 +638,7 @@ function DayBlock({
                     onSelect={() => onSelectActivity(activity.id)}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onUpdate={(patch) => onUpdate(activity.id, patch)}
                     onToggleChecklistItem={(itemId, done) =>
                       onToggleChecklistItem(activity.id, itemId, done)
                     }

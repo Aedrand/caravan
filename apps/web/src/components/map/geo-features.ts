@@ -66,13 +66,17 @@ export function toFeatureCollection(
     type: "FeatureCollection",
     features: plotted.map((a) => {
       const number = stopNumbers?.get(a.id);
+      // `category` rides on every pin so the map can tint it by category — the JS
+      // token bridge in map-panel reads the `--cat-*` tokens and feeds a `match`
+      // keyed on this property (V2.3 pin tint). It's always present (notNull on
+      // the record), so it's unconditional, unlike `number`.
+      const base = { id: a.id, title: a.title, category: a.category };
       return {
         type: "Feature",
         geometry: { type: "Point", coordinates: [a.lng, a.lat] },
         // Only attach `number` when present so the symbol layer's `["has",
         // "number"]` filter cleanly distinguishes numbered pins.
-        properties:
-          number == null ? { id: a.id, title: a.title } : { id: a.id, title: a.title, number },
+        properties: number == null ? base : { ...base, number },
       };
     }),
   };
