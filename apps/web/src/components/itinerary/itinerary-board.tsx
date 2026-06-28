@@ -17,7 +17,7 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { ChevronDown, Lightbulb, Plus } from "lucide-react";
+import { CalendarRange, ChevronDown, Lightbulb, Plus } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ActivityFooter } from "@/components/decisions/activity-footer";
@@ -31,6 +31,7 @@ import {
 import { useFocusedDay } from "@/components/map/focused-day";
 import { useMapSelection } from "@/components/map/selection";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { FALLBACK_PERSON_COLOR } from "@/lib/person-colors";
 import { useMyMember, usePresence, useTripMutation } from "@/lib/sync";
 import { cn } from "@/lib/utils";
@@ -259,18 +260,20 @@ export function ItineraryBoard({
   return (
     <section className="flex flex-col gap-3">
       {isEmpty ? (
-        <div className="cv-card flex flex-col items-center gap-3 p-10 text-center">
-          <p className="font-display text-lg font-bold">Nothing planned yet</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Set the trip dates to lay out days, or drop a first idea in the pool — the group can
-            vote on it later.
-          </p>
-          {canEdit && (
-            <Button className="mt-1" onClick={() => openCreate(null)}>
-              <Plus aria-hidden />
-              Add an idea
-            </Button>
-          )}
+        <div className="cv-card p-8 sm:p-10">
+          <EmptyState
+            icon={CalendarRange}
+            title="Nothing planned yet"
+            description="Set the trip dates to lay out days, or drop a first idea in the pool — the group can vote on it later."
+            action={
+              canEdit ? (
+                <Button onClick={() => openCreate(null)}>
+                  <Plus aria-hidden />
+                  Add an idea
+                </Button>
+              ) : undefined
+            }
+          />
         </div>
       ) : (
         <>

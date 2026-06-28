@@ -67,10 +67,16 @@ export function SortableActivityCard({
         selected={selected}
         onSelect={onSelect}
         dragHandle={
+          // Widened hit area (≥32px) for thumbs; the grip glyph stays size-4 so
+          // the visual is unchanged. `title` gives sighted users the keyboard
+          // hint; dnd-kit's KeyboardSensor already wires an aria-describedby with
+          // full "space to pick up, arrows to move" instructions for screen
+          // readers (via {...attributes}), so we don't re-describe it here.
           <button
             type="button"
             aria-label={`Reorder ${activity.title}`}
-            className="-ml-1 flex w-5 cursor-grab touch-none items-center justify-center self-stretch rounded text-muted-foreground/60 outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
+            title="Drag to reorder, or focus and use the arrow keys"
+            className="-ml-2 flex w-8 cursor-grab touch-none items-center justify-center self-stretch rounded text-muted-foreground/60 outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50 active:cursor-grabbing"
             {...attributes}
             {...listeners}
           >

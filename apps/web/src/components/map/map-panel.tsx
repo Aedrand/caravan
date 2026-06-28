@@ -1,8 +1,9 @@
 import type { Activity, TripSnapshot } from "@caravan/shared";
 import type { Point } from "geojson";
-import { MapPin, MapPinOff } from "lucide-react";
+import { MapPin, MapPinOff, TriangleAlert } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useMapConfig } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import "maplibre-gl/dist/maplibre-gl.css";
@@ -34,29 +35,26 @@ export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; f
   if (activities.length === 0) {
     if (!fill) return null;
     return (
-      <div className="cv-card flex h-full flex-col items-center justify-center gap-2 p-8 text-center">
-        <MapPinOff aria-hidden className="size-6 text-muted-foreground" />
-        <p className="font-display font-bold">The map appears here</p>
-        <p className="max-w-xs text-muted-foreground text-sm">
-          Add a place to an activity and it'll drop a pin.
-        </p>
+      <div className="cv-card flex h-full flex-col p-8">
+        <EmptyState
+          className="flex-1"
+          icon={MapPinOff}
+          title="The map appears here"
+          description="Add a place to an activity and it'll drop a pin."
+        />
       </div>
     );
   }
 
   if (plotted.length === 0) {
     const empty = (
-      <div
-        className={cn(
-          "cv-card flex flex-col items-center gap-2 p-8 text-center",
-          fill && "h-full justify-center",
-        )}
-      >
-        <MapPinOff aria-hidden className="size-6 text-muted-foreground" />
-        <p className="font-display font-bold">Nothing pinned yet</p>
-        <p className="max-w-sm text-muted-foreground text-sm">
-          Add a location to an activity and pick a search result — it'll drop a pin here.
-        </p>
+      <div className={cn("cv-card flex flex-col p-8", fill && "h-full")}>
+        <EmptyState
+          className={cn(fill && "flex-1")}
+          icon={MapPinOff}
+          title="Nothing pinned yet"
+          description="Add a location to an activity and pick a search result — it'll drop a pin here."
+        />
       </div>
     );
     if (fill) return empty;
@@ -265,12 +263,25 @@ function MapView({
 
   return (
     <div className={cn("cv-card overflow-hidden p-0", fill && "flex h-full flex-col")}>
-      <div
-        ref={containerRef}
-        role="application"
-        className={cn("w-full", fill ? "min-h-0 flex-1" : "h-[320px] sm:h-[400px]")}
-        aria-label="Map of trip activities"
-      />
+      <div className={cn("relative w-full", fill ? "min-h-0 flex-1" : "h-[320px] sm:h-[400px]")}>
+        <div
+          ref={containerRef}
+          role="application"
+          className="size-full"
+          aria-label="Map of trip activities"
+        />
+        {/* Tiles come from the host-configured provider via /api/geo/map-config;
+            if that fetch fails the canvas can't boot, so surface a light notice
+            over the blank pane rather than leave a silent grey box. */}
+        {mapConfig.isError && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-muted/40 p-6 text-center">
+            <TriangleAlert aria-hidden className="size-6 text-muted-foreground" />
+            <p role="alert" className="max-w-xs text-muted-foreground text-sm">
+              The map couldn't load. Your places are still saved — refresh to try again.
+            </p>
+          </div>
+        )}
+      </div>
       {mapConfig.data && (
         // Visible attribution (C.5, TD-5 / provider terms).
         <p

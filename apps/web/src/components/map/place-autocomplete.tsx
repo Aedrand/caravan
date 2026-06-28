@@ -66,7 +66,9 @@ export function PlaceAutocomplete({
     }
   }
 
-  const showList = open && !picked && (results.length > 0 || search.isFetching);
+  // Open the dropdown for results, the searching state, or a failed lookup — a
+  // down geocoder shouldn't fail silently (freeform text still saves, PD-1).
+  const showList = open && !picked && (results.length > 0 || search.isFetching || search.isError);
 
   return (
     <div className="relative">
@@ -116,6 +118,11 @@ export function PlaceAutocomplete({
         >
           {results.length === 0 && search.isFetching && (
             <p className="px-3 py-2 text-muted-foreground text-sm">Searching…</p>
+          )}
+          {!search.isFetching && search.isError && (
+            <p role="alert" className="px-3 py-2 text-destructive text-sm">
+              Couldn't reach place search. You can still type a location.
+            </p>
           )}
           {results.map((place, i) => (
             <button

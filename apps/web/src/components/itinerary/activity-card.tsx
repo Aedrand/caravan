@@ -101,9 +101,9 @@ export function ActivityCard({
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon-xs"
+                  size="icon-sm"
                   aria-label={`Actions for ${activity.title}`}
-                  className="-mr-1 shrink-0 text-muted-foreground"
+                  className="-mr-1.5 shrink-0 text-muted-foreground"
                 >
                   <MoreHorizontal aria-hidden />
                 </Button>
