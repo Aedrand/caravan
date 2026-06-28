@@ -5,6 +5,7 @@ import { ActivityCard } from "@/components/itinerary/activity-card";
 import { ActivityFormDialog } from "@/components/itinerary/activity-form-dialog";
 import { deriveDays } from "@/components/itinerary/format";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useMyMember, useTripMutation } from "@/lib/sync";
 import { ActivityFooter } from "./activity-footer";
 import {
@@ -101,12 +102,12 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
       </div>
 
       {ideas.length === 0 ? (
-        <div className="cv-card flex flex-col items-center gap-2 p-8 text-center">
-          <p className="font-display text-lg font-bold">No ideas yet</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Float a place or plan the group can vote on — the favorites become days on the trip.
-          </p>
-        </div>
+        <EmptyState
+          icon={Lightbulb}
+          title="No ideas yet"
+          description="Float a place or plan the group can vote on — the favorites become days on the trip."
+          className="px-6 py-12"
+        />
       ) : (
         <>
           <p className="-mt-1 text-sm text-muted-foreground">

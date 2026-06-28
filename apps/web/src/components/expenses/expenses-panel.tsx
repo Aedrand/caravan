@@ -5,7 +5,7 @@ import {
   settleBalances,
   type TripMember,
 } from "@caravan/shared";
-import { ArrowRight, Pencil, Plus, Receipt, Trash2, Wallet } from "lucide-react";
+import { ArrowRight, Pencil, Plus, Receipt, Trash2, TriangleAlert, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,6 +14,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { EmptyState } from "@/components/ui/empty-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatMoney } from "@/lib/expenses/money";
 import { useMoney } from "@/lib/expenses/use-money";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
@@ -108,12 +110,20 @@ export function ExpensesPanel({
       </header>
 
       {moneyQuery.isPending ? (
-        <div className="h-24 animate-pulse rounded-card bg-muted/60" />
+        <div className="grid gap-2" role="status" aria-busy="true" aria-label="Loading expenses">
+          <Skeleton className="h-9 w-48" />
+          <Skeleton className="h-20 rounded-card" />
+          <Skeleton className="h-12 rounded-card" />
+        </div>
+      ) : moneyQuery.isError ? (
+        <MoneyError onRetry={() => void moneyQuery.refetch()} />
       ) : !hasMoney ? (
-        <p className="py-4 text-sm text-muted-foreground">
-          No expenses yet. Log what the group spends and Caravan keeps the running tally — and tells
-          everyone who owes whom.
-        </p>
+        <EmptyState
+          icon={Receipt}
+          title="No expenses yet"
+          description="Log what the group spends and Caravan keeps the running tally — and tells everyone who owes whom."
+          className="px-4 py-10"
+        />
       ) : (
         <div className="grid gap-5">
           {/* Budget overview */}
@@ -145,14 +155,16 @@ export function ExpensesPanel({
                   return (
                     <li key={b.memberId} className="flex items-center gap-2 text-sm">
                       <Avatar name={m?.name ?? "?"} color={colorOf(b.memberId)} />
-                      <span className="min-w-0 flex-1 truncate">
-                        {m?.name ?? "Someone"}
-                        {m?.status === "ghost" ? " (left)" : ""}
-                      </span>
-                      <span className="text-xs text-muted-foreground">
-                        paid {formatMoney(b.paidMinor, currency)} · owes{" "}
-                        {formatMoney(b.owedMinor, currency)}
-                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate">
+                          {m?.name ?? "Someone"}
+                          {m?.status === "ghost" ? " (left)" : ""}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          paid {formatMoney(b.paidMinor, currency)} · owes{" "}
+                          {formatMoney(b.owedMinor, currency)}
+                        </span>
+                      </div>
                       <NetPill netMinor={b.netMinor} currency={currency} />
                     </li>
                   );
@@ -237,6 +249,27 @@ export function ExpensesPanel({
   );
 }
 
+/**
+ * In-panel money load failure. The panel is already a `cv-card`, so we surface a
+ * compact inline alert + retry here rather than nesting an ErrorState card.
+ */
+function MoneyError({ onRetry }: { onRetry: () => void }) {
+  return (
+    <div
+      role="alert"
+      className="flex flex-col items-center gap-3 px-4 py-10 text-center text-muted-foreground"
+    >
+      <span className="flex size-10 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+        <TriangleAlert aria-hidden className="size-5" strokeWidth={1.75} />
+      </span>
+      <p className="text-sm">Couldn't load expenses. Check your connection and try again.</p>
+      <Button variant="outline" size="sm" onClick={onRetry}>
+        Try again
+      </Button>
+    </div>
+  );
+}
+
 function SettlementSummary({
   transfers,
   currency,
@@ -259,16 +292,15 @@ function SettlementSummary({
       ) : (
         <ul className="grid gap-1.5">
           {transfers.map((t) => (
-            <li
-              key={`${t.fromMember}-${t.toMember}`}
-              className="flex flex-wrap items-center gap-2 text-sm"
-            >
-              <Avatar name={nameOf(t.fromMember)} color={colorOf(t.fromMember)} />
-              <span className="font-medium">{nameOf(t.fromMember)}</span>
-              <ArrowRight aria-hidden className="size-3.5 text-muted-foreground" />
-              <Avatar name={nameOf(t.toMember)} color={colorOf(t.toMember)} />
-              <span className="font-medium">{nameOf(t.toMember)}</span>
-              <span className="ml-auto font-semibold">{formatMoney(t.amountMinor, currency)}</span>
+            <li key={`${t.fromMember}-${t.toMember}`} className="flex items-center gap-2 text-sm">
+              <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                <Avatar name={nameOf(t.fromMember)} color={colorOf(t.fromMember)} />
+                <span className="min-w-0 truncate font-medium">{nameOf(t.fromMember)}</span>
+                <ArrowRight aria-hidden className="size-3.5 shrink-0 text-muted-foreground" />
+                <Avatar name={nameOf(t.toMember)} color={colorOf(t.toMember)} />
+                <span className="min-w-0 truncate font-medium">{nameOf(t.toMember)}</span>
+              </div>
+              <span className="shrink-0 font-semibold">{formatMoney(t.amountMinor, currency)}</span>
             </li>
           ))}
         </ul>

@@ -6,9 +6,10 @@ import {
   type TripMember,
   type TripSnapshot,
 } from "@caravan/shared";
-import { Check, ChevronDown, Lock, MessageSquare, Plus, Sparkles } from "lucide-react";
+import { Check, ChevronDown, Lock, MessageSquare, Plus, Sparkles, Vote } from "lucide-react";
 import { type FormEvent, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
 import { relativeTime } from "@/lib/relative-time";
 import { useMyMember, useTripMutation } from "@/lib/sync";
@@ -55,13 +56,12 @@ export function PollsPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
       </div>
 
       {polls.length === 0 ? (
-        <div className="cv-card flex flex-col items-center gap-2 p-8 text-center">
-          <p className="font-display text-lg font-bold">No polls yet</p>
-          <p className="max-w-sm text-sm text-muted-foreground">
-            Stuck on a question the itinerary can't answer — which week, which Airbnb? Put it to a
-            vote.
-          </p>
-        </div>
+        <EmptyState
+          icon={Vote}
+          title="No polls yet"
+          description="Stuck on a question the itinerary can't answer — which week, which Airbnb? Put it to a vote."
+          className="px-6 py-12"
+        />
       ) : (
         <div className="flex flex-col gap-4">
           {polls.map((poll) => (
@@ -171,7 +171,7 @@ function PollCard({
                 disabled={!canEdit || closed}
                 aria-pressed={chosen}
                 className={cn(
-                  "relative w-full overflow-hidden rounded-control border px-3 py-2 text-left outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  "relative flex min-h-11 w-full items-center overflow-hidden rounded-control border px-3 py-2.5 text-left outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
                   chosen ? "border-primary" : "border-border",
                   canEdit && !closed && "hover:border-foreground/40",
                   (!canEdit || closed) && "cursor-default",
@@ -183,7 +183,7 @@ function PollCard({
                   className="absolute inset-y-0 left-0 bg-primary/10"
                   style={{ width: `${pct}%` }}
                 />
-                <span className="relative flex items-center justify-between gap-2">
+                <span className="relative flex w-full items-center justify-between gap-3">
                   <span className="flex min-w-0 items-center gap-2">
                     <span
                       className={cn(

@@ -11,7 +11,14 @@ import {
   type SplitSpec,
   type TripMember,
 } from "@caravan/shared";
-import { type FormEvent, useMemo, useState } from "react";
+import {
+  type FormEvent,
+  type KeyboardEvent,
+  type RefObject,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -31,6 +38,8 @@ type MutateAsync = <T extends MutationType>(
   type: T,
   payload: MutationPayload<T>,
 ) => Promise<MutationResponse>;
+
+type SplitKind = "equal" | "exact";
 
 const SELECT_CLASS =
   "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
@@ -95,10 +104,43 @@ function ExpenseForm({
   const [notes, setNotes] = useState(expense?.notes ?? "");
   const [dateValue, setDateValue] = useState(expense?.date ?? "");
 
-  const [splitKind, setSplitKind] = useState<"equal" | "exact">(
+  const [splitKind, setSplitKind] = useState<SplitKind>(
     // An edit with uneven shares opens in exact mode.
     expense && !sharesLookEqual(expense) ? "exact" : "equal",
   );
+
+  // ARIA tabs keyboard support for the Equal/Custom split tabs: Left/Right (and
+  // Home/End) move selection + focus between the two; click still works.
+  const equalTabRef = useRef<HTMLButtonElement>(null);
+  const exactTabRef = useRef<HTMLButtonElement>(null);
+  function handleSplitTabKeyDown(event: KeyboardEvent<HTMLButtonElement>, current: SplitKind) {
+    const refs: Record<SplitKind, RefObject<HTMLButtonElement | null>> = {
+      equal: equalTabRef,
+      exact: exactTabRef,
+    };
+    const other: SplitKind = current === "equal" ? "exact" : "equal";
+    let next: SplitKind;
+    switch (event.key) {
+      case "ArrowRight":
+      case "ArrowDown":
+      case "ArrowLeft":
+      case "ArrowUp":
+        // Only two tabs: any arrow moves to the other one.
+        next = other;
+        break;
+      case "Home":
+        next = "equal";
+        break;
+      case "End":
+        next = "exact";
+        break;
+      default:
+        return;
+    }
+    event.preventDefault();
+    setSplitKind(next);
+    refs[next].current?.focus();
+  }
   // Members included in an EQUAL split (default: everyone in the pool).
   const [included, setIncluded] = useState<Set<string>>(
     () => new Set(expense ? expense.shares.map((s) => s.memberId) : pool.map((m) => m.id)),
@@ -277,10 +319,20 @@ function ExpenseForm({
         <div className="flex items-center justify-between">
           <legend className="font-display text-sm font-bold">Split</legend>
           <div className="flex gap-1" role="tablist" aria-label="Split mode">
-            <SplitTab active={splitKind === "equal"} onClick={() => setSplitKind("equal")}>
+            <SplitTab
+              ref={equalTabRef}
+              active={splitKind === "equal"}
+              onSelect={() => setSplitKind("equal")}
+              onKeyDown={(e) => handleSplitTabKeyDown(e, "equal")}
+            >
               Equal
             </SplitTab>
-            <SplitTab active={splitKind === "exact"} onClick={() => setSplitKind("exact")}>
+            <SplitTab
+              ref={exactTabRef}
+              active={splitKind === "exact"}
+              onSelect={() => setSplitKind("exact")}
+              onKeyDown={(e) => handleSplitTabKeyDown(e, "exact")}
+            >
               Custom
             </SplitTab>
           </div>
@@ -377,24 +429,33 @@ function ExpenseForm({
 }
 
 function SplitTab({
+  ref,
   active,
-  onClick,
+  onSelect,
+  onKeyDown,
   children,
 }: {
+  ref: RefObject<HTMLButtonElement | null>;
   active: boolean;
-  onClick: () => void;
+  onSelect: () => void;
+  onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
 }) {
   return (
     <button
+      ref={ref}
       type="button"
       role="tab"
       aria-selected={active}
-      onClick={onClick}
+      // Roving tabindex: only the selected tab is in the tab order; arrow keys
+      // move within the tablist (handled by onKeyDown).
+      tabIndex={active ? 0 : -1}
+      onClick={onSelect}
+      onKeyDown={onKeyDown}
       className={
         active
-          ? "rounded-pill bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground"
-          : "rounded-pill px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
+          ? "rounded-pill bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          : "rounded-pill px-3 py-1 text-xs font-medium text-muted-foreground outline-none hover:bg-muted focus-visible:ring-[3px] focus-visible:ring-ring/50"
       }
     >
       {children}
