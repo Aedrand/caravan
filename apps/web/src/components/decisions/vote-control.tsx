@@ -39,7 +39,7 @@ export function VoteControl({
         aria-pressed={voted}
         aria-label={voted ? "Remove your vote" : "Vote: I'm in"}
         className={cn(
-          "inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-xs font-semibold transition-colors",
+          "inline-flex items-center gap-1.5 rounded-pill border px-2.5 py-1 text-xs font-semibold transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
           voted
             ? "border-transparent bg-primary text-primary-foreground"
             : "border-border bg-card text-muted-foreground",

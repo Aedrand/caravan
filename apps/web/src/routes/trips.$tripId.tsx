@@ -5,7 +5,8 @@ import { DeleteTripDialog } from "@/components/trips/delete-trip-dialog";
 import { TripWorkspace } from "@/components/trips/trip-workspace";
 import { useDeleteTrip, useDuplicateTrip } from "@/components/trips/use-trip-actions";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/error-state";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError } from "@/lib/api";
 import { fetchSession } from "@/lib/auth-client";
 import { personColors } from "@/lib/person-colors";
@@ -113,22 +114,18 @@ function TripContent({ snapshot }: { snapshot: TripSnapshot }) {
 function TripNotFound() {
   return (
     <section className="grid min-h-dvh place-items-center p-6">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <CardTitle className="text-xl">Trip not found</CardTitle>
-          <CardDescription>
-            It may have been deleted, or you may no longer have access.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <ErrorState
+        title="Trip not found"
+        description="It may have been deleted, or you may no longer have access."
+        action={
           <Button asChild variant="outline">
             <Link to="/">
               <ArrowLeft aria-hidden />
               Back to your trips
             </Link>
           </Button>
-        </CardContent>
-      </Card>
+        }
+      />
     </section>
   );
 }
@@ -136,17 +133,15 @@ function TripNotFound() {
 function TripError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <section className="grid min-h-dvh place-items-center p-6">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <CardTitle className="text-xl">Something went sideways</CardTitle>
-          <CardDescription>{message}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <ErrorState
+        title="Something went sideways"
+        description={message}
+        action={
           <Button variant="outline" onClick={onRetry}>
             Try again
           </Button>
-        </CardContent>
-      </Card>
+        }
+      />
     </section>
   );
 }
@@ -159,16 +154,16 @@ function TripSkeleton() {
       className="flex h-dvh flex-col overflow-hidden bg-background"
     >
       <div className="flex shrink-0 items-center gap-3 border-b bg-muted px-4 py-2.5">
-        <div className="size-8 animate-pulse rounded-md bg-foreground/10" />
-        <div className="h-6 w-48 animate-pulse rounded-md bg-foreground/10" />
-        <div className="ml-auto h-8 w-24 animate-pulse rounded-md bg-foreground/10" />
+        <Skeleton className="size-8 bg-foreground/10" />
+        <Skeleton className="h-6 w-48 bg-foreground/10" />
+        <Skeleton className="ml-auto h-8 w-24 bg-foreground/10" />
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="w-20 shrink-0 border-r bg-muted" />
         <div className="flex-1 space-y-3 p-6">
-          <div className="h-8 w-40 animate-pulse rounded-md bg-foreground/10" />
-          <div className="h-24 animate-pulse rounded-xl bg-foreground/10" />
-          <div className="h-24 animate-pulse rounded-xl bg-foreground/10" />
+          <Skeleton className="h-8 w-40 bg-foreground/10" />
+          <Skeleton className="h-24 rounded-xl bg-foreground/10" />
+          <Skeleton className="h-24 rounded-xl bg-foreground/10" />
         </div>
       </div>
     </section>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiFetch } from "@/lib/api";
 import { fetchSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -140,7 +141,7 @@ function SettingsCard() {
       </CardHeader>
       <CardContent>
         {settingsQuery.isPending ? (
-          <div className="h-40 animate-pulse rounded-md bg-muted/60" aria-busy="true" />
+          <Skeleton className="h-40 bg-muted/60" aria-busy="true" />
         ) : settingsQuery.isError ? (
           <p role="alert" className="text-sm text-destructive">
             Couldn't load settings.
@@ -269,7 +270,7 @@ function OverviewCard() {
         {overviewQuery.isPending ? (
           <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {["a", "b", "c", "d", "e"].map((key) => (
-              <div key={key} className="h-16 animate-pulse rounded-md bg-muted/60" />
+              <Skeleton key={key} className="h-16 bg-muted/60" />
             ))}
           </div>
         ) : overviewQuery.isError ? (

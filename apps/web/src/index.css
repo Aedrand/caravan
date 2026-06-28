@@ -109,7 +109,9 @@
   --paper-bright: #f7f0df;
   --surface-card: #fffbf1;
   --ink: #3a2d20;
-  --ink-soft: #8d7b66;
+  /* Darkened from #8d7b66 so muted-foreground clears WCAG AA 4.5:1 on paper/
+     muted/card (E.4). Same OKLab hue & chroma, lower lightness — keeps the look. */
+  --ink-soft: #776551;
   --ink-faint: #cbbda2;
 
   --hue-primary: #c2552f;
@@ -141,7 +143,9 @@
   --paper-bright: #f0edf3;
   --surface-card: #fbf9fd;
   --ink: #2e2838;
-  --ink-soft: #6e6680;
+  /* Darkened from #6e6680 so muted-foreground clears WCAG AA 4.5:1 on paper/
+     muted/card (E.4). Same OKLab hue & chroma, lower lightness — keeps the look. */
+  --ink-soft: #69617b;
   --ink-faint: #bdb4cb;
 
   --hue-primary: #9a4f6b;

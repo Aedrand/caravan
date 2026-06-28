@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { ApiError, apiFetch } from "@/lib/api";
 import { fetchSession } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
@@ -95,7 +96,7 @@ function NotificationsCard() {
       </CardHeader>
       <CardContent>
         {prefsQuery.isPending ? (
-          <div className="h-16 animate-pulse rounded-md bg-muted/60" aria-busy="true" />
+          <Skeleton className="h-16 bg-muted/60" aria-busy="true" />
         ) : prefsQuery.isError ? (
           <p role="alert" className="text-sm text-destructive">
             Couldn't load your preferences.
