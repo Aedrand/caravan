@@ -48,7 +48,7 @@ async function main() {
   const jobs = createJobRegistry(logger);
   const rooms = createTripRooms(logger);
   rooms.startHeartbeat();
-  const app = createApp({ config, db: db.db, logger, auth, rooms });
+  const app = createApp({ config, db: db.db, logger, auth, rooms, email });
 
   // Reclaim expired rate-limit windows so the keyed Map stays bounded under many
   // unique client IPs (the limiters prune lazily on hit, but idle keys linger).

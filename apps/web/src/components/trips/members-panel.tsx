@@ -78,7 +78,9 @@ export function MembersPanel() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [inviteRole, setInviteRole] = useState<InviteRole>("editor");
   const [inviteExpiry, setInviteExpiry] = useState<Expiry>("never");
+  const [inviteEmail, setInviteEmail] = useState("");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [invitedEmail, setInvitedEmail] = useState<string | null>(null);
   const [inviteError, setInviteError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -134,14 +136,20 @@ export function MembersPanel() {
 
   async function createInvite() {
     setInviteError(null);
+    // Recipient is optional: when given, the server emails the join link (if the
+    // admin configured SMTP); the copyable link below is always the fallback.
+    const recipient = inviteEmail.trim();
     try {
       const response = await mutateAsync("invite.create", {
         role: inviteRole,
         expiresAt: expiresAtFor(inviteExpiry),
+        email: recipient || null,
       });
       const token = (response.result as { token?: unknown } | undefined)?.token;
       if (typeof token === "string") {
         setInviteLink(`${window.location.origin}/join/${token}`);
+        setInvitedEmail(recipient || null);
+        setInviteEmail("");
         setCopied(false);
       } else {
         setInviteError("The invite was created but no link came back. Please try again.");
@@ -253,6 +261,22 @@ export function MembersPanel() {
         {canManage && (
           <div className="mt-5 border-t border-border/60 pt-5">
             <h3 className="text-sm font-semibold">Invite</h3>
+            <div className="mt-3 space-y-2">
+              <Label htmlFor="invite-email">Email (optional)</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                placeholder="name@example.com"
+                autoComplete="off"
+                value={inviteEmail}
+                disabled={isPending}
+                onChange={(event) => setInviteEmail(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                We'll email the join link when an admin has configured email. Either way you'll get
+                a copyable link below.
+              </p>
+            </div>
             <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-end">
               <div className="flex-1 space-y-2">
                 <Label htmlFor="invite-role">Role</Label>
@@ -295,6 +319,13 @@ export function MembersPanel() {
             )}
             {inviteLink && (
               <div className="mt-3 space-y-2">
+                {invitedEmail && (
+                  <p className="text-sm text-muted-foreground">
+                    Invite emailed to{" "}
+                    <span className="font-medium text-foreground">{invitedEmail}</span> if email is
+                    configured. Share the link below as a backup.
+                  </p>
+                )}
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input readOnly aria-label="Invite link" value={inviteLink} />
                   <Button

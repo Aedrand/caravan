@@ -17,8 +17,10 @@ import { createExpensesRoutes } from "./features/expenses/routes";
 import { createGeoRoutes } from "./features/geo/routes";
 import { createNotificationPrefsRoutes } from "./features/notifications/prefs-routes";
 import { createInviteRoutes } from "./features/trips/invite-routes";
+import { setMembershipEmailDeps } from "./features/trips/membership";
 import { createTripsRoutes } from "./features/trips/routes";
 import type { Logger } from "./logger";
+import { createEmailService, type EmailService } from "./services/email";
 
 export interface AppDeps {
   config: Config;
@@ -26,6 +28,12 @@ export interface AppDeps {
   logger: Logger;
   auth: Auth;
   rooms: TripRooms;
+  /**
+   * Transactional email gateway (D.1); injected into the membership handlers.
+   * Optional so tests can omit it — a disabled service is built from config when
+   * absent (and sendMail no-ops anyway until SMTP is configured).
+   */
+  email?: EmailService;
 }
 
 /**
@@ -33,7 +41,12 @@ export interface AppDeps {
  * else. Separated from the listener so tests call `app.request()` directly
  * and the typed `hc` client can be derived from `AppType`.
  */
-export function createApp({ config, db, logger, auth, rooms }: AppDeps) {
+export function createApp({ config, db, logger, auth, rooms, email }: AppDeps) {
+  // Wire the email gateway into the membership mutation handlers (D.1). They run
+  // inside the synchronous mutation transaction and fire the send post-commit;
+  // sendMail no-ops when SMTP is unconfigured, so this is safe on every instance.
+  setMembershipEmailDeps({ email: email ?? createEmailService(config, logger), config, logger });
+
   // Trip workspace: CRUD (M1.1) + the sync contract surface (M1.3) behind one
   // session gate — sub-apps assume c.get("user") and do their own membership checks.
   const trips = new Hono<AuthedEnv>()

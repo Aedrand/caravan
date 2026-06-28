@@ -120,6 +120,12 @@ export const mutationPayloads = {
   "invite.create": z.strictObject({
     role: InviteRoleSchema.default("editor"),
     expiresAt: EpochMsSchema.nullable().default(null),
+    /**
+     * Optional recipient (D.1). When set and SMTP is configured, the server
+     * emails the join link to this address; the raw token is still returned so
+     * the copyable link is always the fallback. Stored on inviteLinks.email.
+     */
+    email: z.email().nullable().default(null),
   }),
   "invite.revoke": z.strictObject({ inviteId: IdSchema }),
 
