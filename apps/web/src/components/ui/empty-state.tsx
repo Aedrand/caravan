@@ -16,13 +16,20 @@ function EmptyState({
   description,
   action,
   className,
+  headingLevel = 2,
 }: {
   icon?: LucideIcon;
   title: string;
   description?: string;
   action?: ReactNode;
   className?: string;
+  /**
+   * Heading level for the title. Defaults to 2; pass 3 when this sits inside a
+   * section that already has its own peer `<h2>` (avoids two sibling h2s).
+   */
+  headingLevel?: 2 | 3;
 }) {
+  const Heading = headingLevel === 3 ? "h3" : "h2";
   return (
     <div className={cn("flex flex-col items-center justify-center text-center", className)}>
       {Icon && (
@@ -30,9 +37,9 @@ function EmptyState({
           <Icon aria-hidden className="size-7" strokeWidth={1.75} />
         </div>
       )}
-      <h2 className={cn("font-display text-2xl font-semibold tracking-tight", Icon && "mt-6")}>
+      <Heading className={cn("font-display text-2xl font-semibold tracking-tight", Icon && "mt-6")}>
         {title}
-      </h2>
+      </Heading>
       {description && (
         <p className="mt-2 max-w-md text-sm leading-relaxed text-muted-foreground">{description}</p>
       )}

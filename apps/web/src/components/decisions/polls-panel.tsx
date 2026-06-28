@@ -61,6 +61,7 @@ export function PollsPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
           title="No polls yet"
           description="Stuck on a question the itinerary can't answer — which week, which Airbnb? Put it to a vote."
           className="px-6 py-12"
+          headingLevel={3}
         />
       ) : (
         <div className="flex flex-col gap-4">

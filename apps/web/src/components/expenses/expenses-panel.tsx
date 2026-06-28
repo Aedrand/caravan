@@ -123,6 +123,7 @@ export function ExpensesPanel({
           title="No expenses yet"
           description="Log what the group spends and Caravan keeps the running tally — and tells everyone who owes whom."
           className="px-4 py-10"
+          headingLevel={3}
         />
       ) : (
         <div className="grid gap-5">

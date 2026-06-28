@@ -321,6 +321,8 @@ function ExpenseForm({
           <div className="flex gap-1" role="tablist" aria-label="Split mode">
             <SplitTab
               ref={equalTabRef}
+              id="split-tab-equal"
+              controls="split-panel-equal"
               active={splitKind === "equal"}
               onSelect={() => setSplitKind("equal")}
               onKeyDown={(e) => handleSplitTabKeyDown(e, "equal")}
@@ -329,6 +331,8 @@ function ExpenseForm({
             </SplitTab>
             <SplitTab
               ref={exactTabRef}
+              id="split-tab-exact"
+              controls="split-panel-exact"
               active={splitKind === "exact"}
               onSelect={() => setSplitKind("exact")}
               onKeyDown={(e) => handleSplitTabKeyDown(e, "exact")}
@@ -339,7 +343,12 @@ function ExpenseForm({
         </div>
 
         {splitKind === "equal" ? (
-          <ul className="grid gap-1.5">
+          <ul
+            role="tabpanel"
+            id="split-panel-equal"
+            aria-labelledby="split-tab-equal"
+            className="grid gap-1.5"
+          >
             {pool.map((m) => (
               <li key={m.id}>
                 <label className="flex items-center gap-2 text-sm">
@@ -362,7 +371,12 @@ function ExpenseForm({
             ))}
           </ul>
         ) : (
-          <div className="grid gap-2">
+          <div
+            role="tabpanel"
+            id="split-panel-exact"
+            aria-labelledby="split-tab-exact"
+            className="grid gap-2"
+          >
             <ul className="grid gap-1.5">
               {pool.map((m) => (
                 <li key={m.id} className="flex items-center gap-2">
@@ -430,12 +444,16 @@ function ExpenseForm({
 
 function SplitTab({
   ref,
+  id,
+  controls,
   active,
   onSelect,
   onKeyDown,
   children,
 }: {
   ref: RefObject<HTMLButtonElement | null>;
+  id: string;
+  controls: string;
   active: boolean;
   onSelect: () => void;
   onKeyDown: (event: KeyboardEvent<HTMLButtonElement>) => void;
@@ -444,9 +462,11 @@ function SplitTab({
   return (
     <button
       ref={ref}
+      id={id}
       type="button"
       role="tab"
       aria-selected={active}
+      aria-controls={controls}
       // Roving tabindex: only the selected tab is in the tab order; arrow keys
       // move within the tablist (handled by onKeyDown).
       tabIndex={active ? 0 : -1}

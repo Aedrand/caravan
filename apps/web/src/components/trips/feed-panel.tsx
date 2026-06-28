@@ -126,7 +126,16 @@ export function FeedPanel({ tripId, members }: { tripId: string; members: TripMe
   // inline alert with retry. Both are small in-drawer states, so they stay
   // lightweight rather than using the full-surface primitives.
   if (feedQuery.isPending) {
-    return <FeedSkeleton />;
+    // The skeleton itself is aria-hidden, so pair it with a polite status line
+    // (visually hidden) and mark the region busy so AT announces the load.
+    return (
+      <div aria-busy="true">
+        <p role="status" className="sr-only">
+          Loading recent activity…
+        </p>
+        <FeedSkeleton />
+      </div>
+    );
   }
   if (feedQuery.isError) {
     return (
@@ -152,8 +161,14 @@ export function FeedPanel({ tripId, members }: { tripId: string; members: TripMe
       </p>
     ) : (
       // aria-live: while the drawer is open, events appended by the socket are
-      // announced. The label gives screen-reader users a handle on the region.
-      <ul aria-label="Activity feed" aria-live="polite" className="flex flex-col">
+      // announced. aria-relevant="additions" keeps it to *newly* prepended nodes
+      // so existing items aren't re-read. The label gives SR users a handle.
+      <ul
+        aria-label="Activity feed"
+        aria-live="polite"
+        aria-relevant="additions"
+        className="flex flex-col"
+      >
         {events.map((event, i) => {
           const prev = events[i - 1];
           const showDivider =

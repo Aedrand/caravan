@@ -107,6 +107,7 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
           title="No ideas yet"
           description="Float a place or plan the group can vote on — the favorites become days on the trip."
           className="px-6 py-12"
+          headingLevel={3}
         />
       ) : (
         <>

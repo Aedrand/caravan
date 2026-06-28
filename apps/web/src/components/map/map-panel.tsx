@@ -54,6 +54,9 @@ export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; f
           icon={MapPinOff}
           title="Nothing pinned yet"
           description="Add a location to an activity and pick a search result — it'll drop a pin here."
+          // The non-fill variant renders this under MapHeading's <h2>; demote to
+          // h3 so they don't become sibling h2s in the section outline.
+          headingLevel={3}
         />
       </div>
     );
