@@ -7,6 +7,25 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
+## 2026-06-28 (later) — Trip Workspace v2 review-session notes (owner)
+
+Captured live during a hands-on review of the V2.3 build — not yet triaged.
+
+**Map**
+
+- [ ] **Color map pins by the day they belong to, not the activity category.**
+  V2.3 polish shipped category-tint pins (food/sights/… color), but the owner
+  wants color to encode **which day** a pin is, so a glance at the map
+  immediately groups pins by day. Pairs naturally with the V2.5 day route lines
+  (a day's pins + its route share one color). *Reconsiders the just-shipped
+  category-tint:* open question whether category coloring drops entirely or
+  survives as a secondary cue (e.g. a glyph/icon inside the pin) with **day** as
+  the fill. Candidate day palette: reuse the existing member/join-order color
+  ramp, or a dedicated day ramp. _Promotion path: fold into V2.5
+  routing/map-legibility (it's noted on that plan row)._
+
+---
+
 ## 2026-06-28 — Manual-testing notes (owner)
 
 Quick, unstructured jots from a hands-on pass — drop a line as things come up;
