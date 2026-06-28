@@ -1,13 +1,42 @@
-import { type Activity, positionBetween, type TripSnapshot } from "@caravan/shared";
-import { Lightbulb, Plus } from "lucide-react";
-import { type ReactNode, useMemo, useState } from "react";
-import { ActivityCard } from "@/components/itinerary/activity-card";
+import {
+  type Activity,
+  type ChecklistItem,
+  type ItemType,
+  positionBetween,
+  type TripSnapshot,
+} from "@caravan/shared";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { Lightbulb, ListChecks, MapPin, Plus, StickyNote } from "lucide-react";
+import { type FormEvent, type ReactNode, useCallback, useMemo, useState } from "react";
 import { ActivityFormDialog } from "@/components/itinerary/activity-form-dialog";
 import { deriveDays } from "@/components/itinerary/format";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
-import { useMyMember, useTripMutation } from "@/lib/sync";
+import { Input } from "@/components/ui/input";
+import { useIdeaLists, useMyMember, useTripMutation } from "@/lib/sync";
 import { ActivityFooter } from "./activity-footer";
+import { IdeaCard } from "./idea-card";
+import { IdeaListSection, SortableIdeaListSection } from "./idea-list-section";
 import {
   commentsFor,
   useCommentsByTarget,
@@ -17,22 +46,29 @@ import {
 } from "./use-decisions";
 
 type DialogState =
-  | { mode: "create"; defaultDate: string | null }
+  | { mode: "create"; defaultType: ItemType; defaultListId: string | null }
   | { mode: "edit"; activity: Activity }
   | null;
 
 /**
- * The ideas pool, now living in Decide (C.4): undated candidate activities the
- * group floats and votes on, most-wanted first. The Plan view keeps only a
- * pointer here — voting is the job, so it sits beside the polls. Reuses the
- * itinerary's ActivityCard + the vote/comment footer; "add to a day" is the
- * card's Edit → Day. (Cross-day drag stays in Plan; ideas move via the menu.)
+ * Ideas & Lists — the Decide surface's idea pool (C.4), now organized into
+ * user-defined **lists** (D10) and carrying **freeform idea types** (D1: note +
+ * checklist) alongside activity ideas. Ideas are still undated candidates the
+ * group votes on; an idea joins a list via `activities.listId`. Lists are
+ * collapsible, reorderable groups; an idea with no list falls to **Unlisted**.
+ *
+ * Reuses the shared idea card / vote / comment footer (`IdeaCard` →
+ * `ActivityCard` for activity ideas, its own glyph+body for note/checklist) and
+ * the single `ActivityFormDialog` (type + idea-list selectors) for create/edit.
  */
 export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canEdit: boolean }) {
   const { trip, activities } = snapshot;
   const { mutateAsync } = useTripMutation();
   const me = useMyMember();
+  const { ideaLists, createList, renameList, reorderList, deleteList } = useIdeaLists();
   const [dialog, setDialog] = useState<DialogState>(null);
+  const [creatingList, setCreatingList] = useState(false);
+  const [listDraft, setListDraft] = useState("");
 
   const days = useMemo(
     () => deriveDays(trip.startDate, trip.endDate, activities),
@@ -44,18 +80,45 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
   const membersById = useMembersById(snapshot.members);
   const colors = useMemberColors(snapshot.members);
 
-  // Undated candidates, most-wanted first (ties keep fractional order — PD-2).
-  const ideas = useMemo(() => {
-    const pool = activities.filter((a) => a.date === null);
-    pool.sort((a, b) => {
-      const va = votesByActivity.get(a.id)?.length ?? 0;
-      const vb = votesByActivity.get(b.id)?.length ?? 0;
-      if (va !== vb) return vb - va;
-      return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
-    });
-    return pool;
-  }, [activities, votesByActivity]);
+  // All undated candidates. Grouping + per-list sort happen below.
+  const ideas = useMemo(() => activities.filter((a) => a.date === null), [activities]);
 
+  // Most-wanted first within a group (ties keep fractional order — PD-2).
+  const sortByVotes = useCallback(
+    (pool: Activity[]): Activity[] =>
+      [...pool].sort((a, b) => {
+        const va = votesByActivity.get(a.id)?.length ?? 0;
+        const vb = votesByActivity.get(b.id)?.length ?? 0;
+        if (va !== vb) return vb - va;
+        return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
+      }),
+    [votesByActivity],
+  );
+
+  // Bucket each idea into its list, plus an "Unlisted" bucket. A stale listId
+  // (list just deleted) reads as Unlisted, matching the ON DELETE SET NULL rule.
+  const { byList, unlisted } = useMemo(() => {
+    const listIds = new Set(ideaLists.map((l) => l.id));
+    const byListMap = new Map<string, Activity[]>();
+    const unlistedArr: Activity[] = [];
+    for (const idea of ideas) {
+      if (idea.listId && listIds.has(idea.listId)) {
+        const arr = byListMap.get(idea.listId) ?? [];
+        arr.push(idea);
+        byListMap.set(idea.listId, arr);
+      } else {
+        unlistedArr.push(idea);
+      }
+    }
+    return { byList: byListMap, unlisted: unlistedArr };
+  }, [ideas, ideaLists]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  // Append a new idea at the end of the undated pool (date is always null here).
   const appendPositionFor = (date: string | null): string => {
     const inDate = activities
       .filter((a) => a.date === date)
@@ -63,10 +126,41 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
     return positionBetween(inDate.at(-1)?.position ?? null, null);
   };
 
-  const openCreate = () => setDialog({ mode: "create", defaultDate: null });
+  const openCreate = (defaultType: ItemType, defaultListId: string | null) =>
+    setDialog({ mode: "create", defaultType, defaultListId });
   const openEdit = (activity: Activity) => setDialog({ mode: "edit", activity });
   const remove = (activity: Activity) =>
     void mutateAsync("activity.delete", { activityId: activity.id }).catch(() => {});
+  const toggleChecklistItem = (activity: Activity, item: ChecklistItem, done: boolean) =>
+    void mutateAsync("checklist.toggle", {
+      activityId: activity.id,
+      itemId: item.id,
+      done,
+    }).catch(() => {});
+
+  function handleCreateList(event: FormEvent) {
+    event.preventDefault();
+    const name = listDraft.trim();
+    if (name) void createList(name).catch(() => {});
+    setListDraft("");
+    setCreatingList(false);
+  }
+
+  // Reorder lists: drop into the new slot, then index between the new neighbors
+  // (mirrors the itinerary board's activity.move via positionBetween).
+  function handleListDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const from = ideaLists.findIndex((l) => l.id === active.id);
+    const to = ideaLists.findIndex((l) => l.id === over.id);
+    if (from === -1 || to === -1) return;
+    const reordered = arrayMove(ideaLists, from, to);
+    const idx = reordered.findIndex((l) => l.id === active.id);
+    const before = reordered[idx - 1] ?? null;
+    const after = reordered[idx + 1] ?? null;
+    const position = positionBetween(before?.position ?? null, after?.position ?? null);
+    void reorderList(String(active.id), position).catch(() => {});
+  }
 
   const renderFooter = (activity: Activity): ReactNode => (
     <ActivityFooter
@@ -80,62 +174,204 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
     />
   );
 
-  // The top idea is "most wanted" only once it's actually pulled ahead on votes.
-  const topVotes = ideas[0] ? (votesByActivity.get(ideas[0].id)?.length ?? 0) : 0;
+  // One group's ideas as a vote-sorted list, with a per-list "Most wanted" badge
+  // on the leader once it's actually pulled ahead on votes.
+  const renderIdeas = (sorted: Activity[]): ReactNode => {
+    const topVotes = sorted[0] ? (votesByActivity.get(sorted[0].id)?.length ?? 0) : 0;
+    return (
+      <ul className="flex flex-col gap-3">
+        {sorted.map((activity, rank) => {
+          const votes = votesByActivity.get(activity.id)?.length ?? 0;
+          const mostWanted = rank === 0 && sorted.length > 1 && votes > 0 && votes === topVotes;
+          return (
+            <li key={activity.id} className="relative">
+              {mostWanted && (
+                <span className="-top-2 absolute left-4 z-10 rounded-pill border bg-accent-strong px-2 py-0.5 font-body text-[10px] font-bold uppercase tracking-wide text-[var(--on-primary)] shadow-control">
+                  Most wanted
+                </span>
+              )}
+              <IdeaCard
+                activity={activity}
+                canEdit={canEdit}
+                onEdit={openEdit}
+                onDelete={remove}
+                onToggleChecklistItem={toggleChecklistItem}
+                footer={renderFooter(activity)}
+              />
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
+  const emptyListHint = (
+    <p className="text-sm italic text-muted-foreground">
+      No ideas here yet.
+      {canEdit ? " Add one with “+ Idea,” or assign an idea to this list." : ""}
+    </p>
+  );
+
+  const hasContent = ideas.length > 0 || ideaLists.length > 0;
+  const unlistedSorted = sortByVotes(unlisted);
+
+  const addIdeaMenu = canEdit && (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm">
+          <Plus aria-hidden />
+          Add idea
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => openCreate("activity", null)}>
+          <MapPin aria-hidden />
+          Activity
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => openCreate("note", null)}>
+          <StickyNote aria-hidden />
+          Note
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => openCreate("checklist", null)}>
+          <ListChecks aria-hidden />
+          Checklist
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
     <section className="flex flex-col gap-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <Lightbulb aria-hidden className="size-5 text-[var(--accent-strong)]" />
-          <h2 className="font-display text-xl font-bold">Ideas pool</h2>
+          <h2 className="font-display text-xl font-bold">Ideas &amp; Lists</h2>
           {ideas.length > 0 && (
             <span className="text-sm font-medium text-muted-foreground">{ideas.length}</span>
           )}
         </div>
         {canEdit && (
-          <Button size="sm" onClick={openCreate}>
-            <Plus aria-hidden />
-            Add idea
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCreatingList(true)}
+              disabled={creatingList}
+            >
+              <Plus aria-hidden />
+              New list
+            </Button>
+            {addIdeaMenu}
+          </div>
         )}
       </div>
 
-      {ideas.length === 0 ? (
+      {!hasContent ? (
         <EmptyState
           icon={Lightbulb}
           title="No ideas yet"
-          description="Float a place or plan the group can vote on — the favorites become days on the trip."
+          description="Float a place or plan the group can vote on, and group them into lists — the favorites become days on the trip."
           className="px-6 py-12"
           headingLevel={3}
         />
       ) : (
         <>
           <p className="-mt-1 text-sm text-muted-foreground">
-            Most-wanted first. Vote freely; open an idea to drop it on a day.
+            Most-wanted first within each list. Vote freely; open an idea to drop it on a day.
           </p>
-          <ul className="flex flex-col gap-3">
-            {ideas.map((activity, rank) => {
-              const votes = votesByActivity.get(activity.id)?.length ?? 0;
-              const mostWanted = rank === 0 && ideas.length > 1 && votes > 0 && votes === topVotes;
-              return (
-                <li key={activity.id} className="relative">
-                  {mostWanted && (
-                    <span className="-top-2 absolute left-4 z-10 rounded-pill border bg-accent-strong px-2 py-0.5 font-body text-[10px] font-bold uppercase tracking-wide text-[var(--on-primary)] shadow-control">
-                      Most wanted
-                    </span>
-                  )}
-                  <ActivityCard
-                    activity={activity}
-                    canEdit={canEdit}
-                    onEdit={openEdit}
-                    onDelete={remove}
-                    footer={renderFooter(activity)}
-                  />
-                </li>
-              );
-            })}
-          </ul>
+
+          {creatingList && (
+            <form
+              className="cv-card flex items-center gap-2 p-3 sm:p-4"
+              onSubmit={handleCreateList}
+            >
+              <Input
+                autoFocus
+                value={listDraft}
+                maxLength={80}
+                aria-label="New list name"
+                placeholder="List name (e.g. Food, Day trips)"
+                className="h-9"
+                onChange={(e) => setListDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    setListDraft("");
+                    setCreatingList(false);
+                  }
+                }}
+              />
+              <Button type="submit" size="sm" disabled={!listDraft.trim()}>
+                Add list
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setListDraft("");
+                  setCreatingList(false);
+                }}
+              >
+                Cancel
+              </Button>
+            </form>
+          )}
+
+          {ideaLists.length === 0 ? (
+            // No lists yet — show the pool flat (today's look), grouping optional.
+            ideas.length === 0 ? (
+              <p className="text-sm italic text-muted-foreground">No ideas yet.</p>
+            ) : (
+              renderIdeas(sortByVotes(ideas))
+            )
+          ) : (
+            <>
+              <DndContext
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={handleListDragEnd}
+              >
+                <SortableContext
+                  items={ideaLists.map((l) => l.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <div className="flex flex-col gap-4">
+                    {ideaLists.map((list) => {
+                      const sorted = sortByVotes(byList.get(list.id) ?? []);
+                      return (
+                        <SortableIdeaListSection
+                          key={list.id}
+                          list={list}
+                          name={list.name}
+                          count={sorted.length}
+                          canEdit={canEdit}
+                          onRename={(name) => void renameList(list.id, name).catch(() => {})}
+                          onDelete={() => void deleteList(list.id).catch(() => {})}
+                          onAddIdea={canEdit ? () => openCreate("activity", list.id) : undefined}
+                        >
+                          {sorted.length === 0 ? emptyListHint : renderIdeas(sorted)}
+                        </SortableIdeaListSection>
+                      );
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
+
+              {/* Unlisted — the home for ideas with no list (incl. those whose
+                  list was just deleted). Hidden when empty to avoid clutter. */}
+              {unlistedSorted.length > 0 && (
+                <IdeaListSection
+                  name="Unlisted"
+                  count={unlistedSorted.length}
+                  canEdit={canEdit}
+                  unlisted
+                  onAddIdea={canEdit ? () => openCreate("activity", null) : undefined}
+                >
+                  {renderIdeas(unlistedSorted)}
+                </IdeaListSection>
+              )}
+            </>
+          )}
         </>
       )}
 
@@ -146,9 +382,13 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
         }}
         mode={dialog?.mode ?? "create"}
         activity={dialog?.mode === "edit" ? dialog.activity : undefined}
-        defaultDate={dialog?.mode === "create" ? dialog.defaultDate : undefined}
+        defaultDate={dialog?.mode === "create" ? null : undefined}
+        defaultType={dialog?.mode === "create" ? dialog.defaultType : undefined}
+        defaultListId={dialog?.mode === "create" ? dialog.defaultListId : undefined}
         days={days}
         startDate={trip.startDate}
+        currency={trip.currency}
+        ideaLists={ideaLists}
         mutateAsync={mutateAsync}
         appendPositionFor={appendPositionFor}
       />

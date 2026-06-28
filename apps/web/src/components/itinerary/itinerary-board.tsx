@@ -1,4 +1,10 @@
-import { type Activity, positionBetween, type TripSnapshot } from "@caravan/shared";
+import {
+  type Activity,
+  type ItemType,
+  positionBetween,
+  type TripMember,
+  type TripSnapshot,
+} from "@caravan/shared";
 import {
   closestCenter,
   DndContext,
@@ -17,7 +23,16 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CalendarRange, ChevronDown, Lightbulb, Plus } from "lucide-react";
+import {
+  CalendarRange,
+  ChevronDown,
+  Lightbulb,
+  ListChecks,
+  MapPin,
+  Pencil,
+  Plus,
+  StickyNote,
+} from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { ActivityFooter } from "@/components/decisions/activity-footer";
@@ -31,19 +46,28 @@ import {
 import { useFocusedDay } from "@/components/map/focused-day";
 import { useMapSelection } from "@/components/map/selection";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
+import { Input } from "@/components/ui/input";
+import { formatMoney } from "@/lib/expenses/money";
 import { FALLBACK_PERSON_COLOR } from "@/lib/person-colors";
-import { useMyMember, usePresence, useTripMutation } from "@/lib/sync";
+import { useDays, useIdeaLists, useMyMember, usePresence, useTripMutation } from "@/lib/sync";
 import { cn } from "@/lib/utils";
-import { ActivityCard } from "./activity-card";
 import { ActivityFormDialog } from "./activity-form-dialog";
 import { dayNumber, deriveDays, formatDayLabel, formatDayShort, todayIso } from "./format";
-import { SortableActivityCard } from "./sortable-activity-card";
+import { computeStopNumbers } from "./numbering";
+import { RailRow } from "./rail-row";
+import { SortableRailRow } from "./sortable-activity-card";
 
 type EditingHint = { name: string; color: string };
 
 type DialogState =
-  | { mode: "create"; defaultDate: string | null }
+  | { mode: "create"; defaultDate: string | null; defaultType?: ItemType }
   | { mode: "edit"; activity: Activity }
   | null;
 
@@ -87,6 +111,11 @@ export function ItineraryBoard({
 }) {
   const { trip, activities } = snapshot;
   const { mutateAsync } = useTripMutation();
+  // Per-day metadata (D2) + idea lists (D10) come from the shared sync layer; the
+  // form dialog wants the lists for an idea's list assignment, the rail wants
+  // each day's subtitle.
+  const { daysByDate, upsertDay } = useDays();
+  const { ideaLists } = useIdeaLists();
   const [dialog, setDialog] = useState<DialogState>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -186,8 +215,14 @@ export function ItineraryBoard({
     return positionBetween(last, null);
   };
 
-  const openCreate = (date: string | null) => setDialog({ mode: "create", defaultDate: date });
+  const openCreate = (date: string | null, type?: ItemType) =>
+    setDialog({ mode: "create", defaultDate: date, defaultType: type });
   const openEdit = (activity: Activity) => setDialog({ mode: "edit", activity });
+
+  // Per-item optimistic check/uncheck (D1) — addressed by item id so concurrent
+  // toggles of different entries converge instead of clobbering.
+  const toggleChecklistItem = (activityId: string, itemId: string, done: boolean) =>
+    void mutateAsync("checklist.toggle", { activityId, itemId, done }).catch(() => {});
 
   // Mirror the toolbar's "Add activity" default (first day, or the ideas pool
   // when there are no dated days) so the mobile FAB opens the same dialog.
@@ -370,13 +405,21 @@ export function ItineraryBoard({
                   onToggle={() => setCollapseOverride((o) => ({ ...o, [iso]: !isOpen(iso) }))}
                   onFocus={() => setFocusedIso(iso)}
                   canEdit={canEdit}
+                  currency={trip.currency}
+                  subtitle={daysByDate.get(iso)?.subtitle ?? null}
+                  onSubtitleCommit={(subtitle) => void upsertDay(iso, { subtitle }).catch(() => {})}
                   editingHints={editingHints}
                   flashing={flashing}
                   selectedId={selectedId}
                   onSelectActivity={toggleSelect}
-                  onAdd={() => openCreate(iso)}
+                  membersById={membersById}
+                  colors={colors}
+                  votesByActivity={votesByActivity}
+                  commentsByTarget={commentsByTarget}
+                  onAdd={(type) => openCreate(iso, type)}
                   onEdit={openEdit}
                   onDelete={remove}
+                  onToggleChecklistItem={toggleChecklistItem}
                   renderFooter={renderFooter}
                 />
               ))}
@@ -389,12 +432,20 @@ export function ItineraryBoard({
                 new slot reads clean. */}
             <DragOverlay dropAnimation={null}>
               {activeActivity ? (
-                <ActivityCard
-                  activity={activeActivity}
-                  canEdit={false}
-                  onEdit={openEdit}
-                  onDelete={remove}
-                />
+                <ul className="cv-card list-none bg-card px-2">
+                  <RailRow
+                    activity={activeActivity}
+                    number={
+                      computeStopNumbers(byDate.get(activeActivity.date) ?? []).get(
+                        activeActivity.id,
+                      ) ?? null
+                    }
+                    isFirst
+                    isLast
+                    canEdit={false}
+                    currency={trip.currency}
+                  />
+                </ul>
               ) : null}
             </DragOverlay>
           </DndContext>
@@ -409,8 +460,11 @@ export function ItineraryBoard({
         mode={dialog?.mode ?? "create"}
         activity={dialog?.mode === "edit" ? dialog.activity : undefined}
         defaultDate={dialog?.mode === "create" ? dialog.defaultDate : undefined}
+        defaultType={dialog?.mode === "create" ? dialog.defaultType : undefined}
         days={days}
         startDate={trip.startDate}
+        currency={trip.currency}
+        ideaLists={ideaLists}
         mutateAsync={mutateAsync}
         appendPositionFor={appendPositionFor}
       />
@@ -428,13 +482,21 @@ function DayBlock({
   onToggle,
   onFocus,
   canEdit,
+  currency,
+  subtitle,
+  onSubtitleCommit,
   editingHints,
   flashing,
   selectedId,
   onSelectActivity,
+  membersById,
+  colors,
+  votesByActivity,
+  commentsByTarget,
   onAdd,
   onEdit,
   onDelete,
+  onToggleChecklistItem,
   renderFooter,
 }: {
   sectionRef: (el: HTMLElement | null) => void;
@@ -446,18 +508,33 @@ function DayBlock({
   onToggle: () => void;
   onFocus: () => void;
   canEdit: boolean;
+  currency: string;
+  subtitle: string | null;
+  onSubtitleCommit: (subtitle: string | null) => void;
   editingHints: Map<string, EditingHint>;
   flashing: Set<string>;
   selectedId: string | null;
   onSelectActivity: (id: string) => void;
-  onAdd: () => void;
+  membersById: Map<string, TripMember>;
+  colors: Map<string, string>;
+  votesByActivity: Map<string, string[]>;
+  commentsByTarget: ReturnType<typeof useCommentsByTarget>;
+  onAdd: (type?: ItemType) => void;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
+  onToggleChecklistItem: (activityId: string, itemId: string, done: boolean) => void;
   renderFooter: (activity: Activity) => ReactNode;
 }) {
-  // Drop target sits on the whole day, so a card lands even on a collapsed or
+  // Drop target sits on the whole day, so a row lands even on a collapsed or
   // empty day (handleDragEnd reads the `col:<iso>` id → appends to that day).
   const { setNodeRef, isOver } = useDroppable({ id: colId(iso) });
+
+  // Per-day stop numbers (§C.6) — shared with the map pins. Only dated
+  // `activity` items are numbered; notes/checklists are skipped. Recomputed each
+  // render from `position` order, so a drag-reorder renumbers the stamps live.
+  const stopNumbers = computeStopNumbers(items);
+  const stopCount = items.filter((a) => a.type === "activity").length;
+  const costTotalMinor = items.reduce((sum, a) => sum + (a.estimatedCostMinor ?? 0), 0);
 
   // Empty day → one thin row, not a full dashed box. A 40-day trip would
   // otherwise be ~40 big boxes to scroll past.
@@ -475,7 +552,7 @@ function DayBlock({
           <button
             ref={setNodeRef}
             type="button"
-            onClick={onAdd}
+            onClick={() => onAdd()}
             onMouseEnter={onFocus}
             className={cn(
               "flex w-full items-center gap-2 rounded-control border-2 border-dashed border-border/55 px-3 py-2 text-left text-sm text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground",
@@ -504,7 +581,11 @@ function DayBlock({
           n={n}
           iso={iso}
           isToday={isToday}
-          count={items.length}
+          stopCount={stopCount}
+          costTotalMinor={costTotalMinor}
+          currency={currency}
+          subtitle={subtitle}
+          onSubtitleCommit={onSubtitleCommit}
           open={open}
           onToggle={onToggle}
           onFocus={onFocus}
@@ -517,22 +598,44 @@ function DayBlock({
             items={items.map((a) => a.id)}
             strategy={verticalListSortingStrategy}
           >
-            <div className="flex flex-col gap-2 py-1 pl-7">
-              {items.map((activity) => (
-                <SortableActivityCard
-                  key={activity.id}
-                  activity={activity}
-                  canEdit={canEdit}
-                  editingBy={editingHints.get(activity.id)}
-                  flash={flashing.has(activity.id)}
-                  selected={activity.id === selectedId}
-                  onSelect={() => onSelectActivity(activity.id)}
-                  onEdit={onEdit}
-                  onDelete={onDelete}
-                  footer={renderFooter(activity)}
-                />
-              ))}
-            </div>
+            {/* The rail: an ordered list threaded by the connector spine (§C.2).
+                No inter-row gap so each row's spine segment meets the next. */}
+            <ol className="flex list-none flex-col py-1 pl-1">
+              {items.map((activity, index) => {
+                const addedByMember = membersById.get(activity.createdBy);
+                return (
+                  <SortableRailRow
+                    key={activity.id}
+                    activity={activity}
+                    number={stopNumbers.get(activity.id) ?? null}
+                    isFirst={index === 0}
+                    isLast={index === items.length - 1}
+                    canEdit={canEdit}
+                    currency={currency}
+                    voteCount={votesByActivity.get(activity.id)?.length ?? 0}
+                    commentCount={commentsFor(commentsByTarget, "activity", activity.id).length}
+                    addedBy={
+                      addedByMember
+                        ? {
+                            name: addedByMember.name,
+                            color: colors.get(activity.createdBy) ?? FALLBACK_PERSON_COLOR,
+                          }
+                        : undefined
+                    }
+                    editingBy={editingHints.get(activity.id)}
+                    flash={flashing.has(activity.id)}
+                    selected={activity.id === selectedId}
+                    onSelect={() => onSelectActivity(activity.id)}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                    onToggleChecklistItem={(itemId, done) =>
+                      onToggleChecklistItem(activity.id, itemId, done)
+                    }
+                    footer={renderFooter(activity)}
+                  />
+                );
+              })}
+            </ol>
           </SortableContext>
         )}
       </div>
@@ -561,7 +664,11 @@ function DayHeader({
   n,
   iso,
   isToday,
-  count,
+  stopCount,
+  costTotalMinor,
+  currency,
+  subtitle,
+  onSubtitleCommit,
   open,
   onToggle,
   onFocus,
@@ -571,49 +678,167 @@ function DayHeader({
   n: number | null;
   iso: string;
   isToday: boolean;
-  count: number;
+  stopCount: number;
+  costTotalMinor: number;
+  currency: string;
+  subtitle: string | null;
+  onSubtitleCommit: (subtitle: string | null) => void;
   open: boolean;
   onToggle: () => void;
   onFocus: () => void;
   canEdit: boolean;
-  onAdd: () => void;
+  onAdd: (type?: ItemType) => void;
 }) {
   return (
-    <div className="flex items-center gap-2 py-1">
-      <button
-        type="button"
-        onClick={onToggle}
-        onMouseEnter={onFocus}
-        aria-expanded={open}
-        className="flex min-w-0 items-center gap-1.5 rounded-control text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    <div className="py-1">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onToggle}
+          onMouseEnter={onFocus}
+          aria-expanded={open}
+          className="flex min-w-0 shrink items-center gap-1.5 rounded-control text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <ChevronDown
+            aria-hidden
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform",
+              !open && "-rotate-90",
+            )}
+          />
+          <h3 className="truncate font-display text-lg font-bold">
+            {formatDayLabel(iso)}
+            {n != null && (
+              <span className="ml-2 font-body text-sm font-medium text-muted-foreground">
+                Day {n}
+              </span>
+            )}
+          </h3>
+        </button>
+        <DaySubtitle subtitle={subtitle} canEdit={canEdit} onCommit={onSubtitleCommit} />
+        <div className="ml-auto flex shrink-0 items-center gap-2">
+          {isToday && <TodayBadge />}
+          {canEdit && <DayAddMenu onAdd={onAdd} />}
+        </div>
+      </div>
+      <p className="mt-0.5 pl-6 font-medium text-muted-foreground text-xs">
+        {stopCount} {stopCount === 1 ? "stop" : "stops"}
+        {costTotalMinor > 0 && ` · ~${formatMoney(costTotalMinor, currency)} est`}
+      </p>
+    </div>
+  );
+}
+
+/** Inline-editable per-day subtitle (D2). Mirrors `TripNameEditor`: click → input,
+ * Enter commits, Esc cancels, blur commits. Writes through `upsertDay`. */
+function DaySubtitle({
+  subtitle,
+  canEdit,
+  onCommit,
+}: {
+  subtitle: string | null;
+  canEdit: boolean;
+  onCommit: (subtitle: string | null) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  // Enter commits, then blur fires as the input unmounts — settle exactly once.
+  const doneRef = useRef(false);
+
+  function begin() {
+    if (!canEdit) return;
+    setDraft(subtitle ?? "");
+    doneRef.current = false;
+    setEditing(true);
+  }
+  function finish(save: boolean) {
+    if (doneRef.current) return;
+    doneRef.current = true;
+    setEditing(false);
+    const trimmed = draft.trim();
+    const next = trimmed.length ? trimmed : null;
+    if (save && next !== subtitle && trimmed.length <= 120) onCommit(next);
+  }
+
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        value={draft}
+        maxLength={120}
+        aria-label="Day subtitle"
+        placeholder="Add a subtitle"
+        className="h-7 max-w-[16rem] text-sm"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => finish(true)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") finish(true);
+          else if (e.key === "Escape") finish(false);
+        }}
+      />
+    );
+  }
+
+  if (!subtitle && !canEdit) return null;
+
+  if (!canEdit) {
+    return (
+      <span className="min-w-0 truncate text-muted-foreground text-sm italic">{subtitle}</span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={begin}
+      title="Set a subtitle for this day"
+      className="flex min-w-0 items-center gap-1 truncate rounded-sm text-left text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <span
+        className={cn(
+          "min-w-0 truncate underline decoration-dotted underline-offset-2",
+          subtitle ? "text-foreground" : "text-muted-foreground italic",
+        )}
       >
-        <ChevronDown
-          aria-hidden
-          className={cn(
-            "size-4 shrink-0 text-muted-foreground transition-transform",
-            !open && "-rotate-90",
-          )}
-        />
-        <h3 className="truncate font-display text-lg font-bold">
-          {formatDayLabel(iso)}
-          {n != null && (
-            <span className="ml-2 font-body text-sm font-medium text-muted-foreground">
-              Day {n}
-            </span>
-          )}
-        </h3>
-      </button>
-      {isToday && <TodayBadge />}
-      <span className="ml-auto shrink-0 font-medium text-muted-foreground text-xs">
-        {count} {count === 1 ? "stop" : "stops"}
+        {subtitle ?? "Add a subtitle"}
       </span>
-      {canEdit && (
-        <Button size="sm" variant="ghost" className="shrink-0" onClick={onAdd}>
+      <Pencil aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+    </button>
+  );
+}
+
+/** The day's "Add" — offers a stop, a note, or a checklist (§C.1 / D.1). Each
+ * opens `ActivityFormDialog` with the right `defaultType` + day. */
+function DayAddMenu({
+  onAdd,
+  className,
+}: {
+  onAdd: (type?: ItemType) => void;
+  className?: string;
+}) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button size="sm" variant="ghost" className={cn("shrink-0", className)}>
           <Plus aria-hidden />
           Add
         </Button>
-      )}
-    </div>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onSelect={() => onAdd("activity")}>
+          <MapPin aria-hidden />
+          Add stop
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onAdd("note")}>
+          <StickyNote aria-hidden />
+          Add note
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onAdd("checklist")}>
+          <ListChecks aria-hidden />
+          Add checklist
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

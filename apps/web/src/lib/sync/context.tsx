@@ -22,15 +22,18 @@ import { appendFeedEvent } from "./feed";
 import { tripKeys } from "./keys";
 import {
   createId,
+  type Day,
   type EntityPostImage,
   entityPostImageSchemas,
   type FeedEvent,
+  type IdeaList,
   type Mutation,
   type MutationPayload,
   type MutationResponse,
   type MutationType,
   type PresenceState,
   type PresenceView,
+  positionBetween,
   type ServerWsMessage,
   type TripMember,
   type TripSnapshot,
@@ -278,4 +281,95 @@ export function usePresence(): {
 
 export function useConnectionStatus(): "connecting" | "open" | "closed" {
   return useTripSyncContext("useConnectionStatus").status;
+}
+
+/** Sort lexicographically by the fractional `position` key (TD-1) — the same
+ * comparison the board/ideas use, so every surface agrees on order. */
+function byPosition<T extends { position: string }>(a: T, b: T): number {
+  return a.position < b.position ? -1 : a.position > b.position ? 1 : 0;
+}
+
+/**
+ * Per-day metadata (D2). The calendar still derives day *cells* from the trip
+ * date range (see `deriveDays` in itinerary/format); a `days` row exists only to
+ * carry per-day metadata (currently `subtitle`), created lazily on first edit.
+ *
+ * - `days` — the raw rows from the snapshot (unsorted; look them up by date).
+ * - `daysByDate` — convenience lookup keyed by ISO `YYYY-MM-DD`.
+ * - `upsertDay(date, { subtitle })` — lazy find-or-create + set. The `(tripId,
+ *   date)` key dedupes, so a fresh `dayId` is harmless if the row already
+ *   exists. Pass `subtitle: null` to clear it.
+ */
+export function useDays(): {
+  days: Day[];
+  daysByDate: Map<string, Day>;
+  upsertDay: (date: string, patch: { subtitle: string | null }) => Promise<MutationResponse>;
+} {
+  const { data: snapshot } = useTripSnapshot();
+  const { mutateAsync } = useTripMutation();
+  const days = useMemo(() => snapshot?.days ?? [], [snapshot?.days]);
+  const daysByDate = useMemo(() => new Map(days.map((d) => [d.date, d] as const)), [days]);
+
+  const upsertDay = useCallback(
+    (date: string, patch: { subtitle: string | null }) =>
+      mutateAsync("day.upsert", { dayId: createId(), date, subtitle: patch.subtitle }),
+    [mutateAsync],
+  );
+
+  return { days, daysByDate, upsertDay };
+}
+
+/**
+ * Idea lists (D10) — named buckets for Ideas-pool items. Ideas join a list via
+ * `activities.listId` (set through the activity form / `activity.update`);
+ * deleting a list unassigns its ideas ("Unlisted") rather than deleting them.
+ *
+ * - `ideaLists` — sorted by `position` (display order).
+ * - `createList(name)` — appends a new list after the last one (position is
+ *   computed here).
+ * - `renameList(listId, name)`.
+ * - `reorderList(listId, position)` — pass-through; the caller computes the new
+ *   fractional position (e.g. via `positionBetween` around the drop neighbors),
+ *   mirroring how the board drives `activity.move`.
+ * - `deleteList(listId)` — drops the list; its ideas fall to Unlisted.
+ */
+export function useIdeaLists(): {
+  ideaLists: IdeaList[];
+  createList: (name: string) => Promise<MutationResponse>;
+  renameList: (listId: string, name: string) => Promise<MutationResponse>;
+  reorderList: (listId: string, position: string) => Promise<MutationResponse>;
+  deleteList: (listId: string) => Promise<MutationResponse>;
+} {
+  const { data: snapshot } = useTripSnapshot();
+  const { mutateAsync } = useTripMutation();
+  const ideaLists = useMemo(
+    () => [...(snapshot?.ideaLists ?? [])].sort(byPosition),
+    [snapshot?.ideaLists],
+  );
+
+  const createList = useCallback(
+    (name: string) => {
+      const last = ideaLists.at(-1)?.position ?? null;
+      return mutateAsync("ideaList.create", {
+        listId: createId(),
+        name,
+        position: positionBetween(last, null),
+      });
+    },
+    [mutateAsync, ideaLists],
+  );
+  const renameList = useCallback(
+    (listId: string, name: string) => mutateAsync("ideaList.update", { listId, name }),
+    [mutateAsync],
+  );
+  const reorderList = useCallback(
+    (listId: string, position: string) => mutateAsync("ideaList.reorder", { listId, position }),
+    [mutateAsync],
+  );
+  const deleteList = useCallback(
+    (listId: string) => mutateAsync("ideaList.delete", { listId }),
+    [mutateAsync],
+  );
+
+  return { ideaLists, createList, renameList, reorderList, deleteList };
 }

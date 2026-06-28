@@ -3,6 +3,8 @@ export { applyEvent, applyMutationOptimistic } from "./apply";
 export {
   TripSyncProvider,
   useConnectionStatus,
+  useDays,
+  useIdeaLists,
   useMyMember,
   usePresence,
   useTripMutation,

@@ -1,6 +1,14 @@
 import type { Activity } from "@caravan/shared";
 import { expect, test } from "vitest";
-import { isPlotted, toFeatureCollection, unplottedWithPlace } from "./geo-features";
+import {
+  isPlotted,
+  type Plotted,
+  stopNumbersByDay,
+  toFeatureCollection,
+  unplottedWithPlace,
+} from "./geo-features";
+
+const fid = (c: string) => c.repeat(32);
 
 function activity(over: Partial<Activity>): Activity {
   return {
@@ -57,4 +65,52 @@ test("toFeatureCollection: one Point feature per plotted activity, id+title in p
   const f = fc.features[0];
   expect(f?.geometry).toEqual({ type: "Point", coordinates: [-9.2, 38.7] }); // GeoJSON is [lng, lat]
   expect(f?.properties).toMatchObject({ title: "Belém" });
+});
+
+test("toFeatureCollection: no `number` property when no lookup is supplied", () => {
+  const fc = toFeatureCollection([{ ...activity({ title: "X" }), lat: 1, lng: 2 }]);
+  expect(fc.features[0]?.properties).not.toHaveProperty("number");
+});
+
+test("stopNumbersByDay: numbers each day independently (resets per day) and merges by id", () => {
+  const items = [
+    activity({ id: fid("1"), date: "2026-07-04", position: "a0" }),
+    activity({ id: fid("2"), date: "2026-07-04", position: "a1" }),
+    activity({ id: fid("3"), date: "2026-07-05", position: "a0" }),
+  ];
+  const n = stopNumbersByDay(items);
+  expect(n.get(fid("1"))).toBe(1);
+  expect(n.get(fid("2"))).toBe(2);
+  expect(n.get(fid("3"))).toBe(1); // new day → resets to 1
+});
+
+test("stopNumbersByDay: undated (Ideas-pool) items never get a stop number", () => {
+  const n = stopNumbersByDay([
+    activity({ id: fid("1"), date: "2026-07-04", position: "a0" }),
+    activity({ id: fid("2"), date: null, position: "a1" }),
+  ]);
+  expect(n.get(fid("1"))).toBe(1);
+  expect(n.has(fid("2"))).toBe(false);
+});
+
+test("toFeatureCollection: pins keep their rail number — a subset, never a renumber", () => {
+  // An UNPLOTTED stop sits between two plotted ones in the day's order. It still
+  // consumes its rail number (#2), so the plotted pins must read 1 and 3 — proving
+  // the map shows a faithful subset of the rail numbers, not a 1,2 renumbering.
+  const a: Plotted = {
+    ...activity({ id: fid("a"), date: "2026-07-04", position: "a0" }),
+    lat: 1,
+    lng: 2,
+  };
+  const b = activity({ id: fid("b"), date: "2026-07-04", position: "a1" }); // unplotted (no coords)
+  const c: Plotted = {
+    ...activity({ id: fid("c"), date: "2026-07-04", position: "a2" }),
+    lat: 3,
+    lng: 4,
+  };
+
+  const numbers = stopNumbersByDay([a, b, c]);
+  const fc = toFeatureCollection([a, c], numbers);
+  expect(fc.features[0]?.properties?.number).toBe(1);
+  expect(fc.features[1]?.properties?.number).toBe(3);
 });

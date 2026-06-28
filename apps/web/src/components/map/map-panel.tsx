@@ -9,7 +9,13 @@ import { useMapConfig } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useFocusedDay } from "./focused-day";
-import { isPlotted, type Plotted, toFeatureCollection, unplottedWithPlace } from "./geo-features";
+import {
+  isPlotted,
+  type Plotted,
+  stopNumbersByDay,
+  toFeatureCollection,
+  unplottedWithPlace,
+} from "./geo-features";
 import { useMapSelection } from "./selection";
 
 /**
@@ -79,12 +85,12 @@ export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; f
     );
   }
 
-  if (fill) return <MapView plotted={plotted} unplotted={unplotted} fill />;
+  if (fill) return <MapView activities={activities} plotted={plotted} unplotted={unplotted} fill />;
 
   return (
     <section className="flex flex-col gap-3">
       <MapHeading count={plotted.length} />
-      <MapView plotted={plotted} unplotted={unplotted} />
+      <MapView activities={activities} plotted={plotted} unplotted={unplotted} />
     </section>
   );
 }
@@ -104,10 +110,15 @@ function MapHeading({ count }: { count: number }) {
 }
 
 function MapView({
+  activities,
   plotted,
   unplotted,
   fill = false,
 }: {
+  // The FULL activity set — needed to number pins exactly like the rail does.
+  // Per-day numbering counts every dated stop (incl. unplotted/un-placed ones),
+  // so `plotted` alone would drift; see `stopNumbersByDay`.
+  activities: Activity[];
   plotted: Plotted[];
   unplotted: Activity[];
   fill?: boolean;
@@ -156,7 +167,16 @@ function MapView({
   // reappear when a cluster is expanded. Data-level filtering makes clusters
   // recompute correctly. (`plotted`/`plottedRef` stay the FULL set — boot-fit and
   // focused-day framing consider all pins; framing ≠ visibility.)
-  const fc = useMemo(() => toFeatureCollection(visiblePlotted), [visiblePlotted]);
+  // Per-day stop numbers (1..N, reset each day) keyed by activity id — the same
+  // numbers the itinerary rail stamps, so pin ② ↔ rail stop ② (spec §C.6).
+  // Computed over the FULL activity set (not `visiblePlotted`) so unplotted/
+  // hidden-day stops still consume their rail number; the FeatureCollection only
+  // carries numbers for the pins it actually draws, i.e. a faithful subset.
+  const stopNumbers = useMemo(() => stopNumbersByDay(activities), [activities]);
+  const fc = useMemo(
+    () => toFeatureCollection(visiblePlotted, stopNumbers),
+    [visiblePlotted, stopNumbers],
+  );
 
   const toggleDay = (key: string) => {
     setHiddenDays((prev) => {
@@ -228,19 +248,48 @@ function MapView({
         filter: ["!", ["has", "point_count"]],
         paint: {
           "circle-color": "#c05621",
-          "circle-radius": 8,
+          // A touch larger than the v1 radius (8) so the stop number reads on the
+          // marker; still comfortably below the cluster min radius (16) so the
+          // pin/cluster hierarchy holds.
+          "circle-radius": 11,
           "circle-stroke-width": 2.5,
           "circle-stroke-color": "#fffbf1",
         },
       });
+      // The per-day stop number, rendered ON each pin so the map and the rail are
+      // cross-referenceable (pin ② ↔ rail stop ②, §C.6). A `symbol` layer over
+      // the circle `pins` — the same source/feature, filtered to individual
+      // (non-cluster) pins that carry a `number`. Literal palette values (paint
+      // can't read CSS vars; matches the cluster-count + pin colors above).
+      map.addLayer({
+        id: "pin-numbers",
+        type: "symbol",
+        source: SOURCE_ID,
+        filter: ["all", ["!", ["has", "point_count"]], ["has", "number"]],
+        layout: {
+          "text-field": ["to-string", ["get", "number"]],
+          "text-size": 12,
+          // Every pin's number must stay visible even when pins crowd together —
+          // the rail cross-reference breaks if MapLibre's symbol collision culls
+          // overlapping labels, so opt out of placement collision entirely.
+          "text-allow-overlap": true,
+          "text-ignore-placement": true,
+        },
+        paint: { "text-color": "#fffbf1" },
+      });
 
-      // Pin click → select + popup (bidirectional highlight, half 1).
-      map.on("click", "pins", (e) => {
+      // Pin click → select + popup (bidirectional highlight, half 1). Bind both
+      // the circle and the number-symbol layer so a click anywhere on the pin —
+      // including dead-center on the glyph — still selects (the symbol sits atop
+      // the circle). `select` is idempotent, so a click hitting both is harmless.
+      const onPinClick = (e: maplibregl.MapLayerMouseEvent) => {
         const f = e.features?.[0];
         if (!f) return;
         const id = f.properties?.id as string | undefined;
         if (id) selectRef.current(id);
-      });
+      };
+      map.on("click", "pins", onPinClick);
+      map.on("click", "pin-numbers", onPinClick);
       // Cluster click → zoom in.
       map.on("click", "clusters", (e) => {
         const f = map.queryRenderedFeatures(e.point, { layers: ["clusters"] })[0];
@@ -252,7 +301,7 @@ function MapView({
           map.easeTo({ center: geom.coordinates as [number, number], zoom });
         });
       });
-      for (const layer of ["pins", "clusters"]) {
+      for (const layer of ["pins", "pin-numbers", "clusters"]) {
         map.on("mouseenter", layer, () => {
           map.getCanvas().style.cursor = "pointer";
         });
