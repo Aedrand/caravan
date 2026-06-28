@@ -595,10 +595,12 @@ function DayHeader({
           )}
         />
         <h3 className="truncate font-display text-lg font-bold">
-          {n ? `Day ${n}` : "Day"}
-          <span className="ml-2 font-body text-sm font-medium text-muted-foreground">
-            {formatDayLabel(iso)}
-          </span>
+          {formatDayLabel(iso)}
+          {n != null && (
+            <span className="ml-2 font-body text-sm font-medium text-muted-foreground">
+              Day {n}
+            </span>
+          )}
         </h3>
       </button>
       {isToday && <TodayBadge />}

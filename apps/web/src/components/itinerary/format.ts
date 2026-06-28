@@ -47,13 +47,28 @@ export function deriveDays(
   return [...days].sort();
 }
 
-/** "Mon, Jun 23" */
+/** "Friday, May 1st" — full weekday + month + ordinal day (a day's headline label). */
 export function formatDayLabel(iso: string): string {
-  return parseIso(iso).toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
+  const date = parseIso(iso);
+  const weekday = date.toLocaleDateString(undefined, { weekday: "long" });
+  const month = date.toLocaleDateString(undefined, { month: "long" });
+  return `${weekday}, ${month} ${ordinal(date.getDate())}`;
+}
+
+/** English ordinal: 1→"1st", 2→"2nd", 3→"3rd", 11–13→"th", 21→"21st"… */
+function ordinal(n: number): string {
+  const rem100 = n % 100;
+  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
+  switch (n % 10) {
+    case 1:
+      return `${n}st`;
+    case 2:
+      return `${n}nd`;
+    case 3:
+      return `${n}rd`;
+    default:
+      return `${n}th`;
+  }
 }
 
 /** "Mon 23" — compact, for the day-jump rail chips. */

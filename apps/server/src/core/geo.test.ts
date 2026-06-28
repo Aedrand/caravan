@@ -101,6 +101,64 @@ test("search: caches — a repeat query does not hit upstream again", async () =
   expect(d.takes()).toBe(1); // only one token spent (cache hit skips the limiter)
 });
 
+test("search: default language en is sent to Photon as lang=en", async () => {
+  const fetchMock = vi.fn(async (_input: unknown) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ features: [photonFeature] }),
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  const d = deps();
+  await geoSearch(d, "asakusa");
+  const url = String(fetchMock.mock.calls[0]?.[0]);
+  expect(url).toContain("lang=en");
+});
+
+test("search: empty GEOCODING_LANGUAGE omits any language param", async () => {
+  const fetchMock = vi.fn(async (_input: unknown) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ features: [photonFeature] }),
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  const d = deps({ GEOCODING_LANGUAGE: "" });
+  await geoSearch(d, "asakusa");
+  const url = String(fetchMock.mock.calls[0]?.[0]);
+  expect(url).not.toContain("lang=");
+  expect(url).not.toContain("accept-language=");
+});
+
+test("reverse: sends the configured language to the geocoder", async () => {
+  const fetchMock = vi.fn(async (_input: unknown) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ features: [photonFeature] }),
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  const d = deps({ GEOCODING_LANGUAGE: "de" });
+  await geoReverse(d, 38.6976, -9.2034);
+  const url = String(fetchMock.mock.calls[0]?.[0]);
+  expect(url).toContain("lang=de");
+});
+
+test("search: LocationIQ uses accept-language (not lang)", async () => {
+  const fetchMock = vi.fn(async (_input: unknown) => ({
+    ok: true,
+    status: 200,
+    json: async () => [{ lat: "35.7148", lon: "139.7967", display_name: "Sensō-ji, Tokyo, Japan" }],
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  const d = deps({
+    GEOCODING_PROVIDER: "locationiq",
+    LOCATIONIQ_KEY: "k",
+    GEOCODING_LANGUAGE: "en",
+  });
+  await geoSearch(d, "asakusa");
+  const url = String(fetchMock.mock.calls[0]?.[0]);
+  expect(url).toContain("accept-language=en");
+  expect(url).not.toContain("lang=en");
+});
+
 test("search: rejects too-short queries before any upstream call", async () => {
   mockFetch({ features: [] });
   const d = deps();

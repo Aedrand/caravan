@@ -63,6 +63,7 @@ the shared public endpoints. See [Track C / TD-5] in the plan for the rationale.
 | `GEOAPIFY_KEY` | string | — | Geoapify API key — the preferred keyed upgrade (≈3k req/day free). |
 | `LOCATIONIQ_KEY` | string | — | LocationIQ API key (≈5k/day; attribution link required by their terms). |
 | `NOMINATIM_URL` | url | `https://nominatim.openstreetmap.org` | Nominatim base URL. Only legitimate for reverse geocoding; respect OSM's usage policy if you point at the public instance. |
+| `GEOCODING_LANGUAGE` | string | `en` | Preferred place-name language. Returns Latin/English names where the underlying data has them (e.g. `金龍山 浅草寺` → `Sensō-ji`), falling back to native names otherwise; results stay user-editable. Set empty to always use native names. Photon covers en/de/fr; keyed providers cover more. |
 | `GEO_RATE_LIMIT_PER_MINUTE` | number | `120` | Per-deployment cap on upstream geocoder requests per minute (protects the donated providers). |
 | `TILE_PROVIDER` | enum: `openfreemap` \| `maptiler` \| `stadia` | `openfreemap` | Vector tile source for the browser map. OpenFreeMap is keyless. |
 | `MAPTILER_KEY` | string | — | MapTiler API key — nicer tile styles (non-commercial free tier). |

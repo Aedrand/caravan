@@ -35,6 +35,13 @@ const EnvSchema = z.object({
   LOCATIONIQ_KEY: z.string().min(1).optional(),
   /** Nominatim base URL — only legitimate for reverse geocoding (TD-5). */
   NOMINATIM_URL: z.url().default("https://nominatim.openstreetmap.org"),
+  /**
+   * Place-name language sent to the geocoders (D8 / TD-13). Default `en` returns
+   * Latin/English OSM names where a `name:en` tag exists (`金龍山 浅草寺` →
+   * `Sensō-ji`); obscure spots stay local and remain user-editable. Set empty to
+   * use native names. Photon covers en/de/fr; keyed providers cover more.
+   */
+  GEOCODING_LANGUAGE: z.string().max(8).default("en"),
   /** Per-deployment geo rate limit: max upstream requests per minute. */
   GEO_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(120),
   /** Vector tile source for the browser map (TD-5). OpenFreeMap is keyless. */
@@ -109,6 +116,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       geoapifyKey: parsed.GEOAPIFY_KEY,
       locationiqKey: parsed.LOCATIONIQ_KEY,
       nominatimUrl: parsed.NOMINATIM_URL,
+      geocodingLanguage: parsed.GEOCODING_LANGUAGE,
       rateLimitPerMinute: parsed.GEO_RATE_LIMIT_PER_MINUTE,
       tileProvider: parsed.TILE_PROVIDER,
       maptilerKey: parsed.MAPTILER_KEY,

@@ -3,6 +3,7 @@ import type { Point } from "geojson";
 import { MapPin, MapPinOff, TriangleAlert } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { formatDayShort } from "@/components/itinerary/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useMapConfig } from "@/lib/geo";
 import { cn } from "@/lib/utils";
@@ -21,6 +22,15 @@ import { useMapSelection } from "./selection";
  */
 
 const SOURCE_ID = "activities";
+
+/**
+ * Day key for the per-day filter (Trip Workspace v2). Dated pins key on their
+ * ISO `YYYY-MM-DD`; undated pins (an Ideas-pool place with no date) collapse to
+ * a sentinel. The leading space can't collide with a real ISO date and sorts
+ * ahead of all of them.
+ */
+const UNDATED = " undated";
+const dayKey = (a: Plotted) => a.date ?? UNDATED;
 
 /**
  * `fill` renders the map as a height-filling pane (the trip workspace's ambient
@@ -107,12 +117,55 @@ function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const [ready, setReady] = useState(false);
+  // Per-day pin filter (Trip Workspace v2). We track HIDDEN days (default empty
+  // = everything visible) so a newly-added day shows up automatically.
+  const [hiddenDays, setHiddenDays] = useState<Set<string>>(() => new Set());
   const { selectedId, select } = useMapSelection();
   // Shared with the itinerary (PlanView): the rail-highlighted day. Null on the
   // mobile Map tab (no provider) → the day-follow effect is inert there.
   const { focusedDay } = useFocusedDay();
 
-  const fc = useMemo(() => toFeatureCollection(plotted), [plotted]);
+  // Ordered groups for the filter control: unique dated days ascending, then the
+  // undated "Ideas" group last (only if any undated pins exist).
+  const dayGroups = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of plotted) {
+      const k = dayKey(p);
+      counts.set(k, (counts.get(k) ?? 0) + 1);
+    }
+    const groups = [...counts.keys()]
+      .filter((k) => k !== UNDATED)
+      .sort()
+      .map((key) => ({ key, label: formatDayShort(key), count: counts.get(key) ?? 0 }));
+    const undated = counts.get(UNDATED);
+    if (undated) groups.push({ key: UNDATED, label: "Ideas", count: undated });
+    return groups;
+  }, [plotted]);
+
+  const visiblePlotted = useMemo(
+    () => plotted.filter((p) => !hiddenDays.has(dayKey(p))),
+    [plotted, hiddenDays],
+  );
+
+  // CLUSTERING CORRECTNESS: the source has `cluster: true`, and clusters are
+  // computed over the WHOLE source *before* any MapLibre layer `filter` runs. So
+  // the per-day filter operates at the GeoJSON DATA level — we build the
+  // FeatureCollection from the *visible* set and let the src.setData(fc) sync
+  // effect below push it. We deliberately do NOT use a layer filter/setFilter on
+  // the "pins" layer: that would leave cluster counts wrong and let hidden pins
+  // reappear when a cluster is expanded. Data-level filtering makes clusters
+  // recompute correctly. (`plotted`/`plottedRef` stay the FULL set — boot-fit and
+  // focused-day framing consider all pins; framing ≠ visibility.)
+  const fc = useMemo(() => toFeatureCollection(visiblePlotted), [visiblePlotted]);
+
+  const toggleDay = (key: string) => {
+    setHiddenDays((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
 
   // Latest data, read inside the (one-time) boot effect without re-running it —
   // the live sync effects below keep the source + selection current.
@@ -282,6 +335,54 @@ function MapView({
             <p role="alert" className="max-w-xs text-muted-foreground text-sm">
               The map couldn't load. Your places are still saved — refresh to try again.
             </p>
+          </div>
+        )}
+        {/* Per-day filter overlay (Trip Workspace v2). Lives inside the map's
+            relative container; NavigationControl owns top-right, so this sits
+            top-left. Toggling a day hides/shows its pins purely by filtering the
+            GeoJSON data feeding the source (see the `fc` memo above) — never a
+            layer filter — so clusters recompute correctly. Only shown once pins
+            span ≥2 day groups. */}
+        {dayGroups.length >= 2 && (
+          <div
+            role="toolbar"
+            aria-label="Filter pins by day"
+            className="cv-card absolute top-3 left-3 z-10 flex max-h-[calc(100%-1.5rem)] max-w-[min(60%,15rem)] flex-col gap-1.5 overflow-y-auto p-2"
+          >
+            <p className="px-0.5 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
+              Days
+            </p>
+            <div className="flex flex-wrap gap-1">
+              {dayGroups.map(({ key, label, count }) => {
+                const visible = !hiddenDays.has(key);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => toggleDay(key)}
+                    aria-pressed={visible}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-control border-2 px-2 py-0.5 font-body font-semibold text-xs transition-colors",
+                      visible
+                        ? "border-border bg-card text-foreground shadow-control"
+                        : "border-transparent text-muted-foreground opacity-55 hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                    <span className="text-[10px] tabular-nums opacity-70">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {hiddenDays.size > 0 && (
+              <button
+                type="button"
+                onClick={() => setHiddenDays(new Set())}
+                className="self-start rounded-control px-1.5 py-0.5 font-semibold text-[11px] text-muted-foreground hover:text-foreground"
+              >
+                All
+              </button>
+            )}
           </div>
         )}
       </div>

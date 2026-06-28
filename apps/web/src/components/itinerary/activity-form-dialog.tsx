@@ -248,7 +248,7 @@ function ActivityForm({
               const n = dayNumber(iso, startDate);
               return (
                 <option key={iso} value={iso}>
-                  {n ? `Day ${n} · ${formatDayLabel(iso)}` : formatDayLabel(iso)}
+                  {n != null ? `${formatDayLabel(iso)} · Day ${n}` : formatDayLabel(iso)}
                 </option>
               );
             })}

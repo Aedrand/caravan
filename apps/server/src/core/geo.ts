@@ -159,12 +159,14 @@ function parseNominatim(json: unknown, provider: string): GeoPlace[] {
 
 function searchUrl(cfg: GeoConfig, q: string): string {
   const provider = cfg.geocodingProvider;
+  const lang = cfg.geocodingLanguage;
   if (provider === "geoapify" && cfg.geoapifyKey) {
     const u = new URL("https://api.geoapify.com/v1/geocode/autocomplete");
     u.searchParams.set("text", q);
     u.searchParams.set("limit", String(SEARCH_LIMIT));
     u.searchParams.set("format", "geojson");
     u.searchParams.set("apiKey", cfg.geoapifyKey);
+    if (lang) u.searchParams.set("lang", lang);
     return u.toString();
   }
   if (provider === "locationiq" && cfg.locationiqKey) {
@@ -172,23 +174,27 @@ function searchUrl(cfg: GeoConfig, q: string): string {
     u.searchParams.set("q", q);
     u.searchParams.set("limit", String(SEARCH_LIMIT));
     u.searchParams.set("key", cfg.locationiqKey);
+    if (lang) u.searchParams.set("accept-language", lang);
     return u.toString();
   }
   // Default: Photon (keyless). Also the fallback if a keyed provider has no key.
   const u = new URL("/api", cfg.photonUrl);
   u.searchParams.set("q", q);
   u.searchParams.set("limit", String(SEARCH_LIMIT));
+  if (lang) u.searchParams.set("lang", lang);
   return u.toString();
 }
 
 function reverseUrl(cfg: GeoConfig, lat: number, lng: number): string {
   const provider = cfg.geocodingProvider;
+  const lang = cfg.geocodingLanguage;
   if (provider === "geoapify" && cfg.geoapifyKey) {
     const u = new URL("https://api.geoapify.com/v1/geocode/reverse");
     u.searchParams.set("lat", String(lat));
     u.searchParams.set("lon", String(lng));
     u.searchParams.set("format", "geojson");
     u.searchParams.set("apiKey", cfg.geoapifyKey);
+    if (lang) u.searchParams.set("lang", lang);
     return u.toString();
   }
   if (provider === "locationiq" && cfg.locationiqKey) {
@@ -197,6 +203,7 @@ function reverseUrl(cfg: GeoConfig, lat: number, lng: number): string {
     u.searchParams.set("lon", String(lng));
     u.searchParams.set("format", "json");
     u.searchParams.set("key", cfg.locationiqKey);
+    if (lang) u.searchParams.set("accept-language", lang);
     return u.toString();
   }
   if (provider === "nominatim") {
@@ -204,12 +211,14 @@ function reverseUrl(cfg: GeoConfig, lat: number, lng: number): string {
     u.searchParams.set("lat", String(lat));
     u.searchParams.set("lon", String(lng));
     u.searchParams.set("format", "jsonv2");
+    if (lang) u.searchParams.set("accept-language", lang);
     return u.toString();
   }
   // Default: Photon reverse (keyless).
   const u = new URL("/reverse", cfg.photonUrl);
   u.searchParams.set("lat", String(lat));
   u.searchParams.set("lon", String(lng));
+  if (lang) u.searchParams.set("lang", lang);
   return u.toString();
 }
 
@@ -283,7 +292,7 @@ export async function geoSearch(deps: GeoDeps, rawQuery: string): Promise<GeoPla
   const cfg = deps.config.geo;
   const provider = effectiveProvider(cfg);
   const now = Date.now();
-  const key = `${provider}:search:${q.toLowerCase()}`;
+  const key = `${provider}:${cfg.geocodingLanguage}:search:${q.toLowerCase()}`;
 
   const cached = readCache(deps.db, key, now);
   if (cached !== undefined) return cached as GeoPlace[];
@@ -311,7 +320,7 @@ export async function geoReverse(
   const provider = effectiveProvider(cfg);
   const now = Date.now();
   // Round to ~11m so nearby clicks share a cache entry.
-  const key = `${provider}:reverse:${lat.toFixed(4)},${lng.toFixed(4)}`;
+  const key = `${provider}:${cfg.geocodingLanguage}:reverse:${lat.toFixed(4)},${lng.toFixed(4)}`;
 
   const cached = readCache(deps.db, key, now);
   if (cached !== undefined) return cached as GeoPlace | null;
