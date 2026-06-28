@@ -1,9 +1,12 @@
 import type {
   Activity,
   ActivityVote,
+  ChecklistItem,
   Comment,
+  Day,
   Expense,
   ExpenseShare,
+  IdeaList,
   InviteLink,
   Payment,
   Poll,
@@ -53,6 +56,38 @@ export function serializeActivity(row: typeof schema.activities.$inferSelect): A
     category: row.category,
     notes: row.notes,
     linkUrl: row.linkUrl,
+    // Trip Workspace v2 typed-item fields (D1/D7/D10). The checklist JSON column
+    // round-trips to a typed array; null when the row isn't a checklist.
+    type: row.type,
+    estimatedCostMinor: row.estimatedCostMinor,
+    listId: row.listId,
+    checklistItems: row.checklistItems ? (JSON.parse(row.checklistItems) as ChecklistItem[]) : null,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+/** Per-day metadata (D2). */
+export function serializeDay(row: typeof schema.days.$inferSelect): Day {
+  return {
+    id: row.id,
+    tripId: row.tripId,
+    date: row.date,
+    subtitle: row.subtitle,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+/** Idea list (D10). */
+export function serializeIdeaList(row: typeof schema.ideaLists.$inferSelect): IdeaList {
+  return {
+    id: row.id,
+    tripId: row.tripId,
+    name: row.name,
+    position: row.position,
     createdBy: row.createdBy,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

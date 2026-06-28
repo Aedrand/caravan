@@ -7,6 +7,7 @@ import {
   firstPosition,
   type ServerWsMessage,
   ServerWsMessageSchema,
+  TripSnapshotSchema,
 } from "@caravan/shared";
 import { serve, upgradeWebSocket } from "@hono/node-server";
 import { Hono } from "hono";
@@ -407,6 +408,44 @@ test("snapshot includes ghosts and orders activities; events?since returns the o
     expect(bad.status).toBe(400);
     expect(((await bad.json()) as { error: { code: string } }).error.code).toBe("invalid_since");
   }
+});
+
+test("snapshot carries Trip Workspace v2 days + idea lists and parses with the schema", async () => {
+  const h = await startHarness();
+  const alice = h.insertUser("Alice");
+  const { tripId } = h.insertTrip(alice.id);
+  h.setUser(alice);
+
+  // A day with a subtitle (D2) and a named idea list (D10).
+  const day = await postMutation(h, tripId, {
+    id: createId(),
+    type: "day.upsert",
+    payload: { dayId: createId(), date: "2026-07-04", subtitle: "Arrival" },
+  });
+  expect(day.status).toBe(200);
+  const listId = createId();
+  const list = await postMutation(h, tripId, {
+    id: createId(),
+    type: "ideaList.create",
+    payload: { listId, name: "Food", position: firstPosition() },
+  });
+  expect(list.status).toBe(200);
+
+  // An idea assigned to the list rides in `activities` with its listId set.
+  const ideaCreate = await postMutation(
+    h,
+    tripId,
+    activityCreateEnvelope({ title: "Ramen", date: null, listId }),
+  );
+  expect(ideaCreate.status).toBe(200);
+
+  const raw = await (await fetch(`${h.baseUrl}/${tripId}/snapshot`)).json();
+  const snapshot = TripSnapshotSchema.parse(raw); // the contract holds end-to-end
+  expect(snapshot.days).toHaveLength(1);
+  expect(snapshot.days[0]).toMatchObject({ date: "2026-07-04", subtitle: "Arrival" });
+  expect(snapshot.ideaLists).toHaveLength(1);
+  expect(snapshot.ideaLists[0]).toMatchObject({ name: "Food", id: listId });
+  expect(snapshot.activities.find((a) => a.title === "Ramen")?.listId).toBe(listId);
 });
 
 test("idempotent replay: same envelope twice → same version, one feed row, entity both times", async () => {

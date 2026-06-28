@@ -20,7 +20,9 @@ import { hasRole } from "./permissions";
 import {
   serializeActivity,
   serializeComment,
+  serializeDay,
   serializeExpense,
+  serializeIdeaList,
   serializeInvite,
   serializeMember,
   serializePayment,
@@ -198,6 +200,17 @@ function readPostImage(tx: Tx, entityType: EntityType, entityId: string): Entity
     case "payment": {
       const row = tx.select().from(schema.payments).where(eq(schema.payments.id, entityId)).get();
       return row ? serializePayment(row) : null;
+    }
+    // Trip Workspace v2. A `day` post-image is the upserted row; an `ideaList`
+    // image is the surviving row, or null on delete (the FK SET-NULL unassigns
+    // its ideas DB-side; the client mirrors that on the null image — see apply).
+    case "day": {
+      const row = tx.select().from(schema.days).where(eq(schema.days.id, entityId)).get();
+      return row ? serializeDay(row) : null;
+    }
+    case "ideaList": {
+      const row = tx.select().from(schema.ideaLists).where(eq(schema.ideaLists.id, entityId)).get();
+      return row ? serializeIdeaList(row) : null;
     }
   }
 }

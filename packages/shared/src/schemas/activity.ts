@@ -13,6 +13,30 @@ export const ACTIVITY_CATEGORIES = [
 export const ActivityCategorySchema = z.enum(ACTIVITY_CATEGORIES);
 export type ActivityCategory = z.infer<typeof ActivityCategorySchema>;
 
+/**
+ * The D1 typed-item discriminator (Trip Workspace v2). An activity row is one
+ * of these "items": a scheduled stop (`activity`, the default + back-fill),
+ * a free-text `note` (body reuses the `notes` column), a `checklist`
+ * (`checklistItems` JSON), or a `flight`/`lodging` booking. The booking
+ * variants are forward-compat only in V2.2 — their columns and the create path
+ * land in V2.4, and creating one is guarded until then (see mutations.ts).
+ */
+export const ITEM_TYPES = ["activity", "note", "checklist", "flight", "lodging"] as const;
+export const ItemTypeSchema = z.enum(ITEM_TYPES);
+export type ItemType = z.infer<typeof ItemTypeSchema>;
+
+/**
+ * One checklist entry (D1). Items carry a stable client-generated id so a
+ * `checklist.toggle` addresses the entry directly (index-shift-safe), letting
+ * concurrent toggles of different items converge instead of clobbering.
+ */
+export const ChecklistItemSchema = z.strictObject({
+  id: IdSchema,
+  text: z.string().trim().min(1).max(500),
+  done: z.boolean(),
+});
+export type ChecklistItem = z.infer<typeof ChecklistItemSchema>;
+
 /** A real place behind an activity — optional; freeform location is normal (PD-1/TD-5). */
 export const PlaceSchema = z.strictObject({
   name: z.string().min(1).max(200),
@@ -43,6 +67,14 @@ export const ActivitySchema = z.object({
   notes: z.string().max(5000),
   /** Booking/reference link — link-outs are the only booking story (PD-12). */
   linkUrl: z.url().nullable(),
+  /** D1 discriminator; existing rows back-fill to `activity`. */
+  type: ItemTypeSchema,
+  /** D7 planning figure, minor units (trip currency). `null` = no estimate (distinct from `0`). */
+  estimatedCostMinor: z.number().int().nonnegative().nullable(),
+  /** D10 idea-list membership; `null` = Unlisted / not an idea-list member. */
+  listId: IdSchema.nullable(),
+  /** D1 checklist body; `null` for non-checklist items. */
+  checklistItems: z.array(ChecklistItemSchema).nullable(),
   createdBy: IdSchema,
   createdAt: EpochMsSchema,
   updatedAt: EpochMsSchema,

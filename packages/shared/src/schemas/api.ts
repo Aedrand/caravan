@@ -2,6 +2,8 @@ import { z } from "zod";
 import { ActivitySchema } from "./activity";
 import { CommentSchema } from "./comment";
 import { CurrencySchema, IsoDateSchema } from "./common";
+import { DaySchema } from "./day";
+import { IdeaListSchema } from "./idea-list";
 import { PollWithDetailsSchema } from "./poll";
 import { RoleSchema, TripMemberSchema, TripSchema } from "./trip";
 import { ActivityVoteSchema } from "./vote";
@@ -15,6 +17,11 @@ import { ActivityVoteSchema } from "./vote";
  * ignore unknown keys, newer servers always send them). They reconcile through
  * the same post-image path as activities, so the snapshot stays the single
  * source the UI renders from.
+ *
+ * Trip Workspace v2 appended `days` (D2) and `ideaLists` (D10) on the same
+ * precedent: hot, tiny, always-rendered planning state that reconciles through
+ * the post-image path — so they ride in the snapshot rather than a separate
+ * endpoint.
  */
 export const TripSnapshotSchema = z.object({
   trip: TripSchema,
@@ -23,6 +30,8 @@ export const TripSnapshotSchema = z.object({
   votes: z.array(ActivityVoteSchema),
   comments: z.array(CommentSchema),
   polls: z.array(PollWithDetailsSchema),
+  days: z.array(DaySchema),
+  ideaLists: z.array(IdeaListSchema),
 });
 export type TripSnapshot = z.infer<typeof TripSnapshotSchema>;
 

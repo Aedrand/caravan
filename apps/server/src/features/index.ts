@@ -5,6 +5,8 @@
  */
 import "./decisions/mutations";
 import "./expenses/mutations";
+import "./ideas/lists";
+import "./itinerary/days";
 import "./itinerary/mutations";
 import "./trips/membership";
 import "./trips/mutations";

@@ -2,7 +2,9 @@ import { z } from "zod";
 import { type Activity, ActivitySchema } from "./activity";
 import { type Comment, CommentSchema } from "./comment";
 import { EpochMsSchema, IdSchema } from "./common";
+import { type Day, DaySchema } from "./day";
 import { type Expense, ExpenseSchema } from "./expense";
+import { type IdeaList, IdeaListSchema } from "./idea-list";
 import { type Payment, PaymentSchema } from "./payment";
 import { type PollWithDetails, PollWithDetailsSchema } from "./poll";
 import {
@@ -37,6 +39,9 @@ export const ENTITY_TYPES = [
   // Track B — expenses & settlement.
   "expense",
   "payment",
+  // Trip Workspace v2 — first-class days (D2) and idea lists (D10).
+  "day",
+  "ideaList",
 ] as const;
 export const EntityTypeSchema = z.enum(ENTITY_TYPES);
 export type EntityType = z.infer<typeof EntityTypeSchema>;
@@ -56,7 +61,9 @@ export type EntityPostImage =
   | Comment
   | PollWithDetails
   | Expense
-  | Payment;
+  | Payment
+  | Day
+  | IdeaList;
 
 /**
  * Parse an unknown post-image with the schema for the event's entityType.
@@ -78,6 +85,8 @@ export const entityPostImageSchemas = {
   poll: PollWithDetailsSchema,
   expense: ExpenseSchema,
   payment: PaymentSchema,
+  day: DaySchema,
+  ideaList: IdeaListSchema,
 } as const satisfies Record<EntityType, z.ZodType>;
 
 export const FeedEventSchema = z.object({

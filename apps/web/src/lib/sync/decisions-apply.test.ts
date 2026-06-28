@@ -50,6 +50,8 @@ function snap(overrides: Partial<TripSnapshot> = {}): TripSnapshot {
     votes: [],
     comments: [],
     polls: [],
+    days: [],
+    ideaLists: [],
     ...overrides,
   };
 }

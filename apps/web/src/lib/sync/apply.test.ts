@@ -68,6 +68,10 @@ function makeActivity(overrides: Partial<Activity> = {}): Activity {
     category: "sights",
     notes: "",
     linkUrl: null,
+    type: "activity",
+    estimatedCostMinor: null,
+    listId: null,
+    checklistItems: null,
     createdBy: MEMBER_ID,
     createdAt: NOW,
     updatedAt: NOW,
@@ -84,6 +88,9 @@ function makeSnapshot(overrides: Partial<TripSnapshot> = {}): TripSnapshot {
     votes: [],
     comments: [],
     polls: [],
+    // Trip Workspace v2 appended these; default empty for existing cases.
+    days: [],
+    ideaLists: [],
     ...overrides,
   };
 }
@@ -287,6 +294,10 @@ describe("applyMutationOptimistic", () => {
       category: "food",
       notes: "",
       linkUrl: null,
+      type: "activity",
+      estimatedCostMinor: null,
+      listId: null,
+      checklistItems: null,
       createdBy: MEMBER_ID,
       createdAt: LATER,
       updatedAt: LATER,

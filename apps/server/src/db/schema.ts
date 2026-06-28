@@ -3,6 +3,7 @@ import {
   ACTOR_TYPES,
   ENTITY_TYPES,
   EXPENSE_CATEGORIES,
+  ITEM_TYPES,
   MEMBER_STATUSES,
   TRIP_ROLES,
 } from "@caravan/shared";
@@ -104,12 +105,69 @@ export const activities = sqliteTable(
     category: text("category", { enum: ACTIVITY_CATEGORIES }).notNull().default("other"),
     notes: text("notes").notNull().default(""),
     linkUrl: text("link_url"),
+    /**
+     * Trip Workspace v2 typed-item discriminator (D1). NOT NULL with a default
+     * so every existing row back-fills to `activity`. `flight`/`lodging` are
+     * forward-compat enum values; their columns + create path land in V2.4.
+     */
+    type: text("type", { enum: ITEM_TYPES }).notNull().default("activity"),
+    /** D7 planning figure, minor units. Nullable: null = no estimate, distinct from 0 = free. */
+    estimatedCostMinor: integer("estimated_cost_minor"),
+    /** D10 idea-list membership; SET NULL on list delete → the idea falls to "Unlisted". */
+    listId: text("list_id").references(() => ideaLists.id, { onDelete: "set null" }),
+    /** D1 checklist body: JSON-encoded ChecklistItem[]; null for non-checklist rows. */
+    checklistItems: text("checklist_items"),
     /** Membership id of the creator. */
     createdBy: text("created_by").notNull(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
   (t) => [index("activities_trip_date").on(t.tripId, t.date)],
+);
+
+// ---------------------------------------------------------------------------
+// Trip Workspace v2 — first-class days (D2) + idea lists (D10). Additive: the
+// calendar still derives day cells from the trip range; a `days` row exists
+// only to hold per-day metadata, created lazily by `day.upsert`. Idea lists are
+// named buckets for Ideas-pool items (activities.listId).
+// ---------------------------------------------------------------------------
+
+/** Per-day metadata (D2). Surrogate id PK + unique (tripId,date) — the lazy key. */
+export const days = sqliteTable(
+  "days",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    /** ISO yyyy-mm-dd local date — the `(tripId, date)` lazy key. */
+    date: text("date").notNull(),
+    /** The only metadata in V2.2; routeMode/cover/pinned-note land later. */
+    subtitle: text("subtitle"),
+    /** Membership id of the creator (no FK — history outlives roles, PD-9). */
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("days_trip_date").on(t.tripId, t.date)],
+);
+
+/** Named Ideas-pool buckets (D10); `position` is a fractional ordering key (TD-1). */
+export const ideaLists = sqliteTable(
+  "idea_lists",
+  {
+    id: text("id").primaryKey(),
+    tripId: text("trip_id")
+      .notNull()
+      .references(() => trips.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    position: text("position").notNull(),
+    /** Membership id of the creator (no FK — history outlives roles, PD-9). */
+    createdBy: text("created_by").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (t) => [index("idea_lists_trip").on(t.tripId)],
 );
 
 /**

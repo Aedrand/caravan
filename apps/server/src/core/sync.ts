@@ -26,6 +26,8 @@ import {
 import {
   serializeActivity,
   serializeComment,
+  serializeDay,
+  serializeIdeaList,
   serializeMember,
   serializePollWithDetails,
   serializeTrip,
@@ -193,6 +195,20 @@ export function createSyncRoutes({ db, rooms, logger, upgradeWebSocket, email }:
           .where(eq(schema.polls.tripId, trip.id))
           .all();
 
+        // Trip Workspace v2 — days (D2) + idea lists (D10) ride in the snapshot.
+        const dayRows = db
+          .select()
+          .from(schema.days)
+          .where(eq(schema.days.tripId, trip.id))
+          .orderBy(asc(schema.days.date), asc(schema.days.id))
+          .all();
+        const ideaListRows = db
+          .select()
+          .from(schema.ideaLists)
+          .where(eq(schema.ideaLists.tripId, trip.id))
+          .orderBy(asc(schema.ideaLists.position), asc(schema.ideaLists.id))
+          .all();
+
         const snapshot: TripSnapshot = {
           trip: serializeTrip(trip),
           members: memberRows.map((row) => serializeMember(row.member, row.userName)),
@@ -208,6 +224,8 @@ export function createSyncRoutes({ db, rooms, logger, upgradeWebSocket, email }:
               pollVoteRows.filter((v) => v.poll_votes.pollId === poll.id).map((v) => v.poll_votes),
             ),
           ),
+          days: dayRows.map(serializeDay),
+          ideaLists: ideaListRows.map(serializeIdeaList),
         };
         return c.json(snapshot);
       })

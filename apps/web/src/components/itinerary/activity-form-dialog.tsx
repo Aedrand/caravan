@@ -160,6 +160,12 @@ function ActivityForm({
           notes,
           linkUrl: link,
           place,
+          // Trip Workspace v2 typed-item fields — this form creates a plain
+          // `activity`; the typed-item editors land in V2.3.
+          type: "activity",
+          estimatedCostMinor: null,
+          listId: null,
+          checklistItems: null,
         });
       } else if (activity) {
         const patch: MutationPayload<"activity.update">["patch"] = {};

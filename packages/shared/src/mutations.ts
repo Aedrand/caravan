@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { ActivityCategorySchema, PlaceSchema } from "./schemas/activity";
+import {
+  ActivityCategorySchema,
+  ChecklistItemSchema,
+  ItemTypeSchema,
+  PlaceSchema,
+} from "./schemas/activity";
 import { COMMENT_MAX_LENGTH, CommentTargetTypeSchema } from "./schemas/comment";
 import {
   CurrencySchema,
@@ -11,6 +16,7 @@ import {
 } from "./schemas/common";
 import { AmountMinorSchema, ExpenseCategorySchema } from "./schemas/expense";
 import type { EntityPostImage, FeedEvent } from "./schemas/feed";
+import { IDEA_LIST_NAME_MAX } from "./schemas/idea-list";
 import { POLL_OPTION_MAX, POLL_OPTIONS_LIMIT, POLL_QUESTION_MAX } from "./schemas/poll";
 import { InviteRoleSchema } from "./schemas/trip";
 
@@ -32,6 +38,23 @@ const timePairRefinement = {
   check: (val: { startTime?: string | null; endTime?: string | null }) =>
     !val.startTime || !val.endTime || val.startTime <= val.endTime,
   message: "endTime must not be before startTime",
+};
+
+/**
+ * D1 typed-item refinements on `activity.create` (Trip Workspace v2):
+ * - checklist items may only ride on a `checklist`-type item; and
+ * - `flight`/`lodging` creates are guarded until V2.4 lands booking columns +
+ *   the booking form. The `type` enum already includes them for forward-compat;
+ *   this guard just prevents orphan booking rows in the interim.
+ */
+const checklistOnlyRefinement = {
+  check: (val: { type: string; checklistItems: unknown }) =>
+    val.checklistItems === null || val.type === "checklist",
+  message: "checklistItems are only allowed on a checklist item",
+};
+const bookingGuardRefinement = {
+  check: (val: { type: string }) => val.type !== "flight" && val.type !== "lodging",
+  message: "flight and lodging items arrive in V2.4",
 };
 
 /**
@@ -141,10 +164,21 @@ export const mutationPayloads = {
       notes: z.string().max(5000).default(""),
       linkUrl: LinkUrlSchema.nullable().default(null),
       place: PlaceSchema.nullable().default(null),
+      // D1 typed items (Trip Workspace v2). Defaults preserve pre-v2 clients:
+      // a create with none of these is a plain dated `activity`.
+      type: ItemTypeSchema.default("activity"),
+      estimatedCostMinor: z.number().int().nonnegative().nullable().default(null),
+      listId: IdSchema.nullable().default(null),
+      checklistItems: z.array(ChecklistItemSchema).nullable().default(null),
     })
-    .refine(timePairRefinement.check, { message: timePairRefinement.message }),
+    .refine(timePairRefinement.check, { message: timePairRefinement.message })
+    .refine(checklistOnlyRefinement.check, { message: checklistOnlyRefinement.message })
+    .refine(bookingGuardRefinement.check, { message: bookingGuardRefinement.message }),
   "activity.update": z.strictObject({
     activityId: IdSchema,
+    // `type` is intentionally absent — the discriminator is immutable after
+    // create (changing a stop into a note mid-life is ill-defined about which
+    // fields to clear; delete + recreate instead).
     patch: z
       .strictObject({
         title: z.string().trim().min(1).max(200).optional(),
@@ -154,6 +188,9 @@ export const mutationPayloads = {
         notes: z.string().max(5000).optional(),
         linkUrl: LinkUrlSchema.nullable().optional(),
         place: PlaceSchema.nullable().optional(),
+        estimatedCostMinor: z.number().int().nonnegative().nullable().optional(),
+        listId: IdSchema.nullable().optional(),
+        checklistItems: z.array(ChecklistItemSchema).nullable().optional(),
       })
       .refine((p) => Object.keys(p).length > 0, { message: "empty patch" }),
   }),
@@ -163,6 +200,49 @@ export const mutationPayloads = {
     position: PositionSchema,
   }),
   "activity.delete": z.strictObject({ activityId: IdSchema }),
+
+  // --- Trip Workspace v2: typed items, days, idea lists --------------------
+
+  /**
+   * Check/uncheck ONE checklist entry by id (D1). A dedicated per-item toggle —
+   * not a whole-array `activity.update` — so concurrent toggles of different
+   * items converge in the transaction instead of clobbering. Structural edits
+   * (add/rename/remove/reorder) go through `activity.update`'s array replace.
+   */
+  "checklist.toggle": z.strictObject({
+    activityId: IdSchema,
+    itemId: IdSchema,
+    done: z.boolean(),
+  }),
+
+  /**
+   * Lazy find-or-create a day's metadata by `(tripId, date)` (D2). One mutation
+   * expresses "set this day's subtitle whether or not a row exists yet"; the
+   * unique `(tripId, date)` index resolves the create race (a second concurrent
+   * create falls through to an update). `dayId` is used only on the create path.
+   */
+  "day.upsert": z.strictObject({
+    dayId: IdSchema,
+    date: IsoDateSchema,
+    subtitle: z.string().max(120).nullable(),
+  }),
+
+  /**
+   * Idea lists (D10). `reorder` is its own seam (mirroring `activity.move`) so
+   * the fractional-index ordering conflict stays isolated. `delete` unassigns
+   * member ideas via the `ON DELETE SET NULL` FK — they survive as "Unlisted".
+   */
+  "ideaList.create": z.strictObject({
+    listId: IdSchema,
+    name: z.string().trim().min(1).max(IDEA_LIST_NAME_MAX),
+    position: PositionSchema,
+  }),
+  "ideaList.update": z.strictObject({
+    listId: IdSchema,
+    name: z.string().trim().min(1).max(IDEA_LIST_NAME_MAX),
+  }),
+  "ideaList.reorder": z.strictObject({ listId: IdSchema, position: PositionSchema }),
+  "ideaList.delete": z.strictObject({ listId: IdSchema }),
 
   // --- Track A: group decisions (votes / comments / polls) -----------------
 
@@ -311,6 +391,14 @@ export interface FeedPayloadMap {
   "activity.update": { title: string; fields: string[] };
   "activity.move": { title: string; fromDate: string | null; toDate: string | null };
   "activity.delete": { title: string; date: string | null };
+
+  // --- Trip Workspace v2 -----------------------------------------------------
+  "checklist.toggle": { title: string; item: string; done: boolean };
+  "day.upsert": { date: string; fields: string[] };
+  "ideaList.create": { name: string };
+  "ideaList.update": { name: string };
+  "ideaList.reorder": { name: string };
+  "ideaList.delete": { name: string };
 
   // --- Track A ---------------------------------------------------------------
   /** `on` distinguishes the cast vs. the retraction in the feed verb. */

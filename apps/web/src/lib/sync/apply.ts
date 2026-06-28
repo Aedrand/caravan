@@ -2,8 +2,10 @@ import type {
   Activity,
   ActivityVote,
   Comment,
+  Day,
   EntityPostImage,
   FeedEvent,
+  IdeaList,
   Mutation,
   Place,
   PollWithDetails,
@@ -133,6 +135,27 @@ export function applyEvent(
       const activities = applyPollConversion(snap.activities, poll, event);
       return { ...snap, trip, polls, activities };
     }
+    // Trip Workspace v2 — days (D2) + idea lists (D10). A `day` post-image
+    // upserts into the days cache (day.upsert never deletes). An `ideaList`
+    // delete (null image) drops the list AND nulls `listId` on its held ideas,
+    // mirroring the DB-side ON DELETE SET NULL cascade.
+    case "day": {
+      const trip = { ...snap.trip, version: event.version };
+      const days = entity ? upsertById(snap.days, entity as Day) : snap.days;
+      return { ...snap, trip, days };
+    }
+    case "ideaList": {
+      const trip = { ...snap.trip, version: event.version };
+      if (!entity) {
+        const ideaLists = snap.ideaLists.filter((l) => l.id !== event.entityId);
+        const activities = snap.activities.map((a) =>
+          a.listId === event.entityId ? { ...a, listId: null } : a,
+        );
+        return { ...snap, trip, ideaLists, activities };
+      }
+      const ideaLists = upsertById(snap.ideaLists, entity as IdeaList);
+      return { ...snap, trip, ideaLists };
+    }
   }
 }
 
@@ -169,6 +192,10 @@ function applyPollConversion(
     category: "other",
     notes: `From poll: ${poll.question}`.slice(0, 5000),
     linkUrl: null,
+    type: "activity",
+    estimatedCostMinor: null,
+    listId: null,
+    checklistItems: null,
     createdBy: event.actorMemberId ?? "",
     createdAt: event.createdAt,
     updatedAt: event.createdAt,
@@ -216,6 +243,10 @@ export function applyMutationOptimistic(
         category: p.category,
         notes: p.notes,
         linkUrl: p.linkUrl,
+        type: p.type,
+        estimatedCostMinor: p.estimatedCostMinor,
+        listId: p.listId,
+        checklistItems: p.checklistItems,
         createdBy: ctx.memberId,
         createdAt: ctx.now,
         updatedAt: ctx.now,
@@ -244,6 +275,79 @@ export function applyMutationOptimistic(
     case "activity.delete": {
       const activities = snap.activities.filter((a) => a.id !== mutation.payload.activityId);
       return activities.length === snap.activities.length ? snap : { ...snap, activities };
+    }
+    // --- Trip Workspace v2: typed items / days / idea lists ----------------
+    case "checklist.toggle": {
+      const { activityId, itemId, done } = mutation.payload;
+      return updateActivity(snap, activityId, (activity) => ({
+        ...activity,
+        checklistItems:
+          activity.checklistItems?.map((it) => (it.id === itemId ? { ...it, done } : it)) ?? null,
+        updatedAt: ctx.now,
+      }));
+    }
+    case "day.upsert": {
+      const { dayId, date, subtitle } = mutation.payload;
+      // Find-or-create by date, mirroring the server's lazy upsert.
+      const existing = snap.days.find((d) => d.date === date);
+      if (existing) {
+        return {
+          ...snap,
+          days: snap.days.map((d) =>
+            d.id === existing.id ? { ...d, subtitle, updatedAt: ctx.now } : d,
+          ),
+        };
+      }
+      const day: Day = {
+        id: dayId,
+        tripId: snap.trip.id,
+        date,
+        subtitle,
+        createdBy: ctx.memberId,
+        createdAt: ctx.now,
+        updatedAt: ctx.now,
+      };
+      return { ...snap, days: [...snap.days, day] };
+    }
+    case "ideaList.create": {
+      const p = mutation.payload;
+      const list: IdeaList = {
+        id: p.listId,
+        tripId: snap.trip.id,
+        name: p.name,
+        position: p.position,
+        createdBy: ctx.memberId,
+        createdAt: ctx.now,
+        updatedAt: ctx.now,
+      };
+      return { ...snap, ideaLists: [...snap.ideaLists, list] };
+    }
+    case "ideaList.update": {
+      const { listId, name } = mutation.payload;
+      return {
+        ...snap,
+        ideaLists: snap.ideaLists.map((l) =>
+          l.id === listId ? { ...l, name, updatedAt: ctx.now } : l,
+        ),
+      };
+    }
+    case "ideaList.reorder": {
+      const { listId, position } = mutation.payload;
+      return {
+        ...snap,
+        ideaLists: snap.ideaLists.map((l) =>
+          l.id === listId ? { ...l, position, updatedAt: ctx.now } : l,
+        ),
+      };
+    }
+    case "ideaList.delete": {
+      const { listId } = mutation.payload;
+      // Drop the list and unassign its ideas locally (DB does ON DELETE SET NULL).
+      return {
+        ...snap,
+        ideaLists: snap.ideaLists.filter((l) => l.id !== listId),
+        activities: snap.activities.map((a) => (a.listId === listId ? { ...a, listId: null } : a)),
+      };
     }
     case "trip.update":
       return {
