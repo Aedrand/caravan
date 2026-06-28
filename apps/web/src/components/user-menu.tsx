@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "@tanstack/react-router";
-import { LogOut, ShieldCheck } from "lucide-react";
+import { LogOut, Settings, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { authClient } from "@/lib/auth-client";
@@ -45,6 +45,17 @@ export function UserMenu() {
         </span>
         <span className="hidden sm:inline">{name}</span>
       </span>
+      <Button
+        asChild
+        variant="ghost"
+        size="sm"
+        className="text-muted-foreground hover:text-foreground"
+      >
+        <Link to="/settings">
+          <Settings aria-hidden />
+          <span className="hidden sm:inline">Settings</span>
+        </Link>
+      </Button>
       {isAdmin && (
         <Button
           asChild
