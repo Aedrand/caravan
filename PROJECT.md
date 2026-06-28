@@ -12,28 +12,24 @@ One core addition distinguishes this version: **free and open source, hostable b
 
 ## The problem
 
-Group trip planning is fragmented across a group chat, a shared doc, a map app, and a Splitwise. Existing products each solve a slice:
+Group trip planning is fragmented across a group chat, a shared doc, a map app, and an expense-splitting app. Existing tools each solve a slice:
 
-- **Trip trackers** (TripIt, Google Trips) consolidate reservations but treat collaboration as an afterthought — sharing is read-only, no group decision-making, no meaningful AI.
-- **Collaborative itinerary builders** (Wanderlog, Plan Harmony) get closest — shared editing, voting, expense splitting — but have weak asynchronous coordination, shallow AI gated behind paywalls, and no way to bring your own AI assistant.
-- **Group polling apps** (Troupe, MiTravel) nail the "where should we go" consensus phase, then stop — no itinerary construction, no in-trip support.
+- **Trip trackers** consolidate reservations and confirmation emails, but collaboration is read-only — they're built for one person tracking a trip, not a group deciding one.
+- **Collaborative itinerary builders** come closest — shared editing, voting, expense splitting — but asynchronous coordination is thin, the richer AI tends to sit behind paid tiers, and there's no way to bring your own AI assistant.
+- **Group polling tools** handle the early "where should we go" vote well, then stop — no itinerary construction, no in-trip support.
 
-**The whitespace:** no product combines (a) real-time collaborative itinerary editing, (b) structured group decision workflows — voting, polls, comments, (c) deep AI augmentation at the itinerary level, (d) user-supplied personal AI assistants, and (e) solid expense/split tracking, in one coherent product. ~~And nothing in this space is self-hostable or open source.~~
+**The whitespace:** no single product combines (a) real-time collaborative itinerary editing, (b) structured group decision workflows — voting, polls, comments, (c) deep AI augmentation at the itinerary level, (d) user-supplied personal AI assistants, and (e) solid expense/split tracking, in one coherent product.
 
-> **Competitive correction (research, 2026-06-10):** the struck claim no longer holds — **TREK** (AGPL-3.0, Node+SQLite, ~5.6k★) is a self-hostable FOSS group planner with real-time co-editing, polls, and expense splits. The niche is occupied, not empty. Verified in `docs/research/raw/fact-check.md`.
+> **Positioning (owner, 2026-06-11): differentiate, don't claim a first.** A self-hostable, open-source group planner with real-time co-editing, polls, and expense splits already exists — so Caravan's basis is *differentiation*, not being first to the niche. Where Caravan deliberately diverges from the existing options:
 >
-> **Positioning decision (owner, 2026-06-11): proceed & differentiate.** Where the products actually diverge (TREK's README + fact-check):
+> - **Group *deciding* is the core loop**, not an add-on pack: ideas pool → visible voting → poll-to-activity conversion → comments-as-reasons.
+> - **No in-app group chat** — async catch-up is an attributed feed, "N changes since you looked," and a digest (the still-open gap), rather than duplicating the chat the group already has.
+> - **Presence is core** from M1: avatars, editing hints.
+> - **Settlement-complete money**: payments, minimum-transaction who-owes-whom, ghost members.
+> - **Two AI surfaces, both optional**: a House AI (NL edits, attribution, budgets) **and** bring-your-own MCP, plus the AI-trust UX (per-trip write opt-in, badges).
+> - **Deliberately few concepts** and warm consumer design for the least-technical friend, rather than power-user breadth.
 >
-> | | TREK | Caravan |
-> |---|---|---|
-> | Spine | Feature-maximal planner; collaboration is an addon pack (chat, notes, polls, check-ins) | Group *deciding* is the core loop: ideas pool → visible voting → poll→activity conversion → comments-as-reasons |
-> | Async catch-up | Group chat (duplicates the chat the group already has) | No chat — attributed feed, "N changes since you looked," digest: the still-open market gap |
-> | Presence | Not mentioned | Core from M1: avatars, editing hints |
-> | Money | Splits + charts; no settlement/payments found | Settlement-complete: payments, min-transaction who-owes-whom, ghosts |
-> | AI | MCP-only (no in-app assistant) | House AI (NL edits, attribution, budgets) **and** BYO MCP, independently optional, plus the AI-trust UX (per-trip write opt-in, badges, "Sam's assistant") |
-> | Posture | Power-user breadth: 8 addons, weather/packing/documents/journal, 15 languages | Deliberately few concepts, opinionated flows, warm consumer design for the least-technical friend |
->
-> TREK is the Jira of the niche; Caravan aims to be the Linear. Clean-room discipline applies (TREK is AGPL — no code reference).
+> Clean-room discipline applies: no reference to any other project's code.
 
 ## Who it's for
 

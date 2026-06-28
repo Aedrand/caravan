@@ -4,6 +4,8 @@
 **Date:** 2026-06-10  
 **Scope:** Claims from self-host-prior-art.md, ai-mcp.md, maps-places.md, app-stack.md
 
+> _Note (2026-06-28): names of external/competitor projects have been redacted from this internal research record — they appear below as "Competitor A/B". Repo handles and demo URLs were removed too; generic attributes (license, stack, star counts) are kept._
+
 ---
 
 ## Summary
@@ -16,55 +18,55 @@
 
 ## Verified Claims
 
-- **Claim:** github.com/mauriceboe/TREK exists as a self-hosted travel planner
+- **Claim:** github.com/redacted/Competitor A exists as a self-hosted travel planner
   - Original source: self-host-prior-art.md
-  - Verification source(s): https://github.com/mauriceboe/TREK (direct); https://trendshift.io/repositories/24392
+  - Verification source(s): https://github.com/redacted/Competitor A (direct); https://trendshift.io/repositories/24392
   - Status: VERIFIED
   - Notes: Repository confirmed active, AGPL-3.0, TypeScript codebase.
 
-- **Claim:** TREK has ~5.6k stars
+- **Claim:** Competitor A has ~5.6k stars
   - Original source: self-host-prior-art.md
-  - Verification source(s): https://github.com/mauriceboe/TREK (direct); trendshift.io stats
+  - Verification source(s): https://github.com/redacted/Competitor A (direct); trendshift.io stats
   - Status: VERIFIED
   - Notes: Multiple independent signals agree on 5.6k.
 
-- **Claim:** TREK is licensed AGPL-3.0
+- **Claim:** Competitor A is licensed AGPL-3.0
   - Original source: self-host-prior-art.md
-  - Verification source(s): https://github.com/mauriceboe/TREK
+  - Verification source(s): https://github.com/redacted/Competitor A
   - Status: VERIFIED
 
-- **Claim:** TREK v3.0.22 released 2026-05-24
+- **Claim:** Competitor A v3.0.22 released 2026-05-24
   - Original source: self-host-prior-art.md
-  - Verification source(s): https://github.com/mauriceboe/TREK/releases
+  - Verification source(s): https://github.com/redacted/Competitor A/releases
   - Status: VERIFIED
   - Notes: v3.0.22 release notes confirm "Bug Fixes & Improvements" on May 24, 2026.
 
-- **Claim:** TREK stack is Node.js 22 / Express / SQLite / React 18 / Vite / TypeScript / Tailwind / Leaflet
+- **Claim:** Competitor A stack is Node.js 22 / Express / SQLite / React 18 / Vite / TypeScript / Tailwind / Leaflet
   - Original source: self-host-prior-art.md
-  - Verification source(s): https://github.com/mauriceboe/TREK/blob/main/README.md; search results corroborate Leaflet/Mapbox GL, JWT/OIDC/TOTP, Open-Meteo
+  - Verification source(s): https://github.com/redacted/Competitor A/blob/main/README.md; search results corroborate Leaflet/Mapbox GL, JWT/OIDC/TOTP, Open-Meteo
   - Status: VERIFIED
   - Notes: Also uses Mapbox GL as alternative to Leaflet; README confirms TypeScript at 99.5%.
 
-- **Claim:** TREK pending awesome-selfhosted listing (issue #2361 on awesome-selfhosted-data)
+- **Claim:** Competitor A pending awesome-selfhosted listing (issue #2361 on awesome-selfhosted-data)
   - Original source: self-host-prior-art.md
   - Verification source(s): https://github.com/awesome-selfhosted/awesome-selfhosted-data/issues/2361
   - Status: VERIFIED
-  - Notes: Issue confirmed open as of search date, title "Add TREK", opened 2026-04-21.
+  - Notes: Issue confirmed open as of search date, title "Add Competitor A", opened 2026-04-21.
 
-- **Claim:** AdventureLog github.com/seanmorley15/AdventureLog exists with ~3.3k stars, GPL-3.0, Django+PostGIS+SvelteKit+MapLibre
+- **Claim:** Competitor B github.com/redacted/Competitor B exists with ~3.3k stars, GPL-3.0, Django+PostGIS+SvelteKit+MapLibre
   - Original source: self-host-prior-art.md
-  - Verification source(s): https://github.com/seanmorley15/AdventureLog
+  - Verification source(s): https://github.com/redacted/Competitor B
   - Status: VERIFIED
 
-- **Claim:** AdventureLog v0.12.1 released 2026-05-25
+- **Claim:** Competitor B v0.12.1 released 2026-05-25
   - Original source: self-host-prior-art.md
-  - Verification source(s): https://github.com/seanmorley15/AdventureLog/releases/tag/v0.12.1; https://adventurelog.app/docs/changelogs/v0-12-0.html (v0.12.0 dated 2026-02-03); newreleases.io showing "3 months ago" for v0.12.0
+  - Verification source(s): https://github.com/redacted/Competitor B/releases/tag/v0.12.1; https://competitor-b.app/docs/changelogs/v0-12-0.html (v0.12.0 dated 2026-02-03); newreleases.io showing "3 months ago" for v0.12.0
   - Status: VERIFIED
   - Notes: The GitHub release page shows "May 25 17:03" without an explicit year, but the v0.12.0 changelog confirms "Released 02-03-2026," making the May 2026 date for v0.12.1 consistent. An earlier WebFetch attempt hallucinated "May 25, 2024" — this is wrong; primary source evidence points to 2026.
 
-- **Claim:** AdventureLog collaboration model is link/user sharing, NOT real-time co-editing; no expense splitting; no group polls
+- **Claim:** Competitor B collaboration model is link/user sharing, NOT real-time co-editing; no expense splitting; no group polls
   - Original source: self-host-prior-art.md
-  - Verification source(s): https://github.com/seanmorley15/AdventureLog (README and release notes); v0.12.0 changelog (budgeting tools added are per-trip cost fields, not settlement splitting)
+  - Verification source(s): https://github.com/redacted/Competitor B (README and release notes); v0.12.0 changelog (budgeting tools added are per-trip cost fields, not settlement splitting)
   - Status: VERIFIED
   - Notes: v0.12.0 added trip budgets with cost fields for locations/transportation/lodging, but these are cost-tracking inputs, not group expense splitting with settlement. No polls feature found. Collaboration is sharing-based (edit access on collections).
 
@@ -110,13 +112,13 @@
   - Status: PARTIALLY VERIFIED
   - Notes: The claim is substantively correct. Wording correction: the "2026-07-28 RC" refers to a spec whose final version will be published on that date; the RC was locked 2026-05-21. Current stable is confirmed 2025-11-25.
 
-- **Claim:** TREK has real-time collaborative group features including simultaneous co-editing, group voting/polls, expense SPLITTING with settlement between members
+- **Claim:** Competitor A has real-time collaborative group features including simultaneous co-editing, group voting/polls, expense SPLITTING with settlement between members
   - Original source: self-host-prior-art.md
-  - What's verified: TREK has WebSocket real-time sync (changes propagate live across connected users), multi-user trips with RBAC, group chat, shared notes, polls (listed as a feature in the Collab addon), day check-ins, and per-person/per-day expense splits with multi-currency.
+  - What's verified: Competitor A has WebSocket real-time sync (changes propagate live across connected users), multi-user trips with RBAC, group chat, shared notes, polls (listed as a feature in the Collab addon), day check-ins, and per-person/per-day expense splits with multi-currency.
   - What's uncertain: Whether "expense splitting" includes automated settlement calculation between members (e.g., "A owes B $12"). The README lists "per-person / per-day splits" under the Budget addon, which implies splits are tracked, but whether debt/settlement flows are implemented is not confirmed from README alone.
-  - Verification source(s): https://github.com/mauriceboe/TREK/blob/main/README.md
+  - Verification source(s): https://github.com/redacted/Competitor A/blob/main/README.md
   - Status: PARTIALLY VERIFIED
-  - Notes: The research's characterization of TREK as "individual-planner-with-sharing, not group-coordination-first" is MATERIALLY WRONG — see Contradicted Claims below.
+  - Notes: The research's characterization of Competitor A as "individual-planner-with-sharing, not group-coordination-first" is MATERIALLY WRONG — see Contradicted Claims below.
 
 - **Claim:** Photon public instance (photon.komoot.io) permits typeahead autocomplete, no API key, fair-use throttling only
   - Original source: maps-places.md
@@ -138,11 +140,11 @@
 
 ## Contradicted Claims
 
-- **Claim:** TREK is best characterized as "individual-planner-with-sharing, not group-coordination-first"
+- **Claim:** Competitor A is best characterized as "individual-planner-with-sharing, not group-coordination-first"
   - Original source: self-host-prior-art.md
-  - Contradicting evidence: TREK's README and feature set describe real-time collaborative planning as its core differentiator. The project's GitHub description is "A self-hosted travel/trip planner with **real-time collaboration**..." The Collab addon includes group chat, shared notes, polls, and day check-ins. Expense tracking includes per-person splits. WebSocket sync means all connected users see changes simultaneously.
-  - Contradicting source(s): https://github.com/mauriceboe/TREK (repo description); https://github.com/mauriceboe/TREK/blob/main/README.md
-  - Likely correct version: TREK is a group-coordination-first planner with real-time collaborative features including simultaneous editing, polls, group chat, and expense splits. The key gap versus Caravan's vision is that TREK's group coordination is trip-centric and media-rich (journaling, photos, reservations), while Caravan may differentiate on expense settlement flows (debt calculation/resolution between members), democratic destination voting with weighting, or asymmetric participant roles. Settlement automation is unconfirmed in TREK and should be verified via demo.
+  - Contradicting evidence: Competitor A's README and feature set describe real-time collaborative planning as its core differentiator. The project's GitHub description is "A self-hosted travel/trip planner with **real-time collaboration**..." The Collab addon includes group chat, shared notes, polls, and day check-ins. Expense tracking includes per-person splits. WebSocket sync means all connected users see changes simultaneously.
+  - Contradicting source(s): https://github.com/redacted/Competitor A (repo description); https://github.com/redacted/Competitor A/blob/main/README.md
+  - Likely correct version: Competitor A is a group-coordination-first planner with real-time collaborative features including simultaneous editing, polls, group chat, and expense splits. The key gap versus Caravan's vision is that Competitor A's group coordination is trip-centric and media-rich (journaling, photos, reservations), while Caravan may differentiate on expense settlement flows (debt calculation/resolution between members), democratic destination voting with weighting, or asymmetric participant roles. Settlement automation is unconfirmed in Competitor A and should be verified via demo.
   - Status: CONTRADICTED
   - Notes: This is a high-impact error for product positioning. If the research uses "not group-coordination-first" as evidence that the niche is unoccupied, that conclusion is wrong.
 
@@ -174,17 +176,17 @@
 
 ## Unverifiable Claims
 
-- **Claim:** TREK features include "route optimization" and "AI/MCP integration"
+- **Claim:** Competitor A features include "route optimization" and "AI/MCP integration"
   - Why unverifiable: The README confirms many features, and v3.0.22 release notes mention "MCP fixes" confirming MCP integration exists. However, "route optimization" as a distinct feature (vs. route visualization) could not be independently confirmed from available README content alone.
   - Risk level: LOW — does not affect Caravan's positioning decision
-  - Recommendation: Include with caveat; verify against TREK's live demo at https://demo-nomad.pakulat.org if needed.
+  - Recommendation: Include with caveat; verify against Competitor A's live demo at https://[demo URL redacted] if needed.
 
 ---
 
 ## Source Quality Assessment
 
-- https://github.com/mauriceboe/TREK: Tier 1 — Primary source (the repo itself); directly verifiable attributes
-- https://github.com/seanmorley15/AdventureLog: Tier 1 — Primary source
+- https://github.com/redacted/Competitor A: Tier 1 — Primary source (the repo itself); directly verifiable attributes
+- https://github.com/redacted/Competitor B: Tier 1 — Primary source
 - https://claude.com/docs/connectors/building/authentication: Tier 1 — Official Anthropic documentation
 - https://platform.claude.com/docs/en/api/openai-sdk: Tier 1 — Official Anthropic documentation
 - https://github.com/anthropics/claude-ai-mcp/issues/112: Tier 1 — Primary source (official Anthropic repo issue tracker)
@@ -195,7 +197,7 @@
 - https://openfreemap.org: Tier 1 — Official project site
 - https://photon.komoot.io: Tier 1 — Official project site
 - https://github.com/vercel/ai/blob/main/LICENSE: Tier 1 — Primary source (license file in official repo)
-- https://adventurelog.app/docs/changelogs/v0-12-0.html: Tier 1 — Official project changelog
+- https://competitor-b.app/docs/changelogs/v0-12-0.html: Tier 1 — Official project changelog
 - https://github.com/awesome-selfhosted/awesome-selfhosted-data/issues/2361: Tier 1 — Primary source
 - https://docs.mealie.io/documentation/getting-started/installation/sqlite/: Tier 1 — Official project docs
 - https://community.vikunja.io/t/first-setup-with-unified-container-sqlite/2162: Tier 3 — Community forum (supported by official docs)
@@ -207,7 +209,7 @@
 
 ## Corrections Required in Research Files
 
-1. **self-host-prior-art.md — CRITICAL:** Remove or substantially revise the characterization of TREK as "individual-planner-with-sharing, not group-coordination-first." TREK explicitly markets itself as a real-time collaborative group planner and includes polls, group chat, per-person expense splits, and simultaneous WebSocket-synced editing. Any product positioning argument that relies on TREK being weak on group coordination is not supported by the evidence. Caravan's differentiation must be argued on different grounds (e.g., settlement flows, democratic decision-making with weighting, mobile-first UX, or simplicity).
+1. **self-host-prior-art.md — CRITICAL:** Remove or substantially revise the characterization of Competitor A as "individual-planner-with-sharing, not group-coordination-first." Competitor A explicitly markets itself as a real-time collaborative group planner and includes polls, group chat, per-person expense splits, and simultaneous WebSocket-synced editing. Any product positioning argument that relies on Competitor A being weak on group coordination is not supported by the evidence. Caravan's differentiation must be argued on different grounds (e.g., settlement flows, democratic decision-making with weighting, mobile-first UX, or simplicity).
 
 2. **app-stack.md — LICENSE ERROR:** Correct the Vercel AI SDK license from MIT to **Apache 2.0**. The npm package `ai` and the GitHub repository https://github.com/vercel/ai are Apache 2.0 licensed, not MIT.
 
@@ -217,4 +219,4 @@
 
 5. **app-stack.md — GRIST SQLITE CLARIFICATION:** Grist uses SQLite as its native document format (each document is a .grist SQLite file; home metadata is home.sqlite3), which is accurate but architecturally distinct from Mealie/Vikunja/Actual Budget where SQLite is the application database. The claim is not wrong, but should be clarified to avoid implying Grist uses SQLite the same way.
 
-6. **self-host-prior-art.md — TREK SETTLEMENT FLOWS:** Whether TREK calculates and presents net settlement debts between members (e.g., "Alex owes Jordan $23.50") is unconfirmed from the README alone. The README confirms per-person split tracking, not settlement resolution. Verify against live demo before using this as a differentiator.
+6. **self-host-prior-art.md — Competitor A SETTLEMENT FLOWS:** Whether Competitor A calculates and presents net settlement debts between members (e.g., "Alex owes Jordan $23.50") is unconfirmed from the README alone. The README confirms per-person split tracking, not settlement resolution. Verify against live demo before using this as a differentiator.

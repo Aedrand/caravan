@@ -215,7 +215,7 @@
   - Date: 2026
   - Type: editorial + official
 
-- **Finding:** Atlassian pragmatic-drag-and-drop is institutionally backed (Jira/Trello use it); no React dependency; better for Jira-scale performance; steeper setup; migration path from react-beautiful-dnd exists.
+- **Finding:** Atlassian pragmatic-drag-and-drop is institutionally backed (used in large-scale production apps); no React dependency; better for large-scale performance; steeper setup; migration path from react-beautiful-dnd exists.
   - Source: https://www.pkgpulse.com/guides/dnd-kit-vs-react-beautiful-dnd-vs-pragmatic-drag-drop-2026
   - Date: 2026
   - Type: comparison blog

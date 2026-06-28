@@ -7,7 +7,7 @@ Produced by a gap-analysis review agent over the full doc set (vision docs, deci
 | # | Finding | Disposition |
 |---|---|---|
 | 1 | Vercel AI SDK license stated as MIT in `ai-mcp.md` (TL;DR, §A1, §A5); actually **Apache-2.0**. TD-6 was already corrected; raw file contradicted it. | ✅ Fixed — errata banner on `ai-mcp.md`; TD-6 states Apache-2.0 |
-| 2 | TREK mischaracterized in `self-host-prior-art.md` ("individual-planner-with-sharing"); fact-check refuted — it is group-coordination-first with real-time co-editing, polls, expense splits. "Open niche" conclusion fails; PROJECT.md whitespace claim needs amending; differentiation decision needed. | ✅ Fixed — errata banner on `self-host-prior-art.md`; brief + plan §8/§10 corrected; PROJECT.md/product-brief.md amended with competitive-correction notes; decision flagged as plan §10 item 1 |
+| 2 | Competitor A mischaracterized in `self-host-prior-art.md` ("individual-planner-with-sharing"); fact-check refuted — it is group-coordination-first with real-time co-editing, polls, expense splits. "Open niche" conclusion fails; PROJECT.md whitespace claim needs amending; differentiation decision needed. | ✅ Fixed — errata banner on `self-host-prior-art.md`; brief + plan §8/§10 corrected; PROJECT.md/product-brief.md amended with competitive-correction notes; decision flagged as plan §10 item 1 |
 | 3 | MCP "2026-07-28 RC" wording imprecise (that's the target *final publication* date; RC locked 2026-05-21). | ✅ Fixed — TD-7 + ai-mcp.md errata |
 
 ## Important
@@ -32,4 +32,4 @@ Produced by a gap-analysis review agent over the full doc set (vision docs, deci
 
 ## Questions only the owner can answer
 
-Identical to plan.md §10 (TREK stance, TD-1/TD-7/TD-8 ratification, vote-culture fit, v1.0 boundary, name, repo hosting).
+Identical to plan.md §10 (Competitor A stance, TD-1/TD-7/TD-8 ratification, vote-culture fit, v1.0 boundary, name, repo hosting).

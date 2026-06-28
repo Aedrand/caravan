@@ -28,7 +28,7 @@ Repo hygiene scan done (no secrets/DB/env tracked; `.gitignore` hardened for age
 
 The persistent dev DB (`apps/server/data/caravan.db`, Test Admin = `test@testing.com`, role admin) has two trips:
 - **Dolomites 2026** — small itinerary (Rome/Florence/Paris pins) used for map verification.
-- **Japan 2026** (`7a196dfbceb3982dbbf6bfc39e06a9d2`) — **55 activities across Oct 1–11 2026**, imported from the owner's "Japan 2025 – Wanderlog" PDF (shifted onto the 2026 trip; day 1→Oct 1). Categories/times/notes carried over. **Places are text-only (unplotted) — geocoding is the next task.**
+- **Japan 2026** (`7a196dfbceb3982dbbf6bfc39e06a9d2`) — **55 activities across Oct 1–11 2026**, imported from the owner's "Japan 2025" trip-export PDF (shifted onto the 2026 trip; day 1→Oct 1). Categories/times/notes carried over. **Places are text-only (unplotted) — geocoding is the next task.**
 
 > The import was a one-off script (`apps/server/src/scripts/import-japan.ts`, since deleted) modeled on `seed.ts` — it used `executeMutation` so versioning + feed events are correct. If you need to re-import or geocode, follow the same pipeline (don't hand-write the DB while the dev server holds it open).
 

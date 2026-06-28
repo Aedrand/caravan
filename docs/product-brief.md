@@ -4,7 +4,7 @@ Synthesized 2026-06-10 from the research docs of the prior `travel-planner` proj
 
 ## Problem statement
 
-A web application that serves as a one-stop-shop for groups planning trips together. Unlike solo-focused apps (TripIt) or map-centric tools (Wanderlog), it centers the *group coordination problem*: multiple people simultaneously and asynchronously building a shared itinerary, voting on destinations and activities, splitting expenses, and receiving AI-generated suggestions — all in a single collaborative workspace. It must handle the full trip lifecycle: early brainstorming and voting, mid-planning itinerary construction, and in-trip reference and expense tracking.
+A web application that serves as a one-stop-shop for groups planning trips together. Unlike solo-focused trip trackers or map-centric itinerary tools, it centers the *group coordination problem*: multiple people simultaneously and asynchronously building a shared itinerary, voting on destinations and activities, splitting expenses, and receiving AI-generated suggestions — all in a single collaborative workspace. It must handle the full trip lifecycle: early brainstorming and voting, mid-planning itinerary construction, and in-trip reference and expense tracking.
 
 This version adds a positioning constraint the original lacked: **free, open source, and self-hostable.** Distribution is `git clone` + one command, run by a tech-savvy friend for their circle. There is no business model, which removes the paywall pressure that deforms every commercial competitor's feature set.
 
@@ -12,15 +12,15 @@ This version adds a positioning constraint the original lacked: **free, open sou
 
 The market splits into camps, none satisfying:
 
-| Camp | Examples | Strength | Gap |
-|---|---|---|---|
-| Trip trackers | TripIt, Google Trips | Ingest confirmation emails, consolidate reservations | Collaboration is read-only afterthought; no group decisions; no real AI |
-| Collaborative builders | Wanderlog, Plan Harmony | Shared editing, voting, expense splits, maps | Weak async contribution; shallow AI behind paywall ($40/yr); no BYO AI; no double-booking detection |
-| Group polling | Troupe, MiTravel | Destination/date voting, group chat | Stops after "where should we go" — no itinerary, no expenses |
+| Camp | Strength | Gap |
+|---|---|---|
+| Trip trackers | Ingest confirmation emails, consolidate reservations | Collaboration is read-only; built for one tracker, not a group deciding; no real AI |
+| Collaborative builders | Shared editing, voting, expense splits, maps | Thin async contribution; richer AI behind paid tiers; no BYO AI; no double-booking detection |
+| Group polling | Destination/date voting | Stops after "where should we go" — no itinerary, no expenses |
 
-**Whitespace:** no product combines real-time collaborative itinerary editing, structured group decision workflows (voting/polls/comments), deep itinerary-level AI, user-supplied personal AI assistants, and solid expense tracking. ~~Nothing in the space is self-hostable.~~ *(Correction 2026-06-10: TREK — a self-hostable FOSS group planner with real-time collaboration, polls, and expense splits — has since emerged; see `research/raw/fact-check.md`. Differentiation, not first-mover, is the positioning basis.)*
+**Whitespace:** no product combines real-time collaborative itinerary editing, structured group decision workflows (voting/polls/comments), deep itinerary-level AI, user-supplied personal AI assistants, and solid expense tracking. *(Correction 2026-06-10: a self-hostable FOSS group planner with real-time collaboration, polls, and expense splits does exist — so differentiation, not first-mover, is the positioning basis.)*
 
-A recurring gap across *all* competitors: **asynchronous contribution.** Group members rarely plan at the same time. Surfacing "Sam added 3 activities to Day 2 while you were offline" — via activity feeds and notifications — is underserved everywhere and should be a strength here.
+A recurring gap across the category: **asynchronous contribution.** Group members rarely plan at the same time. Surfacing "Sam added 3 activities to Day 2 while you were offline" — via activity feeds and notifications — is underserved everywhere and should be a strength here.
 
 ## Feature detail
 
@@ -43,7 +43,7 @@ A recurring gap across *all* competitors: **asynchronous contribution.** Group m
 
 ### Expense tracking
 
-Goal: handle the money side without leaving the app — no Splitwise side-channel, no spreadsheet.
+Goal: handle the money side without leaving the app — no separate expense-splitting app, no spreadsheet.
 
 - Log an expense: amount, description, who paid, category (predefined: food, transport, accommodation, activities, shopping, other), notes; optionally attached to a day or activity.
 - Split among selected members — equal split as the default (covers most real expenses), exact custom amounts as the alternative. Percentage/shares-based splits are a later nicety.
@@ -55,7 +55,7 @@ Goal: handle the money side without leaving the app — no Splitwise side-channe
 
 ### UI & design direction
 
-The product-level lessons from studying Wanderlog, TripIt, and Google Travel:
+The product-level lessons from studying the category:
 
 - **Card-based content** — every activity, expense, poll, comment is a scannable card.
 - **Map-forward split view** as the core workspace layout: itinerary panel alongside a persistent map. Collapses to single-panel with a map toggle/bottom-sheet on mobile.

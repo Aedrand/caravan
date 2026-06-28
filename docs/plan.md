@@ -298,7 +298,7 @@ Instance-level `personal_ai_enabled` setting (admin panel; OFF → token UI hidd
 | Better Auth fit for invite-centric flows | M0/M1 | Membership is our domain code (TD-2); worst case Better Auth handles identity only — already the design |
 | MCP TS SDK v1.x middleware gaps | M9 | Manual `StreamableHTTPServerTransport` wiring is a known fallback; spec pinned to 2025-11-25 with swappable auth (TD-7) |
 | Single-maintainer deps (Hocuspocus avoided; OpenFreeMap, Litestream remain) | Ops | All are optional/swappable layers; pin versions + Renovate |
-| **TREK is a confirmed direct competitor** (fact-check refuted the "open niche" finding: it has real-time group co-editing, polls, expense splits, AGPL, Node+SQLite, ~5.6k ★) | Positioning / motivation | ✅ Decided 2026-06-11: proceed & differentiate (decision-first UX, settlement, house AI + trust UX, design — comparison in PROJECT.md). Whitespace claim amended. Clean-room discipline (TD-8) applies |
+| **A direct FOSS competitor exists** (fact-check refuted the "open niche" finding: a self-hostable group planner with real-time co-editing, polls, and expense splits is already out there) | Positioning / motivation | ✅ Decided 2026-06-11: proceed & differentiate (decision-first UX, settlement, house AI + trust UX, design — comparison in PROJECT.md). Whitespace claim amended. Clean-room discipline (TD-8) applies |
 | LLM provider drift (AI SDK majors, MCP RC) | v1.1+ | AI isolated behind service layer + tool registry; never load-bearing (principle 5) |
 | Scope creep during fan-out | v1.0 date | PD-12 boundary + §9 backlog is the pressure valve |
 | User-data hygiene expectations (account deletion, audit-log retention) | Trust | Self-hosted = data stays home, but tooling is still owed: account deletion + per-user wipe in §9 (flagged as a pull-into-v1.0 candidate); audit-log retention documented |
@@ -311,7 +311,7 @@ Percentage splits · multi-currency · guest (non-account) expense participants 
 
 > **All items resolved 2026-06-11.** Remaining decisions ratified wholesale. **Build: UNDERWAY** (owner go signal 2026-06-11). Repo: [github.com/Aedrand/caravan](https://github.com/Aedrand/caravan), public, AGPL-3.0.
 
-1. **Positioning vs TREK** — ✅ **RESOLVED (owner, 2026-06-11): proceed & differentiate** — group-decision-first, settlement-complete, design-led, house AI + AI-trust UX. Comparison table recorded in PROJECT.md.
+1. **Competitive positioning** — ✅ **RESOLVED (owner, 2026-06-11): proceed & differentiate** — group-decision-first, settlement-complete, design-led, house AI + AI-trust UX. Comparison recorded in PROJECT.md.
 2. **TD-1** — ✅ RESOLVED (owner, 2026-06-11): server-authoritative sync ACCEPTED.
 3. **TD-7** — ✅ RESOLVED (owner, 2026-06-11): OAuth 2.1 ships **with** v1.3 alongside PATs (proposed staging overridden; former v1.4 folded into M9).
 4. **TD-8** — ✅ RESOLVED (owner, 2026-06-11): AGPL-3.0 + DCO ACCEPTED.
