@@ -219,15 +219,16 @@ function MapView({
         type: "geojson",
         data: fcRef.current,
         cluster: true,
-        // Keep pins separate longer on zoom-out so a day's numbered stops (and
-        // its route) stay readable — only merge when markers are essentially
-        // overlapping, not while there's still visible space between them.
-        // Radius 48→30 (~one pin diameter, so two pins cluster only when nearly
-        // touching) and the cluster cutoff 14→13 so neighborhood/day zooms never
-        // cluster. Regional zoom-out (a whole multi-city trip) still groups, so
-        // viewing everything at once doesn't pile 50 pins on top of each other.
-        clusterRadius: 30,
-        clusterMaxZoom: 13,
+        // Clustering is intentionally minimal: proximity alone should NOT group
+        // pins — a day's numbered stops must stay individual so the sequence/
+        // route reads. Clustering only kicks in at a true zoomed-OUT trip
+        // overview (zoom <= 9, i.e. country/multi-region), and even there only
+        // when markers sit essentially on the same spot. So at city, district,
+        // and day zooms every pin is rendered individually no matter how close,
+        // and the only thing clustering saves is the "whole trip at once" view
+        // where dozens of pins would otherwise stack into an unreadable blob.
+        clusterRadius: 12,
+        clusterMaxZoom: 9,
       });
       map.addLayer({
         id: "clusters",
