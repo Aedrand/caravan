@@ -17,9 +17,20 @@
 # So: a normal feat/fix commit -> (merge release PR) -> tag + release -> image.
 name: release-please
 
+# ⚠️ DEFERRED to M6 (v1.0 release). Set to manual-only (workflow_dispatch) so it
+# does NOT run on every push to main: pre-v1.0 we aren't cutting releases, and on
+# push it failed (and emailed) at the PR-creation step. To RE-ENABLE for v1.0:
+#   1. Restore the `push: { branches: [main] }` trigger below (replace workflow_dispatch).
+#   2. Repo Settings → Actions → General → Workflow permissions → enable
+#      "Allow GitHub Actions to create and approve pull requests"
+#      (API: gh api -X PUT repos/<owner>/<repo>/actions/permissions/workflow
+#            -F can_approve_pull_request_reviews=true). Without this, release-please
+#      cannot open its PR and the run fails.
+#   3. The manifest starts at the 0.0.0 sentinel, which makes release-please propose
+#      1.0.0; set .github/.release-please-manifest.json to the intended starting
+#      version (e.g. "0.1.0") unless you really are cutting v1.0.
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
