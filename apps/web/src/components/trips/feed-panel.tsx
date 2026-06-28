@@ -1,5 +1,6 @@
 import type { FeedEvent, TripMember } from "@caravan/shared";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
 import { relativeTime } from "@/lib/relative-time";
 import { useFeed, useMarkSeen, useSeen } from "@/lib/sync";
@@ -121,13 +122,38 @@ export function FeedPanel({ tripId, members }: { tripId: string; members: TripMe
     if (latestVersion > seen) markSeen(latestVersion);
   }, [latestVersion, seen, markSeen]);
 
+  // First-load (no cached page yet) shows a skeleton; a load failure shows an
+  // inline alert with retry. Both are small in-drawer states, so they stay
+  // lightweight rather than using the full-surface primitives.
+  if (feedQuery.isPending) {
+    return <FeedSkeleton />;
+  }
+  if (feedQuery.isError) {
+    return (
+      <div className="py-3">
+        <p role="alert" className="text-sm text-destructive">
+          Couldn't load recent activity.
+        </p>
+        <button
+          type="button"
+          onClick={() => void feedQuery.refetch()}
+          className="mt-2 rounded-sm text-sm font-medium text-primary underline-offset-4 outline-none hover:underline focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
+
   const body =
     events.length === 0 ? (
       <p className="py-3 text-sm text-muted-foreground">
         Nothing's happened yet — changes show up here as the group plans.
       </p>
     ) : (
-      <ul className="flex flex-col">
+      // aria-live: while the drawer is open, events appended by the socket are
+      // announced. The label gives screen-reader users a handle on the region.
+      <ul aria-label="Activity feed" aria-live="polite" className="flex flex-col">
         {events.map((event, i) => {
           const prev = events[i - 1];
           const showDivider =
@@ -182,4 +208,21 @@ export function FeedPanel({ tripId, members }: { tripId: string; members: TripMe
 
   // Rows only — the drawer owns the header and scroll.
   return body;
+}
+
+/** Loading placeholder that echoes the feed-row layout (avatar + two lines). */
+function FeedSkeleton() {
+  return (
+    <div aria-hidden className="flex flex-col">
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="flex items-start gap-2.5 py-2">
+          <Skeleton className="mt-0.5 size-6 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <Skeleton className="h-3.5 w-3/4" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }

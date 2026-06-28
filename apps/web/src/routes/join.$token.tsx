@@ -4,7 +4,7 @@ import { UserRoundPlus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { AuthShell, FormError } from "@/components/auth-shell";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ErrorState } from "@/components/ui/error-state";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, apiFetch, apiPost } from "@/lib/api";
@@ -311,19 +311,15 @@ function JoinPage() {
 function InviteInvalid() {
   return (
     <section className="flex flex-1 items-center justify-center">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <CardTitle className="text-xl">This invite link is no longer valid</CardTitle>
-          <CardDescription>
-            It may have expired or been revoked. Ask a trip organizer for a fresh link.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <ErrorState
+        title="This invite link is no longer valid"
+        description="It may have expired or been revoked. Ask a trip organizer for a fresh link."
+        action={
           <Button asChild variant="outline">
             <Link to="/">Go to Caravan</Link>
           </Button>
-        </CardContent>
-      </Card>
+        }
+      />
     </section>
   );
 }
@@ -331,17 +327,15 @@ function InviteInvalid() {
 function InviteLoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
     <section className="flex flex-1 items-center justify-center">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <CardTitle className="text-xl">Something went sideways</CardTitle>
-          <CardDescription>{message}</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <ErrorState
+        title="Something went sideways"
+        description={message}
+        action={
           <Button variant="outline" onClick={onRetry}>
             Try again
           </Button>
-        </CardContent>
-      </Card>
+        }
+      />
     </section>
   );
 }

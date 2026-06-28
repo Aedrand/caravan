@@ -189,74 +189,80 @@ export function MembersPanel() {
         <CardTitle id="members-panel-heading">Members</CardTitle>
       </CardHeader>
       <CardContent>
-        <ul className="divide-y divide-border/60">
-          {activeMembers.map((member) => {
-            const isSelf = member.id === me?.id;
-            return (
-              <li key={member.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                <span
-                  aria-hidden
-                  className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-accent text-xs font-semibold uppercase text-accent-foreground"
-                >
-                  {member.name.trim().charAt(0) || "?"}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                  {member.name}
-                  {isSelf && (
-                    <span className="ml-1.5 text-xs font-normal text-muted-foreground">you</span>
-                  )}
-                </span>
-                <Badge variant={ROLE_BADGE_VARIANT[member.role]} className="capitalize">
-                  {member.role}
-                </Badge>
-                {canManage && !isSelf && (
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon-sm"
-                        aria-label={`Member actions for ${member.name}`}
-                        className="text-muted-foreground"
-                        disabled={isPending}
-                      >
-                        <Ellipsis aria-hidden />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {member.role !== "owner" && (
+        {activeMembers.length === 0 ? (
+          // Defensive: you're always a member of a trip you can see, so this is
+          // an edge case (stale snapshot) rather than a normal empty.
+          <p className="py-2 text-sm text-muted-foreground">No members yet.</p>
+        ) : (
+          <ul className="divide-y divide-border/60">
+            {activeMembers.map((member) => {
+              const isSelf = member.id === me?.id;
+              return (
+                <li key={member.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                  <span
+                    aria-hidden
+                    className="flex size-8 shrink-0 select-none items-center justify-center rounded-full bg-accent text-xs font-semibold uppercase text-accent-foreground"
+                  >
+                    {member.name.trim().charAt(0) || "?"}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {member.name}
+                    {isSelf && (
+                      <span className="ml-1.5 text-xs font-normal text-muted-foreground">you</span>
+                    )}
+                  </span>
+                  <Badge variant={ROLE_BADGE_VARIANT[member.role]} className="capitalize">
+                    {member.role}
+                  </Badge>
+                  {canManage && !isSelf && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label={`Member actions for ${member.name}`}
+                          className="text-muted-foreground"
+                          disabled={isPending}
+                        >
+                          <Ellipsis aria-hidden />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {member.role !== "owner" && (
+                          <DropdownMenuItem
+                            disabled={isPending}
+                            onSelect={() =>
+                              void setRole(member, member.role === "editor" ? "viewer" : "editor")
+                            }
+                          >
+                            <ShieldCheck aria-hidden />
+                            {member.role === "editor" ? "Make viewer" : "Make editor"}
+                          </DropdownMenuItem>
+                        )}
                         <DropdownMenuItem
                           disabled={isPending}
-                          onSelect={() =>
-                            void setRole(member, member.role === "editor" ? "viewer" : "editor")
-                          }
+                          onSelect={() => setAction({ kind: "transfer", member })}
                         >
-                          <ShieldCheck aria-hidden />
-                          {member.role === "editor" ? "Make viewer" : "Make editor"}
+                          <Crown aria-hidden />
+                          Make owner…
                         </DropdownMenuItem>
-                      )}
-                      <DropdownMenuItem
-                        disabled={isPending}
-                        onSelect={() => setAction({ kind: "transfer", member })}
-                      >
-                        <Crown aria-hidden />
-                        Make owner…
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        variant="destructive"
-                        disabled={isPending}
-                        onSelect={() => setAction({ kind: "remove", member })}
-                      >
-                        <Trash2 aria-hidden />
-                        Remove from trip…
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          disabled={isPending}
+                          onSelect={() => setAction({ kind: "remove", member })}
+                        >
+                          <Trash2 aria-hidden />
+                          Remove from trip…
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
 
         {canManage && (
           <div className="mt-5 border-t border-border/60 pt-5">

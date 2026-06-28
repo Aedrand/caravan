@@ -514,6 +514,11 @@ function FeedDrawer(props: {
   return <FeedDrawerBody {...props} />;
 }
 
+// Tabbable elements inside the open drawer (visible, not disabled). Used to
+// keep Tab/Shift+Tab cycling within the dialog and to seed initial focus.
+const FOCUSABLE_SELECTOR =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 function FeedDrawerBody({
   onClose,
   tripId,
@@ -533,6 +538,57 @@ function FeedDrawerBody({
   if (openUnreadRef.current === null) openUnreadRef.current = unread;
   const openUnread = openUnreadRef.current;
 
+  // Focus management (E.4): this drawer is a custom (non-Radix) dialog, so it
+  // traps focus by hand. On open, remember whatever was focused (the Bell
+  // trigger), move focus into the drawer, and cycle Tab/Shift+Tab within it;
+  // on close (the body unmounts) restore focus to that trigger. Escape +
+  // backdrop close still live above, in FeedDrawer.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    // Declared (not control-flow-narrowed) type so the closure below keeps it
+    // non-null. `dialogRef.current` is set by the time this layout-after effect
+    // runs, since the dialog div renders unconditionally.
+    const dialog: HTMLDivElement | null = dialogRef.current;
+    if (!dialog) return;
+    const node: HTMLDivElement = dialog;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+
+    // Move focus inside: the first tabbable control (the close button), or the
+    // dialog container itself (tabIndex=-1) as a fallback for an empty feed.
+    const first = node.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+    (first ?? node).focus();
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Tab") return;
+      const focusable = Array.from(node.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR));
+      const firstEl = focusable[0];
+      const lastEl = focusable[focusable.length - 1];
+      if (!firstEl || !lastEl) {
+        // Nothing tabbable (empty feed): keep focus pinned on the container.
+        event.preventDefault();
+        node.focus();
+        return;
+      }
+      const active = document.activeElement;
+      if (event.shiftKey) {
+        if (active === firstEl || !node.contains(active)) {
+          event.preventDefault();
+          lastEl.focus();
+        }
+      } else if (active === lastEl || !node.contains(active)) {
+        event.preventDefault();
+        firstEl.focus();
+      }
+    }
+
+    node.addEventListener("keydown", onKeyDown);
+    return () => {
+      node.removeEventListener("keydown", onKeyDown);
+      // Restore focus to the trigger when the drawer unmounts (close).
+      previouslyFocused?.focus?.();
+    };
+  }, []);
+
   // "Mark all as read" — advance the cursor to the newest event, then dismiss.
   function markAllRead() {
     const latest = feedQuery.data?.events[0]?.version ?? 0;
@@ -549,14 +605,17 @@ function FeedDrawerBody({
         className="absolute inset-0 bg-foreground/30"
       />
       <div
+        ref={dialogRef}
         role="dialog"
+        aria-modal="true"
         aria-label="What changed"
+        tabIndex={-1}
         // Full-screen on mobile; the capped `max-w-sm` slide-over returns at lg.
-        className="absolute inset-y-0 right-0 flex w-full max-w-none flex-col bg-muted shadow-overlay lg:max-w-sm"
+        className="absolute inset-y-0 right-0 flex w-full max-w-none flex-col bg-muted shadow-overlay outline-none lg:max-w-sm"
       >
         <div className="flex shrink-0 items-center gap-2 border-b px-4 py-3">
           <Bell aria-hidden className="size-5 text-[var(--accent-strong)]" />
-          <span className="font-display font-bold text-lg">What changed</span>
+          <h2 className="font-display font-bold text-lg">What changed</h2>
           {openUnread > 0 && (
             <span className="rounded-pill bg-primary px-2 py-0.5 font-semibold text-primary-foreground text-xs">
               {openUnread > 9 ? "9+" : openUnread} new
