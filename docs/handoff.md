@@ -10,9 +10,11 @@ Caravan is **feature-complete for the original v1.0 scope** — M0/M1 + fan-out 
 
 **Later sessions (2026-06-28/29):** **V2.4 bookings + day anchors SHIPPED & pushed** (`e97882a`: flight/lodging entries on the activities table + migration 0006; computed + manually-overridable per-day home-base anchors; derived check-out/arrival rows; dual flight map pins; 281 unit, e2e 5/5). **V2.5 routing SHIPPED & pushed** (`b236af5`: keyless `/api/route` proxy — FOSSGIS Valhalla default, key-optional ORS — + `route_cache`/rate-limit/graceful-off + migration 0007; day-colored route lines on the map, travel-time labels on the rail, per-day + trip-default walk/drive toggle; 329 unit, e2e 5/5). V2.4/V2.5 were built autonomously while the owner was away; provider/mode/perf calls + deferred items are logged in `enhancements.md` (MAP-PIN-DAY-COLOR, ROUTING-PERF-LAZY-LOAD, TRIP-SETTINGS-DIALOG, FLIGHT-COST-FIELD). **Live routing must be eyeball-verified on the dev server** (the build env can't reach the Valhalla host). `main` is at **`b236af5`**.
 
-**Immediate next:** **V2.6 — money:** convert an activity's `estimatedCostMinor` → a split expense + planned-vs-actual budget (D7); surface "needs attention" in the overview.
+**V2.6 — money SHIPPED & pushed** (`748e732`: client-only — "Log as expense" converts a rail activity's `estimatedCostMinor` into a prefilled, user-confirmed split expense linked via `expenses.activityId`, idempotent; `BudgetBar` planned-vs-actual; no migration. 340 unit, e2e 5/5). **One owner-confirm teed up:** the planned/actual double-count rule (`enhancements.md` BUDGET-PLANNED-SEMANTICS) — a one-line flip in the pure `budget.ts` selector.
 
-**Roadmap next:** finish **Trip Workspace v2** (V2.6 → V2.7 — money → workspace shell), then **M6 — v1.0 hardening & release** over the v2-inclusive app.
+**Immediate next:** **V2.7 — workspace shell:** continuous-scroll canvas + synced left-rail index wrapping Plan/Decide/Money/Group into one surface (D9/PD-15); Plan View v2 becomes a section within it; the V2.6 `BudgetBar` (compact) + over-budget chip mount in the hero band.
+
+**Roadmap next:** finish **Trip Workspace v2** (V2.7 — workspace shell), then **M6 — v1.0 hardening & release** over the v2-inclusive app.
 
 ## This session (2026-06-28 — Trip Workspace V2.1 → V2.3 shipped)
 
@@ -67,7 +69,8 @@ The persistent dev DB (`apps/server/data/caravan.db`, Test Admin = `test@testing
 - **V2.3 — Plan View v2 — ✅ SHIPPED (`e721ca8`):** order-driven progression rail (two-line rows, numbered stamps ↔ numbered map pins, inline note/checklist rows, est-cost chips, drag-to-resequence), idea lists + freeform idea types on Decide, typed-item form dialog. Built in today's tabbed shell. **Polish + map-clustering tune shipped after** (`a4c2ac6`→`6b6b641`): category-tint pins, inline cost/time edit, drag-between-lists, minimal clustering.
 - **V2.4 — bookings + day anchors — ✅ SHIPPED (`e97882a`):** flight/lodging on the activities table + 6 home-base cols on `days` (migration 0006); shared `bookings.ts` derivation; booking form + rail `BookingBody` + derived check-out/arrival rows + day-header anchor chip with manual override; dual flight map pins + single lodging pin.
 - **V2.5 — routing — ✅ SHIPPED (`b236af5`):** keyless `/api/route` proxy (Valhalla default, ORS key-optional) + `route_cache` + graceful-off + migration 0007; day-colored route lines (map) + travel-time labels (rail) + walk/drive mode toggle (per-day override + trip default). Consumes V2.4 anchors. **Verify live routing on the dev server.**
-- **V2.6 → V2.7 — ⏭ NEXT:** money (convert-estimate-to-expense + planned-vs-actual budget) → workspace shell (continuous scroll + synced left-rail index wrapping it all). **Open map-legibility review (now active — routes ARE day-colored):** also color map pins by day? See `enhancements.md` MAP-PIN-DAY-COLOR.
+- **V2.6 — money — ✅ SHIPPED (`748e732`):** "Log as expense" convert (prefill-confirm, idempotent) + planned-vs-actual `BudgetBar`; client-only, no migration.
+- **V2.7 — workspace shell — ⏭ NEXT:** continuous scroll + synced left-rail index wrapping it all (D9); Plan View v2 becomes a section; mount the compact `BudgetBar` + over-budget chip in the hero band. **Open reviews:** MAP-PIN-DAY-COLOR (color pins by day now routes are day-colored) + BUDGET-PLANNED-SEMANTICS — see `enhancements.md`.
 
 **Scope guardrails (from the decisions):** **desktop-first** — *mobile UX is its own later design review, not now*. **Deferred:** the file/image upload subsystem (so hero image, image-type ideas, and file attachments wait). **Out of scope:** full UI localization, public-transit routing. Reuse the existing activity row + sync/feed/permissions (PD-13) — don't build parallel machinery per type.
 

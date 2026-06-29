@@ -7,6 +7,10 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
+## 2026-06-29 — V2.6 money: one decision to confirm (orchestrator, owner away)
+
+- [ ] **BUDGET-PLANNED-SEMANTICS** — the planned-vs-actual `BudgetBar` is built as a **comparison**: **Planned** = Σ all activity estimates on the itinerary (dated items, all types); **Actual** = Σ all logged expenses. A converted item counts in BOTH (its estimate in Planned, its expense in Actual) — i.e. "we planned $1,200, we've spent $1,310." **Confirm this is the intended reading**, vs the alternative "remaining budget" view where converting an estimate *removes* it from Planned (so the bar shows only estimates for items not yet expensed). It's a **one-line flip** in the pure `apps/web/src/lib/expenses/budget.ts` `plannedMinor` selector (filter out activities that already have a linked expense) — no schema/UI rework. Also low-stakes: there's no hard "one expense per activity" constraint (a deposit + final payment can both link to one activity); flag if you want uniqueness enforced.
+
 ## 2026-06-29 — V2.5 routing build: deferred review items (orchestrator, owner away)
 
 Surfaced while building V2.4/V2.5 autonomously; flagged for owner review (not commitments).
