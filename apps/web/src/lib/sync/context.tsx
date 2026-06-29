@@ -26,6 +26,7 @@ import {
   type EntityPostImage,
   entityPostImageSchemas,
   type FeedEvent,
+  type GeoPlace,
   type IdeaList,
   type Mutation,
   type MutationPayload,
@@ -296,14 +297,20 @@ function byPosition<T extends { position: string }>(a: T, b: T): number {
  *
  * - `days` — the raw rows from the snapshot (unsorted; look them up by date).
  * - `daysByDate` — convenience lookup keyed by ISO `YYYY-MM-DD`.
- * - `upsertDay(date, { subtitle })` — lazy find-or-create + set. The `(tripId,
- *   date)` key dedupes, so a fresh `dayId` is harmless if the row already
- *   exists. Pass `subtitle: null` to clear it.
+ * - `upsertDay(date, patch)` — lazy find-or-create + set. The `(tripId, date)`
+ *   key dedupes, so a fresh `dayId` is harmless if the row already exists. Each
+ *   field in `patch` is independent: omit a key to leave that column untouched,
+ *   pass `null` to clear it (`subtitle: null` clears the subtitle;
+ *   `homeBasePlace: null` clears the V2.4 home-base override). At least one field
+ *   must be present (the mutation rejects an empty upsert).
  */
 export function useDays(): {
   days: Day[];
   daysByDate: Map<string, Day>;
-  upsertDay: (date: string, patch: { subtitle: string | null }) => Promise<MutationResponse>;
+  upsertDay: (
+    date: string,
+    patch: { subtitle?: string | null; homeBasePlace?: GeoPlace | null },
+  ) => Promise<MutationResponse>;
 } {
   const { data: snapshot } = useTripSnapshot();
   const { mutateAsync } = useTripMutation();
@@ -311,8 +318,12 @@ export function useDays(): {
   const daysByDate = useMemo(() => new Map(days.map((d) => [d.date, d] as const)), [days]);
 
   const upsertDay = useCallback(
-    (date: string, patch: { subtitle: string | null }) =>
-      mutateAsync("day.upsert", { dayId: createId(), date, subtitle: patch.subtitle }),
+    (date: string, patch: { subtitle?: string | null; homeBasePlace?: GeoPlace | null }) => {
+      const payload: MutationPayload<"day.upsert"> = { dayId: createId(), date };
+      if (patch.subtitle !== undefined) payload.subtitle = patch.subtitle;
+      if (patch.homeBasePlace !== undefined) payload.homeBasePlace = patch.homeBasePlace;
+      return mutateAsync("day.upsert", payload);
+    },
     [mutateAsync],
   );
 

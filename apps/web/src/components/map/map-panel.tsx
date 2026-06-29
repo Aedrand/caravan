@@ -10,10 +10,10 @@ import { cn } from "@/lib/utils";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useFocusedDay } from "./focused-day";
 import {
-  isPlotted,
-  type Plotted,
+  type MapPin as MapPinFeature,
   stopNumbersByDay,
   toFeatureCollection,
+  toMapPins,
   unplottedWithPlace,
 } from "./geo-features";
 import { pinColorExpression, readPinTints } from "./pin-tint";
@@ -37,7 +37,7 @@ const SOURCE_ID = "activities";
  * ahead of all of them.
  */
 const UNDATED = " undated";
-const dayKey = (a: Plotted) => a.date ?? UNDATED;
+const dayKey = (p: MapPinFeature) => p.date ?? UNDATED;
 
 /**
  * `fill` renders the map as a height-filling pane (the trip workspace's ambient
@@ -46,7 +46,15 @@ const dayKey = (a: Plotted) => a.date ?? UNDATED;
  */
 export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; fill?: boolean }) {
   const { activities } = snapshot;
-  const plotted = useMemo(() => activities.filter(isPlotted), [activities]);
+  // Per-day stop numbers (1..N, reset each day) keyed by activity id — the same
+  // numbers the itinerary rail stamps (§C.6). Computed over the FULL set so
+  // unplotted/hidden-day stops still consume their rail number; the pins only
+  // carry numbers for the ones actually drawn (a faithful subset). Bookings are
+  // never numbered (see `toMapPins`).
+  const stopNumbers = useMemo(() => stopNumbersByDay(activities), [activities]);
+  // Render pins, expanded from activities: an ordinary item → one pin; a flight →
+  // a departure pin (on `date`) + an arrival pin (on `endDate`) (V2.4 bookings).
+  const pins = useMemo(() => toMapPins(activities, stopNumbers), [activities, stopNumbers]);
   const unplotted = useMemo(() => unplottedWithPlace(activities), [activities]);
 
   if (activities.length === 0) {
@@ -63,7 +71,7 @@ export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; f
     );
   }
 
-  if (plotted.length === 0) {
+  if (pins.length === 0) {
     const empty = (
       <div className={cn("cv-card flex flex-col p-8", fill && "h-full")}>
         <EmptyState
@@ -80,18 +88,18 @@ export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; f
     if (fill) return empty;
     return (
       <section className="flex flex-col gap-3">
-        <MapHeading count={plotted.length} />
+        <MapHeading count={pins.length} />
         {empty}
       </section>
     );
   }
 
-  if (fill) return <MapView activities={activities} plotted={plotted} unplotted={unplotted} fill />;
+  if (fill) return <MapView pins={pins} unplotted={unplotted} fill />;
 
   return (
     <section className="flex flex-col gap-3">
-      <MapHeading count={plotted.length} />
-      <MapView activities={activities} plotted={plotted} unplotted={unplotted} />
+      <MapHeading count={pins.length} />
+      <MapView pins={pins} unplotted={unplotted} />
     </section>
   );
 }
@@ -111,16 +119,13 @@ function MapHeading({ count }: { count: number }) {
 }
 
 function MapView({
-  activities,
-  plotted,
+  pins,
   unplotted,
   fill = false,
 }: {
-  // The FULL activity set — needed to number pins exactly like the rail does.
-  // Per-day numbering counts every dated stop (incl. unplotted/un-placed ones),
-  // so `plotted` alone would drift; see `stopNumbersByDay`.
-  activities: Activity[];
-  plotted: Plotted[];
+  // The FULL render-pin set (a flight is already fanned out into its departure +
+  // arrival pins, each carrying its own day/number). See `toMapPins`.
+  pins: MapPinFeature[];
   unplotted: Activity[];
   fill?: boolean;
 }) {
@@ -141,7 +146,7 @@ function MapView({
   // undated "Ideas" group last (only if any undated pins exist).
   const dayGroups = useMemo(() => {
     const counts = new Map<string, number>();
-    for (const p of plotted) {
+    for (const p of pins) {
       const k = dayKey(p);
       counts.set(k, (counts.get(k) ?? 0) + 1);
     }
@@ -152,32 +157,25 @@ function MapView({
     const undated = counts.get(UNDATED);
     if (undated) groups.push({ key: UNDATED, label: "Ideas", count: undated });
     return groups;
-  }, [plotted]);
+  }, [pins]);
 
-  const visiblePlotted = useMemo(
-    () => plotted.filter((p) => !hiddenDays.has(dayKey(p))),
-    [plotted, hiddenDays],
+  const visiblePins = useMemo(
+    () => pins.filter((p) => !hiddenDays.has(dayKey(p))),
+    [pins, hiddenDays],
   );
 
   // CLUSTERING CORRECTNESS: the source has `cluster: true`, and clusters are
   // computed over the WHOLE source *before* any MapLibre layer `filter` runs. So
   // the per-day filter operates at the GeoJSON DATA level — we build the
-  // FeatureCollection from the *visible* set and let the src.setData(fc) sync
+  // FeatureCollection from the *visible* pins and let the src.setData(fc) sync
   // effect below push it. We deliberately do NOT use a layer filter/setFilter on
   // the "pins" layer: that would leave cluster counts wrong and let hidden pins
   // reappear when a cluster is expanded. Data-level filtering makes clusters
-  // recompute correctly. (`plotted`/`plottedRef` stay the FULL set — boot-fit and
-  // focused-day framing consider all pins; framing ≠ visibility.)
-  // Per-day stop numbers (1..N, reset each day) keyed by activity id — the same
-  // numbers the itinerary rail stamps, so pin ② ↔ rail stop ② (spec §C.6).
-  // Computed over the FULL activity set (not `visiblePlotted`) so unplotted/
-  // hidden-day stops still consume their rail number; the FeatureCollection only
-  // carries numbers for the pins it actually draws, i.e. a faithful subset.
-  const stopNumbers = useMemo(() => stopNumbersByDay(activities), [activities]);
-  const fc = useMemo(
-    () => toFeatureCollection(visiblePlotted, stopNumbers),
-    [visiblePlotted, stopNumbers],
-  );
+  // recompute correctly. (`pins`/`pinsRef` stay the FULL set — boot-fit and
+  // focused-day framing consider all pins; framing ≠ visibility.) Each pin already
+  // carries its own day + stop number (a flight's arrival pin keys on `endDate`
+  // and bookings carry none), so day-filtering and numbering are read off the pin.
+  const fc = useMemo(() => toFeatureCollection(visiblePins), [visiblePins]);
 
   const toggleDay = (key: string) => {
     setHiddenDays((prev) => {
@@ -192,8 +190,8 @@ function MapView({
   // the live sync effects below keep the source + selection current.
   const fcRef = useRef(fc);
   fcRef.current = fc;
-  const plottedRef = useRef(plotted);
-  plottedRef.current = plotted;
+  const pinsRef = useRef(pins);
+  pinsRef.current = pins;
   const selectRef = useRef(select);
   selectRef.current = select;
 
@@ -202,7 +200,7 @@ function MapView({
   const styleUrl = mapConfig.data?.styleUrl;
   useEffect(() => {
     if (!styleUrl || !containerRef.current || mapRef.current) return;
-    const first = plottedRef.current[0];
+    const first = pinsRef.current[0];
 
     const map = new maplibregl.Map({
       container: containerRef.current,
@@ -333,7 +331,7 @@ function MapView({
       }
 
       setReady(true);
-      fitToPlotted(map, plottedRef.current);
+      fitToPlotted(map, pinsRef.current);
     });
 
     return () => {
@@ -359,18 +357,21 @@ function MapView({
     if (!map || !ready) return;
     popupRef.current?.remove();
     if (!selectedId) return;
-    const place = plotted.find((a) => a.id === selectedId);
+    // A selected activity may own >1 pin (a flight) — fly to its first pin (the
+    // departure for a flight); both pins share the same `id`, so either click
+    // resolves here and the rail cross-highlight still matches.
+    const place = pins.find((p) => p.id === selectedId);
     if (!place) return;
     map.flyTo({ center: [place.lng, place.lat], zoom: Math.max(map.getZoom(), 13), duration: 600 });
     popupRef.current = new maplibregl.Popup({ closeButton: false, offset: 14 })
       .setLngLat([place.lng, place.lat])
       .setText(place.title)
       .addTo(map);
-  }, [selectedId, plotted, ready]);
+  }, [selectedId, pins, ready]);
 
   // Map follows the itinerary's focused day (the deferred C.4 polish): when the
-  // focused day *changes*, frame that day's plotted pins. Deps are only
-  // [focusedDay, ready] — `plotted` is read via its ref so adding/editing an
+  // focused day *changes*, frame that day's pins. Deps are only
+  // [focusedDay, ready] — `pins` is read via its ref so adding/editing an
   // activity won't reframe; only an actual day switch does. This fires on day
   // change, while the selection effect above flies to a single pin on select —
   // hovering a card sets focusedDay (usually unchanged → no reframe) and selects
@@ -383,7 +384,7 @@ function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !focusedDay) return;
-    const ofDay = plottedRef.current.filter((a) => a.date === focusedDay);
+    const ofDay = pinsRef.current.filter((p) => p.date === focusedDay);
     if (ofDay.length === 0) return;
     fitToPlotted(map, ofDay, 600);
   }, [focusedDay, ready]);
@@ -530,13 +531,13 @@ function MapView({
  * `duration` defaults to 0 (instant) for the boot fit; the day-follow passes a
  * value to glide between days rather than snap.
  */
-function fitToPlotted(map: maplibregl.Map, plotted: Plotted[], duration = 0): void {
-  if (plotted.length === 1) {
-    const only = plotted[0];
+function fitToPlotted(map: maplibregl.Map, pins: MapPinFeature[], duration = 0): void {
+  if (pins.length === 1) {
+    const only = pins[0];
     if (only) map.easeTo({ center: [only.lng, only.lat], zoom: 12, duration });
     return;
   }
   const bounds = new maplibregl.LngLatBounds();
-  for (const p of plotted) bounds.extend([p.lng, p.lat]);
+  for (const p of pins) bounds.extend([p.lng, p.lat]);
   if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 56, maxZoom: 14, duration });
 }

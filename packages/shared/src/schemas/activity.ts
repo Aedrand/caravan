@@ -75,6 +75,18 @@ export const ActivitySchema = z.object({
   listId: IdSchema.nullable(),
   /** D1 checklist body; `null` for non-checklist items. */
   checklistItems: z.array(ChecklistItemSchema).nullable(),
+  // V2.4 booking fields (flight/lodging). All nullable — only booking rows
+  // populate them. `endDate` is the check-out (lodging) / arrival (flight) date;
+  // the `arr*` fields are a FLIGHT's arrival place (place* holds departure/lodging).
+  endDate: IsoDateSchema.nullable(),
+  confirmationCode: z.string().max(100).nullable(),
+  arrPlaceName: z.string().max(200).nullable(),
+  arrAddress: z.string().max(400).nullable(),
+  arrLat: z.number().nullable(),
+  arrLng: z.number().nullable(),
+  arrPlaceProvider: z.string().max(40).nullable(),
+  arrPlaceRef: z.string().max(200).nullable(),
+  flightNumber: z.string().max(20).nullable(),
   createdBy: IdSchema,
   createdAt: EpochMsSchema,
   updatedAt: EpochMsSchema,

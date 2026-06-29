@@ -201,12 +201,133 @@ test("listId: an idea may join a list on its own trip; a cross-trip list is reje
   ).toThrowError(expect.objectContaining({ status: 400, code: "unknown_list" }));
 });
 
-test("flight/lodging creation is guarded until V2.4 (payload-level reject)", () => {
-  for (const type of ["flight", "lodging"] as const) {
-    const parsed = mutationPayloads["activity.create"].safeParse(createActivity({ type }));
-    expect(parsed.success).toBe(false);
-    expect(JSON.stringify(parsed.error?.issues)).toMatch(/V2\.4/);
-  }
+test("create lodging: endDate + place persist and round-trip through the post-image", () => {
+  const h = harness();
+  const owner = h.insertUser("Owner");
+  const { tripId } = h.insertTrip(owner);
+
+  const activityId = createId();
+  const res = h.exec(
+    tripId,
+    owner,
+    "activity.create",
+    createActivity({
+      activityId,
+      type: "lodging",
+      title: "Hotel Nikko",
+      date: "2026-07-04",
+      endDate: "2026-07-07",
+      confirmationCode: "ABC123",
+      place: { name: "Hotel Nikko", lat: 35.6, lng: 139.7 },
+    }),
+  );
+
+  const row = h.db.select().from(schema.activities).all()[0];
+  expect(row?.type).toBe("lodging");
+  expect(row?.endDate).toBe("2026-07-07");
+  expect(row?.confirmationCode).toBe("ABC123");
+  expect(row?.placeName).toBe("Hotel Nikko");
+  const entity = res.entity as Activity;
+  expect(entity.endDate).toBe("2026-07-07");
+  expect(entity.confirmationCode).toBe("ABC123");
+  // The feed payload carries `type` so copy can say "added lodging".
+  expect((res.event.payload as { type: string }).type).toBe("lodging");
+});
+
+test("create flight: endDate + arrival place + flight number persist (place = departure)", () => {
+  const h = harness();
+  const owner = h.insertUser("Owner");
+  const { tripId } = h.insertTrip(owner);
+
+  const activityId = createId();
+  const res = h.exec(
+    tripId,
+    owner,
+    "activity.create",
+    createActivity({
+      activityId,
+      type: "flight",
+      title: "SFO -> HND",
+      date: "2026-07-03",
+      endDate: "2026-07-04",
+      flightNumber: "NH7",
+      place: { name: "SFO" },
+      arrPlace: { name: "Haneda", lat: 35.55, lng: 139.78 },
+    }),
+  );
+
+  const row = h.db.select().from(schema.activities).all()[0];
+  expect(row?.type).toBe("flight");
+  expect(row?.endDate).toBe("2026-07-04");
+  expect(row?.flightNumber).toBe("NH7");
+  expect(row?.placeName).toBe("SFO"); // departure
+  expect(row?.arrPlaceName).toBe("Haneda"); // arrival
+  expect(row?.arrLat).toBe(35.55);
+  const entity = res.entity as Activity;
+  expect(entity.arrPlaceName).toBe("Haneda");
+  expect(entity.flightNumber).toBe("NH7");
+});
+
+test("booking refinements: lodging needs a check-out date; arr/flightNumber are flight-only; endDate >= date", () => {
+  // lodging without a check-out date → rejected.
+  expect(
+    mutationPayloads["activity.create"].safeParse(createActivity({ type: "lodging" })).success,
+  ).toBe(false);
+  // an arrival place on a non-flight → rejected.
+  expect(
+    mutationPayloads["activity.create"].safeParse(
+      createActivity({ type: "activity", arrPlace: { name: "Haneda" } }),
+    ).success,
+  ).toBe(false);
+  // a flight number on a non-flight → rejected.
+  expect(
+    mutationPayloads["activity.create"].safeParse(
+      createActivity({ type: "activity", flightNumber: "NH7" }),
+    ).success,
+  ).toBe(false);
+  // endDate before date → rejected.
+  expect(
+    mutationPayloads["activity.create"].safeParse(
+      createActivity({ type: "lodging", date: "2026-07-07", endDate: "2026-07-04" }),
+    ).success,
+  ).toBe(false);
+  // valid flight/lodging now parse — the old V2.4 guard is gone.
+  expect(
+    mutationPayloads["activity.create"].safeParse(
+      createActivity({ type: "lodging", endDate: "2026-07-05" }),
+    ).success,
+  ).toBe(true);
+  expect(
+    mutationPayloads["activity.create"].safeParse(createActivity({ type: "flight" })).success,
+  ).toBe(true);
+});
+
+test("booking fields are editable on update (endDate, arrPlace, flightNumber, confirmationCode)", () => {
+  const h = harness();
+  const owner = h.insertUser("Owner");
+  const { tripId } = h.insertTrip(owner);
+
+  const activityId = createId();
+  h.exec(
+    tripId,
+    owner,
+    "activity.create",
+    createActivity({ activityId, type: "flight", date: "2026-07-03", endDate: "2026-07-04" }),
+  );
+  h.exec(tripId, owner, "activity.update", {
+    activityId,
+    patch: {
+      endDate: "2026-07-05",
+      flightNumber: "NH7",
+      confirmationCode: "ZZ9",
+      arrPlace: { name: "Haneda", lat: 35.55, lng: 139.78 },
+    },
+  });
+  const row = h.db.select().from(schema.activities).all()[0];
+  expect(row?.endDate).toBe("2026-07-05");
+  expect(row?.flightNumber).toBe("NH7");
+  expect(row?.confirmationCode).toBe("ZZ9");
+  expect(row?.arrPlaceName).toBe("Haneda");
 });
 
 test("checklistItems on a non-checklist item is rejected", () => {

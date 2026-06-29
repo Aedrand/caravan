@@ -1,5 +1,11 @@
 import {
   type Activity,
+  type AnchorRef,
+  computeBookingDerivedEntries,
+  type DayOverride,
+  type DerivedEntry,
+  deriveAnchors,
+  type GeoPlace,
   type ItemType,
   type MutationPayload,
   positionBetween,
@@ -25,14 +31,18 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import {
+  Building2,
   CalendarRange,
   ChevronDown,
+  Home,
   Lightbulb,
   ListChecks,
   MapPin,
   Pencil,
+  Plane,
   Plus,
   StickyNote,
+  X,
 } from "lucide-react";
 import type { ReactNode, RefObject } from "react";
 import { useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
@@ -45,6 +55,7 @@ import {
   useVotesByActivity,
 } from "@/components/decisions/use-decisions";
 import { useFocusedDay } from "@/components/map/focused-day";
+import { PlaceAutocomplete } from "@/components/map/place-autocomplete";
 import { useMapSelection } from "@/components/map/selection";
 import { Button } from "@/components/ui/button";
 import {
@@ -60,6 +71,7 @@ import { FALLBACK_PERSON_COLOR } from "@/lib/person-colors";
 import { useDays, useIdeaLists, useMyMember, usePresence, useTripMutation } from "@/lib/sync";
 import { cn } from "@/lib/utils";
 import { ActivityFormDialog } from "./activity-form-dialog";
+import { DerivedEntryRow } from "./derived-entry-row";
 import { dayNumber, deriveDays, formatDayLabel, formatDayShort, todayIso } from "./format";
 import { computeStopNumbers } from "./numbering";
 import { RailRow } from "./rail-row";
@@ -132,6 +144,32 @@ export function ItineraryBoard({
   );
   const byDate = useMemo(() => groupByDate(activities), [activities]);
 
+  // V2.4 bookings (flight/lodging) + per-day home-base overrides feed the
+  // booking-derived rows and the day anchor chips. `allBookings` spans the whole
+  // trip (a booking spawns rows on OTHER days); `dayOverrides` retypes the Day
+  // rows to the pure `DayOverride` shape `deriveAnchors` consumes.
+  const allBookings = useMemo(
+    () => activities.filter((a) => a.type === "flight" || a.type === "lodging"),
+    [activities],
+  );
+  const dayOverrides = useMemo<Map<string, DayOverride>>(
+    () => new Map([...daysByDate.values()].map((d) => [d.date, d] as const)),
+    [daysByDate],
+  );
+  // The implicit rows each booking spawns (check-outs, flight arrivals),
+  // bucketed by the day they land on.
+  const derivedByDate = useMemo(() => {
+    const map = new Map<string, DerivedEntry[]>();
+    for (const booking of allBookings) {
+      for (const entry of computeBookingDerivedEntries(booking)) {
+        const arr = map.get(entry.date) ?? [];
+        arr.push(entry);
+        map.set(entry.date, arr);
+      }
+    }
+    return map;
+  }, [allBookings]);
+
   // Track A: votes + comments rails, and the ideas-by-votes default sort (PD-2).
   const votesByActivity = useVotesByActivity(snapshot.votes);
   const commentsByTarget = useCommentsByTarget(snapshot.comments);
@@ -170,8 +208,14 @@ export function ItineraryBoard({
   const today = todayIso();
   const todayInTrip = days.includes(today);
   const emptyDays = useMemo(
-    () => new Set(days.filter((iso) => (byDate.get(iso) ?? []).length === 0)),
-    [days, byDate],
+    () =>
+      new Set(
+        days.filter(
+          (iso) =>
+            (byDate.get(iso) ?? []).length === 0 && (derivedByDate.get(iso)?.length ?? 0) === 0,
+        ),
+      ),
+    [days, byDate, derivedByDate],
   );
   // Focus is shared with the ambient map (via FocusedDayProvider) so it can
   // frame the focused day's pins — the map lives across a lazy/Suspense boundary
@@ -192,7 +236,8 @@ export function ItineraryBoard({
   }, [focusedDay, initialFocus, setFocusedDay]);
   const [collapseOverride, setCollapseOverride] = useState<Record<string, boolean>>({});
   const defaultOpen = (iso: string): boolean =>
-    (byDate.get(iso) ?? []).length > 0 && (!todayInTrip || iso >= today);
+    ((byDate.get(iso) ?? []).length > 0 || (derivedByDate.get(iso)?.length ?? 0) > 0) &&
+    (!todayInTrip || iso >= today);
   const isOpen = (iso: string): boolean => collapseOverride[iso] ?? defaultOpen(iso);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
@@ -219,6 +264,12 @@ export function ItineraryBoard({
   const openCreate = (date: string | null, type?: ItemType) =>
     setDialog({ mode: "create", defaultDate: date, defaultType: type });
   const openEdit = (activity: Activity) => setDialog({ mode: "edit", activity });
+  // A booking-derived row links back to its source booking (D-anchors) — open
+  // that booking in the edit dialog.
+  const openBookingById = (bookingId: string) => {
+    const booking = activities.find((a) => a.id === bookingId);
+    if (booking) openEdit(booking);
+  };
 
   // Per-item optimistic check/uncheck (D1) — addressed by item id so concurrent
   // toggles of different entries converge instead of clobbering.
@@ -413,6 +464,16 @@ export function ItineraryBoard({
                   onFocus={() => setFocusedIso(iso)}
                   canEdit={canEdit}
                   currency={trip.currency}
+                  allBookings={allBookings}
+                  dayOverrides={dayOverrides}
+                  derived={derivedByDate.get(iso) ?? []}
+                  onOpenBooking={openBookingById}
+                  onSetHomeBase={(place) =>
+                    void upsertDay(iso, { homeBasePlace: place }).catch(() => {})
+                  }
+                  onClearHomeBase={() =>
+                    void upsertDay(iso, { homeBasePlace: null }).catch(() => {})
+                  }
                   subtitle={daysByDate.get(iso)?.subtitle ?? null}
                   onSubtitleCommit={(subtitle) => void upsertDay(iso, { subtitle }).catch(() => {})}
                   editingHints={editingHints}
@@ -480,6 +541,57 @@ export function ItineraryBoard({
   );
 }
 
+/** One rendered rail row: a real (draggable) activity or a derived display row. */
+type DisplayRow =
+  | { kind: "activity"; activity: Activity }
+  | { kind: "derived"; entry: DerivedEntry };
+
+/** The resolved anchor-chip state for a day's header, or null when there's none. */
+type AnchorChipData = {
+  placeName: string;
+  /** True when the value is this day's manual override (vs a booking-computed one). */
+  isOverride: boolean;
+  /** Which glyph to lead with — a hotel, a plane, or the home (override) mark. */
+  icon: "lodging" | "flight" | "home";
+};
+
+/**
+ * Interleave a day's booking-derived entries (check-outs, flight arrivals) into
+ * its manually-ordered activity rows by time, WITHOUT reordering the activities.
+ * The rail is a drag-ordered list and the dnd drop math assumes render order
+ * equals `position` order, so activities keep their exact order; each derived
+ * entry (a read-only artifact) slots in just before the first activity due at or
+ * after it. Remaining derived entries — and all of them when the day's
+ * activities are untimed — trail in time order. Null times sort last.
+ */
+function mergeDayRows(items: Activity[], derived: DerivedEntry[]): DisplayRow[] {
+  const sorted = [...derived].sort((a, b) => {
+    if (a.time === b.time) return 0;
+    if (a.time === null) return 1;
+    if (b.time === null) return -1;
+    return a.time < b.time ? -1 : 1;
+  });
+
+  const rows: DisplayRow[] = [];
+  let d = 0;
+  for (const activity of items) {
+    const at = activity.startTime;
+    while (d < sorted.length && at !== null) {
+      const next = sorted[d];
+      if (!next || next.time === null || next.time > at) break;
+      rows.push({ kind: "derived", entry: next });
+      d += 1;
+    }
+    rows.push({ kind: "activity", activity });
+  }
+  while (d < sorted.length) {
+    const next = sorted[d];
+    if (next) rows.push({ kind: "derived", entry: next });
+    d += 1;
+  }
+  return rows;
+}
+
 function DayBlock({
   sectionRef,
   iso,
@@ -491,6 +603,12 @@ function DayBlock({
   onFocus,
   canEdit,
   currency,
+  allBookings,
+  dayOverrides,
+  derived,
+  onOpenBooking,
+  onSetHomeBase,
+  onClearHomeBase,
   subtitle,
   onSubtitleCommit,
   editingHints,
@@ -518,6 +636,19 @@ function DayBlock({
   onFocus: () => void;
   canEdit: boolean;
   currency: string;
+  /** All flight/lodging bookings across the trip (a booking spawns rows + anchors
+   * on days other than its own). */
+  allBookings: Activity[];
+  /** Per-day home-base overrides, keyed by ISO date (override-then-computed). */
+  dayOverrides: Map<string, DayOverride>;
+  /** The booking-derived rows landing on THIS day (check-outs / arrivals). */
+  derived: DerivedEntry[];
+  /** Jump to a derived row's source booking (opens the edit dialog). */
+  onOpenBooking: (bookingId: string) => void;
+  /** Pin this day's home base (writes the override). */
+  onSetHomeBase: (place: GeoPlace) => void;
+  /** Clear this day's home-base override (back to computed). */
+  onClearHomeBase: () => void;
   subtitle: string | null;
   onSubtitleCommit: (subtitle: string | null) => void;
   editingHints: Map<string, EditingHint>;
@@ -544,11 +675,47 @@ function DayBlock({
   // render from `position` order, so a drag-reorder renumbers the stamps live.
   const stopNumbers = computeStopNumbers(items);
   const stopCount = items.filter((a) => a.type === "activity").length;
+  // Bookings carry their own `estimatedCostMinor`, so this total includes them.
   const costTotalMinor = items.reduce((sum, a) => sum + (a.estimatedCostMinor ?? 0), 0);
 
+  // The day's render order: manually-ordered activities with the read-only
+  // booking-derived rows woven in by time (the activities keep their order — the
+  // dnd math relies on render order == position order, see `mergeDayRows`).
+  const rows = mergeDayRows(items, derived);
+
+  // The day's home-base anchor (the chip). `deriveAnchors` already applies the
+  // override-then-computed precedence; this day's OWN manual override wins for
+  // display since it's exactly what the chip edits/clears.
+  const ownOverride = dayOverrides.get(iso);
+  const ownHomeBase = ownOverride?.homeBasePlaceName ?? null;
+  const anchors = deriveAnchors(allBookings, iso, dayOverrides);
+  const displayAnchor: AnchorRef | null =
+    ownHomeBase !== null && ownOverride
+      ? {
+          bookingId: null,
+          placeName: ownHomeBase,
+          lat: ownOverride.homeBaseLat,
+          lng: ownOverride.homeBaseLng,
+        }
+      : (anchors.start ?? anchors.end);
+  const anchorBookingId = displayAnchor?.bookingId ?? null;
+  const anchorBooking = anchorBookingId
+    ? (allBookings.find((b) => b.id === anchorBookingId) ?? null)
+    : null;
+  const anchorChip: AnchorChipData | null =
+    displayAnchor?.placeName != null
+      ? {
+          placeName: displayAnchor.placeName,
+          isOverride: ownHomeBase !== null,
+          icon:
+            ownHomeBase !== null ? "home" : anchorBooking?.type === "flight" ? "flight" : "lodging",
+        }
+      : null;
+
   // Empty day → one thin row, not a full dashed box. A 40-day trip would
-  // otherwise be ~40 big boxes to scroll past.
-  if (items.length === 0) {
+  // otherwise be ~40 big boxes to scroll past. A day with only derived rows
+  // (e.g. a check-out) is NOT empty — it falls through to the full block.
+  if (items.length === 0 && derived.length === 0) {
     const label = (
       <>
         <DayName n={n} />
@@ -594,6 +761,10 @@ function DayBlock({
           stopCount={stopCount}
           costTotalMinor={costTotalMinor}
           currency={currency}
+          anchor={anchorChip}
+          canClearAnchor={ownHomeBase !== null}
+          onSetHomeBase={onSetHomeBase}
+          onClearHomeBase={onClearHomeBase}
           subtitle={subtitle}
           onSubtitleCommit={onSubtitleCommit}
           open={open}
@@ -603,23 +774,41 @@ function DayBlock({
           onAdd={onAdd}
         />
         {open && (
+          // The SortableContext only knows the real activity ids; the woven-in
+          // derived rows render OUTSIDE the sortable (read-only display artifacts).
           <SortableContext
             id={colId(iso)}
             items={items.map((a) => a.id)}
             strategy={verticalListSortingStrategy}
           >
             {/* The rail: an ordered list threaded by the connector spine (§C.2).
-                No inter-row gap so each row's spine segment meets the next. */}
+                No inter-row gap so each row's spine segment meets the next.
+                isFirst/isLast span the FULL list so the spine reaches end to end. */}
             <ol className="flex list-none flex-col py-1 pl-1">
-              {items.map((activity, index) => {
+              {rows.map((row, index) => {
+                const isFirst = index === 0;
+                const isLast = index === rows.length - 1;
+                if (row.kind === "derived") {
+                  return (
+                    <DerivedEntryRow
+                      key={`derived:${row.entry.sourceBookingId}:${row.entry.kind}`}
+                      entry={row.entry}
+                      isFirst={isFirst}
+                      isLast={isLast}
+                      canEdit={canEdit}
+                      onOpenBooking={onOpenBooking}
+                    />
+                  );
+                }
+                const activity = row.activity;
                 const addedByMember = membersById.get(activity.createdBy);
                 return (
                   <SortableRailRow
                     key={activity.id}
                     activity={activity}
                     number={stopNumbers.get(activity.id) ?? null}
-                    isFirst={index === 0}
-                    isLast={index === items.length - 1}
+                    isFirst={isFirst}
+                    isLast={isLast}
                     canEdit={canEdit}
                     currency={currency}
                     voteCount={votesByActivity.get(activity.id)?.length ?? 0}
@@ -678,6 +867,10 @@ function DayHeader({
   stopCount,
   costTotalMinor,
   currency,
+  anchor,
+  canClearAnchor,
+  onSetHomeBase,
+  onClearHomeBase,
   subtitle,
   onSubtitleCommit,
   open,
@@ -692,6 +885,10 @@ function DayHeader({
   stopCount: number;
   costTotalMinor: number;
   currency: string;
+  anchor: AnchorChipData | null;
+  canClearAnchor: boolean;
+  onSetHomeBase: (place: GeoPlace) => void;
+  onClearHomeBase: () => void;
   subtitle: string | null;
   onSubtitleCommit: (subtitle: string | null) => void;
   open: boolean;
@@ -701,7 +898,7 @@ function DayHeader({
   onAdd: (type?: ItemType) => void;
 }) {
   return (
-    <div className="py-1">
+    <div className="group/day py-1">
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -732,11 +929,126 @@ function DayHeader({
           {canEdit && <DayAddMenu onAdd={onAdd} />}
         </div>
       </div>
-      <p className="mt-0.5 pl-6 font-medium text-muted-foreground text-xs">
-        {stopCount} {stopCount === 1 ? "stop" : "stops"}
-        {costTotalMinor > 0 && ` · ~${formatMoney(costTotalMinor, currency)} est`}
-      </p>
+      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs">
+        <AnchorChip
+          anchor={anchor}
+          canEdit={canEdit}
+          canClear={canClearAnchor}
+          onSetHomeBase={onSetHomeBase}
+          onClearHomeBase={onClearHomeBase}
+        />
+        <p className="font-medium text-muted-foreground">
+          {stopCount} {stopCount === 1 ? "stop" : "stops"}
+          {costTotalMinor > 0 && ` · ~${formatMoney(costTotalMinor, currency)} est`}
+        </p>
+      </div>
     </div>
+  );
+}
+
+/**
+ * The day's home-base anchor chip (V2.4 D-anchors). Shows where you slept:
+ * muted + a hotel/Plane glyph when booking-computed, normal weight + a Pencil
+ * when this day carries a manual override (with an × to clear on hover). Clicking
+ * opens an inline `PlaceAutocomplete` — picking a suggestion writes the override
+ * via `onSetHomeBase`. With no anchor at all, editors get a hover-revealed
+ * "+ set home base" affordance; viewers see nothing. Mirrors the DaySubtitle
+ * inline-edit idiom (click → input, Esc / click-away cancels).
+ */
+function AnchorChip({
+  anchor,
+  canEdit,
+  canClear,
+  onSetHomeBase,
+  onClearHomeBase,
+}: {
+  anchor: AnchorChipData | null;
+  canEdit: boolean;
+  canClear: boolean;
+  onSetHomeBase: (place: GeoPlace) => void;
+  onClearHomeBase: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  function begin() {
+    if (!canEdit) return;
+    setDraft(anchor?.placeName ?? "");
+    setEditing(true);
+  }
+
+  if (editing) {
+    return (
+      // biome-ignore lint/a11y/noStaticElementInteractions: focus-trap wrapper for the inline home-base editor — Escape/blur dismiss it; the interactive control is the PlaceAutocomplete within
+      <div
+        ref={wrapRef}
+        className="w-60"
+        onBlur={(e) => {
+          if (!wrapRef.current?.contains(e.relatedTarget as Node | null)) setEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") setEditing(false);
+        }}
+      >
+        <PlaceAutocomplete
+          value={draft}
+          picked={false}
+          placeholder="Set a home base for this day"
+          onTextChange={setDraft}
+          onPick={(place) => {
+            onSetHomeBase(place);
+            setEditing(false);
+          }}
+        />
+      </div>
+    );
+  }
+
+  if (!anchor) {
+    if (!canEdit) return null;
+    return (
+      <button
+        type="button"
+        onClick={begin}
+        className="flex items-center gap-1 rounded-pill px-1.5 py-0.5 font-medium text-muted-foreground opacity-0 outline-none transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/50 group-focus-within/day:opacity-100 group-hover/day:opacity-100"
+      >
+        <Home aria-hidden className="size-3.5 shrink-0" />+ set home base
+      </button>
+    );
+  }
+
+  const Icon = anchor.icon === "flight" ? Plane : anchor.icon === "home" ? Home : Building2;
+  return (
+    <span className="flex items-center gap-0.5">
+      <button
+        type="button"
+        onClick={begin}
+        disabled={!canEdit}
+        title={canEdit ? "Set this day's home base" : undefined}
+        aria-label={`Home base: ${anchor.placeName}`}
+        className={cn(
+          "flex max-w-[12rem] items-center gap-1 rounded-pill px-1.5 py-0.5 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+          canEdit && "hover:bg-accent-soft",
+          anchor.isOverride ? "font-medium text-foreground" : "text-muted-foreground",
+        )}
+      >
+        <Icon aria-hidden className="size-3.5 shrink-0" />
+        <span className="truncate">{anchor.placeName}</span>
+        {anchor.isOverride && <Pencil aria-hidden className="size-3 shrink-0 opacity-70" />}
+      </button>
+      {canClear && canEdit && (
+        <button
+          type="button"
+          onClick={onClearHomeBase}
+          aria-label="Clear home base"
+          title="Clear home base"
+          className="rounded-full p-0.5 text-muted-foreground opacity-0 outline-none transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/50 group-focus-within/day:opacity-100 group-hover/day:opacity-100"
+        >
+          <X aria-hidden className="size-3" />
+        </button>
+      )}
+    </span>
   );
 }
 
@@ -847,6 +1159,14 @@ function DayAddMenu({
         <DropdownMenuItem onSelect={() => onAdd("checklist")}>
           <ListChecks aria-hidden />
           Add checklist
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onAdd("flight")}>
+          <Plane aria-hidden />
+          Add flight
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => onAdd("lodging")}>
+          <Building2 aria-hidden />
+          Add lodging
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -5,8 +5,9 @@ import type { Activity } from "@caravan/shared";
  * and the map share this ONE helper so a stop's number always matches between
  * the two surfaces.
  *
- * A "stop" is a dated `activity`-type item. `note` and `checklist` rows are
- * never numbered and never consume a number — they're skipped entirely.
+ * A "stop" is a dated `activity`-type item. Every other item type — `note`,
+ * `checklist`, and the V2.4 `flight`/`lodging` bookings — is never numbered and
+ * never consumes a number; they're skipped entirely.
  * Numbering follows `position` order (the same lexicographic fractional-index
  * comparison the board/ideas use), starting at 1.
  *

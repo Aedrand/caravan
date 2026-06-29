@@ -62,19 +62,35 @@ export function serializeActivity(row: typeof schema.activities.$inferSelect): A
     estimatedCostMinor: row.estimatedCostMinor,
     listId: row.listId,
     checklistItems: row.checklistItems ? (JSON.parse(row.checklistItems) as ChecklistItem[]) : null,
+    // V2.4 booking fields (flight/lodging).
+    endDate: row.endDate,
+    confirmationCode: row.confirmationCode,
+    arrPlaceName: row.arrPlaceName,
+    arrAddress: row.arrAddress,
+    arrLat: row.arrLat,
+    arrLng: row.arrLng,
+    arrPlaceProvider: row.arrPlaceProvider,
+    arrPlaceRef: row.arrPlaceRef,
+    flightNumber: row.flightNumber,
     createdBy: row.createdBy,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-/** Per-day metadata (D2). */
+/** Per-day metadata (D2) + the V2.4 home-base anchor override. */
 export function serializeDay(row: typeof schema.days.$inferSelect): Day {
   return {
     id: row.id,
     tripId: row.tripId,
     date: row.date,
     subtitle: row.subtitle,
+    homeBasePlaceName: row.homeBasePlaceName,
+    homeBaseAddress: row.homeBaseAddress,
+    homeBaseLat: row.homeBaseLat,
+    homeBaseLng: row.homeBaseLng,
+    homeBasePlaceProvider: row.homeBasePlaceProvider,
+    homeBasePlaceRef: row.homeBasePlaceRef,
     createdBy: row.createdBy,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,

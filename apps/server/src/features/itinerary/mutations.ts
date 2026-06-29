@@ -71,12 +71,24 @@ registerMutation("activity.create", {
         category: payload.category,
         notes: payload.notes,
         linkUrl: payload.linkUrl,
-        // Trip Workspace v2 typed-item fields (the create payload guards
-        // flight/lodging and checklist-only items at the schema level).
+        // Trip Workspace v2 typed-item fields (the create payload enforces
+        // checklist-only items + the V2.4 booking field constraints at the
+        // schema level).
         type: payload.type,
         estimatedCostMinor: payload.estimatedCostMinor,
         listId: payload.listId,
         checklistItems: payload.checklistItems ? JSON.stringify(payload.checklistItems) : null,
+        // V2.4 booking fields. `arrPlace` is the flight's arrival place; the
+        // `place*` columns above hold the departure airport / lodging address.
+        endDate: payload.endDate,
+        confirmationCode: payload.confirmationCode,
+        arrPlaceName: payload.arrPlace?.name ?? null,
+        arrAddress: payload.arrPlace?.address ?? null,
+        arrLat: payload.arrPlace?.lat ?? null,
+        arrLng: payload.arrPlace?.lng ?? null,
+        arrPlaceProvider: payload.arrPlace?.provider ?? null,
+        arrPlaceRef: payload.arrPlace?.ref ?? null,
+        flightNumber: payload.flightNumber,
         createdBy: ctx.member.id,
         createdAt: ctx.now,
         updatedAt: ctx.now,
@@ -86,7 +98,8 @@ registerMutation("activity.create", {
     return {
       entityType: "activity",
       entityId: payload.activityId,
-      feedPayload: { title: payload.title, date: payload.date },
+      // `type` rides along so the feed can say "added a flight" / "added lodging".
+      feedPayload: { title: payload.title, date: payload.date, type: payload.type },
     };
   },
 });
@@ -95,9 +108,12 @@ registerMutation("activity.update", {
   role: "editor",
   apply(ctx, payload) {
     const activity = loadActivity(ctx, payload.activityId);
-    // `checklistItems` is a typed array on the wire but a JSON text column; pull
-    // it out of the flat-field spread and serialize it explicitly below.
-    const { place, checklistItems, ...fields } = payload.patch;
+    // `checklistItems` is a typed array on the wire but a JSON text column, and
+    // `place`/`arrPlace` are nested objects that fan out to six columns each —
+    // pull all three out of the flat-field spread and map them explicitly below.
+    // (`endDate`/`confirmationCode`/`flightNumber` ARE flat columns, so they ride
+    // along in `...fields`.)
+    const { place, arrPlace, checklistItems, ...fields } = payload.patch;
 
     const update: Partial<typeof schema.activities.$inferInsert> = {
       ...fields,
@@ -110,6 +126,14 @@ registerMutation("activity.update", {
       update.lng = place?.lng ?? null;
       update.placeProvider = place?.provider ?? null;
       update.placeRef = place?.ref ?? null;
+    }
+    if (arrPlace !== undefined) {
+      update.arrPlaceName = arrPlace?.name ?? null;
+      update.arrAddress = arrPlace?.address ?? null;
+      update.arrLat = arrPlace?.lat ?? null;
+      update.arrLng = arrPlace?.lng ?? null;
+      update.arrPlaceProvider = arrPlace?.provider ?? null;
+      update.arrPlaceRef = arrPlace?.ref ?? null;
     }
     if (checklistItems !== undefined) {
       update.checklistItems = checklistItems ? JSON.stringify(checklistItems) : null;

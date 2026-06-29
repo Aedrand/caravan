@@ -14,6 +14,14 @@ export const DaySchema = z.object({
   /** ISO yyyy-mm-dd — the lazy `(tripId, date)` key. */
   date: IsoDateSchema,
   subtitle: z.string().nullable(),
+  // V2.4 day home-base override (D-anchors). When set, this place overrides the
+  // lodging/flight-derived "where you slept" anchor for the day; null = computed.
+  homeBasePlaceName: z.string().max(200).nullable(),
+  homeBaseAddress: z.string().max(400).nullable(),
+  homeBaseLat: z.number().nullable(),
+  homeBaseLng: z.number().nullable(),
+  homeBasePlaceProvider: z.string().max(40).nullable(),
+  homeBasePlaceRef: z.string().max(200).nullable(),
   /** Membership id of the creator (no FK — history outlives roles, PD-9). */
   createdBy: IdSchema,
   createdAt: EpochMsSchema,

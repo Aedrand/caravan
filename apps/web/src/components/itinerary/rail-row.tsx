@@ -1,10 +1,12 @@
 import type { Activity, ChecklistItem, MutationPayload } from "@caravan/shared";
 import {
+  Building2,
   Heart,
   ListChecks,
   MessageSquare,
   MoreHorizontal,
   Pencil,
+  Plane,
   StickyNote,
   Trash2,
 } from "lucide-react";
@@ -29,7 +31,7 @@ import { Input } from "@/components/ui/input";
 import { formatMoney, minorToInput, parseMoney } from "@/lib/expenses/money";
 import { cn } from "@/lib/utils";
 import { CATEGORY_META } from "./categories";
-import { formatTimeRange } from "./format";
+import { formatTime, formatTimeRange } from "./format";
 
 /** The shape of an `activity.update` patch — the same pipeline the ⋯ menu's
  * Edit-details dialog writes through (mutations.ts). Inline edits send a minimal
@@ -99,7 +101,7 @@ export function RailRow(props: RailRowProps) {
   const { activity, innerRef, style, isDragging, dragHandle, flash, selected, footer } = props;
   const [footerOpen, setFooterOpen] = useState(false);
   const ctx: Ctx = { ...props, footerOpen, onToggleFooter: () => setFooterOpen((v) => !v) };
-  const isStop = activity.type === "activity";
+  const isBooking = activity.type === "flight" || activity.type === "lodging";
 
   return (
     <li
@@ -122,7 +124,13 @@ export function RailRow(props: RailRowProps) {
       {dragHandle}
       <Spine {...ctx} />
       <div className="min-w-0 flex-1 py-2">
-        {isStop ? <StopBody {...ctx} /> : <TypedBody {...ctx} />}
+        {activity.type === "activity" ? (
+          <StopBody {...ctx} />
+        ) : isBooking ? (
+          <BookingBody {...ctx} />
+        ) : (
+          <TypedBody {...ctx} />
+        )}
         {footerOpen && <div className="mt-2">{footer}</div>}
       </div>
       <RowMenu {...ctx} />
@@ -130,8 +138,21 @@ export function RailRow(props: RailRowProps) {
   );
 }
 
-/** The left gutter: the 2px connector spine plus the row's stamp/mark. */
-function Spine({ activity, number, isFirst, isLast }: Ctx) {
+/**
+ * The left gutter: the 2px connector spine plus a centered stamp/mark. Shared
+ * with the read-only `DerivedEntryRow` (booking-spawned rows) so every row on a
+ * day threads the same continuous spine. `isFirst`/`isLast` are positions in the
+ * day's FULL row list (derived rows included), which set the connector's ends.
+ */
+export function SpineColumn({
+  isFirst,
+  isLast,
+  children,
+}: {
+  isFirst: boolean;
+  isLast: boolean;
+  children: ReactNode;
+}) {
   const single = isFirst && isLast;
   const connectorStyle: CSSProperties = isLast
     ? { top: isFirst ? SPINE_TOP : "0px", height: SPINE_TOP, bottom: "auto" }
@@ -146,15 +167,22 @@ function Spine({ activity, number, isFirst, isLast }: Ctx) {
           style={connectorStyle}
         />
       )}
-      {/* pt-2 mirrors the body's py-2 so the stamp centers on line 1. */}
-      <div className="flex justify-center pt-2">
-        {activity.type === "activity" ? (
-          <NumberStamp activity={activity} n={number} />
-        ) : (
-          <SpineMark type={activity.type} />
-        )}
-      </div>
+      {/* pt-2 mirrors the body's py-2 so the mark centers on line 1. */}
+      <div className="flex justify-center pt-2">{children}</div>
     </div>
+  );
+}
+
+/** The row's gutter content: a number stamp for stops, else a typed mark. */
+function Spine({ activity, number, isFirst, isLast }: Ctx) {
+  return (
+    <SpineColumn isFirst={isFirst} isLast={isLast}>
+      {activity.type === "activity" ? (
+        <NumberStamp activity={activity} n={number} />
+      ) : (
+        <SpineMark type={activity.type} />
+      )}
+    </SpineColumn>
   );
 }
 
@@ -177,18 +205,24 @@ function NumberStamp({ activity, n }: { activity: Activity; n: number | null }) 
   );
 }
 
-/** Round, soft-tinted anchor-mark for un-numbered note/checklist rows (§C.5). */
-function SpineMark({ type }: { type: Activity["type"] }) {
-  const note = type === "note";
-  const Icon = note ? StickyNote : ListChecks;
+/**
+ * Round, soft-tinted mark for the un-numbered, non-stop rows: notes, checklists,
+ * and the V2.4 bookings (flight = Plane/transport tint, lodging = Building2/
+ * lodging tint). Shared with `DerivedEntryRow`, which maps a check-out → lodging
+ * and a flight arrival → flight so the derived rows wear the same glyph.
+ */
+export function SpineMark({ type }: { type: Exclude<Activity["type"], "activity"> }) {
+  const { Icon, bg, fg } = {
+    note: { Icon: StickyNote, bg: "var(--info-soft)", fg: "var(--info)" },
+    checklist: { Icon: ListChecks, bg: "var(--success-soft)", fg: "var(--success)" },
+    flight: { Icon: Plane, bg: "var(--cat-transport-soft)", fg: "var(--cat-transport)" },
+    lodging: { Icon: Building2, bg: "var(--cat-lodging-soft)", fg: "var(--cat-lodging)" },
+  }[type];
   return (
     <span
       aria-hidden
       className="relative z-10 flex size-7 items-center justify-center rounded-full border"
-      style={{
-        backgroundColor: note ? "var(--info-soft)" : "var(--success-soft)",
-        color: note ? "var(--info)" : "var(--success)",
-      }}
+      style={{ backgroundColor: bg, color: fg }}
     >
       <Icon className="size-4" strokeWidth={2.25} />
     </span>
@@ -504,6 +538,134 @@ function PlaceMeta({ activity }: { activity: Activity }) {
     return <span className="italic text-muted-foreground">{activity.notes}</span>;
   }
   return <span className="text-muted-foreground/70">—</span>;
+}
+
+/** Calendar-local ISO `YYYY-MM-DD` parse (no timezone drift) for booking dates. */
+function parseBookingIso(iso: string): Date {
+  return new Date(Number(iso.slice(0, 4)), Number(iso.slice(5, 7)) - 1, Number(iso.slice(8, 10)));
+}
+
+/** "May 10" — compact month + day for a booking date/time line. */
+function formatMonthDay(iso: string): string {
+  return parseBookingIso(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+/** "May 10–15" (same month) or "May 30 – Jun 2" (spanning) — a lodging stay. */
+function formatStayRange(start: string, end: string | null): string {
+  const s = parseBookingIso(start);
+  const sMonth = s.toLocaleDateString(undefined, { month: "short" });
+  if (!end) return `${sMonth} ${s.getDate()}`;
+  const e = parseBookingIso(end);
+  const eMonth = e.toLocaleDateString(undefined, { month: "short" });
+  return sMonth === eMonth
+    ? `${sMonth} ${s.getDate()}–${e.getDate()}`
+    : `${sMonth} ${s.getDate()} – ${eMonth} ${e.getDate()}`;
+}
+
+/** "May 10 9:30am" — a date with its optional time, for a flight's when-line. */
+function formatWhen(iso: string | null, time: string | null): string | null {
+  if (!iso) return time ? formatTime(time) : null;
+  return time ? `${formatMonthDay(iso)} ${formatTime(time)}` : formatMonthDay(iso);
+}
+
+/**
+ * A booking row — a flight or a lodging stay (V2.4). Two lines like a stop, but
+ * un-numbered (bookings aren't map stops): line 1 is the headline (a flight's
+ * route, or the hotel name) with a cost chip (+ a stay-range chip for lodging);
+ * line 2 carries place / times / reference (flight or confirmation number). The
+ * stamp slot wears the booking's Plane/Building2 mark (see `SpineMark`).
+ */
+function BookingBody(ctx: Ctx) {
+  const { activity, currency = "USD", canEdit, onUpdate } = ctx;
+  const isFlight = activity.type === "flight";
+  const dep = activity.placeName ?? "Departure";
+  const arr = activity.arrPlaceName ?? "Arrival";
+  return (
+    <>
+      {/* line 1 — headline + cost (+ stay range for lodging) */}
+      <div className="flex items-start gap-2">
+        <h4 className="min-w-0 flex-1 truncate font-display font-bold leading-snug">
+          {isFlight ? `Dep ${dep} → Arr ${arr}` : activity.title}
+        </h4>
+        <div className="flex shrink-0 items-center gap-2 pt-0.5">
+          <CostChip activity={activity} currency={currency} canEdit={canEdit} onUpdate={onUpdate} />
+          {!isFlight && activity.date && (
+            <span className="whitespace-nowrap rounded-pill border bg-accent-soft px-1.5 py-0.5 font-body text-xs font-semibold text-muted-foreground">
+              {formatStayRange(activity.date, activity.endDate)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* line 2 — the booking detail (always present for a stable row height) */}
+      <div className="mt-0.5 flex min-h-5 items-start gap-2">
+        <p className="min-w-0 flex-1 truncate text-sm">
+          {isFlight ? <FlightMeta activity={activity} /> : <LodgingMeta activity={activity} />}
+        </p>
+        <FootCounts {...ctx} />
+      </div>
+
+      <RowAttribution {...ctx} />
+    </>
+  );
+}
+
+/** Flight line 2: departure when → arrival when · flight # · confirmation #. */
+function FlightMeta({ activity }: { activity: Activity }) {
+  const depWhen = formatWhen(activity.date, activity.startTime);
+  const arrWhen = formatWhen(activity.endDate, activity.endTime);
+  const when = depWhen && arrWhen ? `${depWhen} → ${arrWhen}` : (depWhen ?? arrWhen);
+  if (!when && !activity.flightNumber && !activity.confirmationCode) {
+    return <span className="text-muted-foreground/70">—</span>;
+  }
+  return (
+    <span className="text-muted-foreground">
+      {when}
+      {activity.flightNumber && (
+        <>
+          {when ? " · " : ""}Flight {activity.flightNumber}
+        </>
+      )}
+      {activity.confirmationCode && (
+        <>
+          {when || activity.flightNumber ? " · " : ""}Conf {activity.confirmationCode}
+        </>
+      )}
+    </span>
+  );
+}
+
+/** Lodging line 2: hotel place · check-in/out times · confirmation #. */
+function LodgingMeta({ activity }: { activity: Activity }) {
+  const times =
+    activity.startTime && activity.endTime
+      ? `Check in ${formatTime(activity.startTime)} / out ${formatTime(activity.endTime)}`
+      : activity.startTime
+        ? `Check in ${formatTime(activity.startTime)}`
+        : activity.endTime
+          ? `Check out ${formatTime(activity.endTime)}`
+          : null;
+  if (!activity.placeName && !times && !activity.confirmationCode) {
+    return <span className="text-muted-foreground/70">—</span>;
+  }
+  return (
+    <span className="text-muted-foreground">
+      {activity.placeName && (
+        <span className="font-semibold text-foreground">{activity.placeName}</span>
+      )}
+      {times && (
+        <>
+          {activity.placeName ? " · " : ""}
+          {times}
+        </>
+      )}
+      {activity.confirmationCode && (
+        <>
+          {activity.placeName || times ? " · " : ""}Conf {activity.confirmationCode}
+        </>
+      )}
+    </span>
+  );
 }
 
 /** Note / checklist body — un-numbered inline rows (§C.5). */

@@ -100,7 +100,11 @@ test("create: applies, bumps version to 1, records an attributed feed event", ()
   expect(res.event.actorMemberId).toBe(memberId);
   expect(res.event.actorType).toBe("user");
   expect(res.event.entityType).toBe("activity");
-  expect(res.event.payload).toEqual({ title: "Sunrise hike", date: "2026-07-04" });
+  expect(res.event.payload).toEqual({
+    title: "Sunrise hike",
+    date: "2026-07-04",
+    type: "activity",
+  });
 
   const rows = h.db.select().from(schema.activities).all();
   expect(rows).toHaveLength(1);
@@ -362,7 +366,7 @@ test("eventsSince returns the ordered tail after a version", () => {
   const tail = eventsSince(h.db, tripId, 2);
   expect(tail.map((e) => e.version)).toEqual([3, 4]);
   expect(tail[0]?.id).toBe(events[2]?.id);
-  expect(tail[0]?.payload).toEqual({ title: "Sunrise hike", date: "2026-07-04" });
+  expect(tail[0]?.payload).toEqual({ title: "Sunrise hike", date: "2026-07-04", type: "activity" });
 });
 
 test("duplicate entity id from a different mutation is a client-bug 409", () => {

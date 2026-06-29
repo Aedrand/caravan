@@ -39,6 +39,30 @@ function flattenPlace(place: Place | null) {
   };
 }
 
+/** V2.4 flight arrival-place columns from a payload `arrPlace` — `null` clears all six. */
+function flattenArrPlace(place: Place | null) {
+  return {
+    arrPlaceName: place?.name ?? null,
+    arrAddress: place?.address ?? null,
+    arrLat: place?.lat ?? null,
+    arrLng: place?.lng ?? null,
+    arrPlaceProvider: place?.provider ?? null,
+    arrPlaceRef: place?.ref ?? null,
+  };
+}
+
+/** V2.4 day home-base columns from a payload `homeBasePlace` — `null` clears all six. */
+function flattenHomeBase(place: Place | null) {
+  return {
+    homeBasePlaceName: place?.name ?? null,
+    homeBaseAddress: place?.address ?? null,
+    homeBaseLat: place?.lat ?? null,
+    homeBaseLng: place?.lng ?? null,
+    homeBasePlaceProvider: place?.provider ?? null,
+    homeBasePlaceRef: place?.ref ?? null,
+  };
+}
+
 /** Drop keys whose value is `undefined` so optional patch keys never clobber state. */
 function definedOnly<T extends object>(patch: T): Partial<T> {
   return Object.fromEntries(
@@ -196,6 +220,15 @@ function applyPollConversion(
     estimatedCostMinor: null,
     listId: null,
     checklistItems: null,
+    endDate: null,
+    confirmationCode: null,
+    arrPlaceName: null,
+    arrAddress: null,
+    arrLat: null,
+    arrLng: null,
+    arrPlaceProvider: null,
+    arrPlaceRef: null,
+    flightNumber: null,
     createdBy: event.actorMemberId ?? "",
     createdAt: event.createdAt,
     updatedAt: event.createdAt,
@@ -247,6 +280,11 @@ export function applyMutationOptimistic(
         estimatedCostMinor: p.estimatedCostMinor,
         listId: p.listId,
         checklistItems: p.checklistItems,
+        // V2.4 booking fields (arrPlace = flight arrival; place above = departure).
+        endDate: p.endDate,
+        confirmationCode: p.confirmationCode,
+        ...flattenArrPlace(p.arrPlace),
+        flightNumber: p.flightNumber,
         createdBy: ctx.memberId,
         createdAt: ctx.now,
         updatedAt: ctx.now,
@@ -254,12 +292,15 @@ export function applyMutationOptimistic(
       return { ...snap, activities: [...snap.activities, activity] };
     }
     case "activity.update": {
-      const { place, ...fields } = mutation.payload.patch;
+      // `place`/`arrPlace` fan out to six columns each; the flat booking fields
+      // (endDate/confirmationCode/flightNumber) ride along in `...fields`.
+      const { place, arrPlace, ...fields } = mutation.payload.patch;
       return updateActivity(snap, mutation.payload.activityId, (activity) => ({
         ...activity,
         ...definedOnly(fields),
-        // `place` present (object or null) replaces all six columns; absent leaves them.
+        // `place`/`arrPlace` present (object or null) replaces all six columns; absent leaves them.
         ...(place !== undefined ? flattenPlace(place) : undefined),
+        ...(arrPlace !== undefined ? flattenArrPlace(arrPlace) : undefined),
         updatedAt: ctx.now,
       }));
     }
@@ -287,22 +328,29 @@ export function applyMutationOptimistic(
       }));
     }
     case "day.upsert": {
-      const { dayId, date, subtitle } = mutation.payload;
+      const { dayId, date, subtitle, homeBasePlace } = mutation.payload;
+      // Each field is independent: an absent key leaves that column untouched.
+      const patch = {
+        ...(subtitle !== undefined ? { subtitle } : undefined),
+        ...(homeBasePlace !== undefined ? flattenHomeBase(homeBasePlace) : undefined),
+      };
       // Find-or-create by date, mirroring the server's lazy upsert.
       const existing = snap.days.find((d) => d.date === date);
       if (existing) {
         return {
           ...snap,
           days: snap.days.map((d) =>
-            d.id === existing.id ? { ...d, subtitle, updatedAt: ctx.now } : d,
+            d.id === existing.id ? { ...d, ...patch, updatedAt: ctx.now } : d,
           ),
         };
       }
+      const homeBase = flattenHomeBase(homeBasePlace ?? null);
       const day: Day = {
         id: dayId,
         tripId: snap.trip.id,
         date,
-        subtitle,
+        subtitle: subtitle ?? null,
+        ...homeBase,
         createdBy: ctx.memberId,
         createdAt: ctx.now,
         updatedAt: ctx.now,

@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   ActivityCategorySchema,
   ChecklistItemSchema,
+  type ItemType,
   ItemTypeSchema,
   PlaceSchema,
 } from "./schemas/activity";
@@ -43,18 +44,41 @@ const timePairRefinement = {
 /**
  * D1 typed-item refinements on `activity.create` (Trip Workspace v2):
  * - checklist items may only ride on a `checklist`-type item; and
- * - `flight`/`lodging` creates are guarded until V2.4 lands booking columns +
- *   the booking form. The `type` enum already includes them for forward-compat;
- *   this guard just prevents orphan booking rows in the interim.
+ * - the V2.4 booking refinements below constrain flight/lodging fields to the
+ *   right `type` (flight/lodging creates are no longer guarded — V2.4 lands them).
  */
 const checklistOnlyRefinement = {
   check: (val: { type: string; checklistItems: unknown }) =>
     val.checklistItems === null || val.type === "checklist",
   message: "checklistItems are only allowed on a checklist item",
 };
-const bookingGuardRefinement = {
-  check: (val: { type: string }) => val.type !== "flight" && val.type !== "lodging",
-  message: "flight and lodging items arrive in V2.4",
+
+/**
+ * V2.4 booking refinements on `activity.create`:
+ * - `endDate` (check-out / arrival) must not precede the item's `date`;
+ * - a `lodging` booking must carry a check-out date (`endDate`);
+ * - an arrival place (`arrPlace`) only makes sense on a `flight`; and
+ * - a `flightNumber` only makes sense on a `flight`.
+ */
+const bookingDateOrderRefinement = {
+  check: (val: { date?: string | null; endDate?: string | null }) =>
+    !val.date || !val.endDate || val.endDate >= val.date,
+  message: "endDate must not be before date",
+};
+const lodgingNeedsEndDateRefinement = {
+  check: (val: { type: string; endDate?: string | null }) =>
+    val.type !== "lodging" || (val.endDate ?? null) !== null,
+  message: "lodging bookings require a check-out date",
+};
+const arrPlaceFlightOnlyRefinement = {
+  check: (val: { type: string; arrPlace?: unknown }) =>
+    (val.arrPlace ?? null) === null || val.type === "flight",
+  message: "an arrival place is only allowed on a flight",
+};
+const flightNumberFlightOnlyRefinement = {
+  check: (val: { type: string; flightNumber?: string | null }) =>
+    (val.flightNumber ?? null) === null || val.type === "flight",
+  message: "a flight number is only allowed on a flight",
 };
 
 /**
@@ -170,10 +194,22 @@ export const mutationPayloads = {
       estimatedCostMinor: z.number().int().nonnegative().nullable().default(null),
       listId: IdSchema.nullable().default(null),
       checklistItems: z.array(ChecklistItemSchema).nullable().default(null),
+      // V2.4 booking fields. Defaults keep pre-v2.4 clients valid: a create with
+      // none of these is a plain item. `arrPlace` is a FLIGHT's arrival place;
+      // `place` (above) is the departure airport / lodging address.
+      endDate: IsoDateSchema.nullable().default(null),
+      confirmationCode: z.string().max(100).nullable().default(null),
+      arrPlace: PlaceSchema.nullable().default(null),
+      flightNumber: z.string().trim().max(20).nullable().default(null),
     })
     .refine(timePairRefinement.check, { message: timePairRefinement.message })
     .refine(checklistOnlyRefinement.check, { message: checklistOnlyRefinement.message })
-    .refine(bookingGuardRefinement.check, { message: bookingGuardRefinement.message }),
+    .refine(bookingDateOrderRefinement.check, { message: bookingDateOrderRefinement.message })
+    .refine(lodgingNeedsEndDateRefinement.check, { message: lodgingNeedsEndDateRefinement.message })
+    .refine(arrPlaceFlightOnlyRefinement.check, { message: arrPlaceFlightOnlyRefinement.message })
+    .refine(flightNumberFlightOnlyRefinement.check, {
+      message: flightNumberFlightOnlyRefinement.message,
+    }),
   "activity.update": z.strictObject({
     activityId: IdSchema,
     // `type` is intentionally absent — the discriminator is immutable after
@@ -191,6 +227,11 @@ export const mutationPayloads = {
         estimatedCostMinor: z.number().int().nonnegative().nullable().optional(),
         listId: IdSchema.nullable().optional(),
         checklistItems: z.array(ChecklistItemSchema).nullable().optional(),
+        // V2.4 booking fields (editable post-create; `type` stays immutable).
+        endDate: IsoDateSchema.nullable().optional(),
+        confirmationCode: z.string().max(100).nullable().optional(),
+        arrPlace: PlaceSchema.nullable().optional(),
+        flightNumber: z.string().trim().max(20).nullable().optional(),
       })
       .refine((p) => Object.keys(p).length > 0, { message: "empty patch" }),
   }),
@@ -221,11 +262,19 @@ export const mutationPayloads = {
    * unique `(tripId, date)` index resolves the create race (a second concurrent
    * create falls through to an update). `dayId` is used only on the create path.
    */
-  "day.upsert": z.strictObject({
-    dayId: IdSchema,
-    date: IsoDateSchema,
-    subtitle: z.string().max(120).nullable(),
-  }),
+  "day.upsert": z
+    .strictObject({
+      dayId: IdSchema,
+      date: IsoDateSchema,
+      // Both metadata fields are independently optional now (V2.4 adds the home-
+      // base override): an absent key leaves that column untouched; a present
+      // `null` clears it. The refine keeps the upsert from being a no-op.
+      subtitle: z.string().max(120).nullable().optional(),
+      homeBasePlace: PlaceSchema.nullable().optional(),
+    })
+    .refine((p) => p.subtitle !== undefined || p.homeBasePlace !== undefined, {
+      message: "day.upsert requires at least one of subtitle or homeBasePlace",
+    }),
 
   /**
    * Idea lists (D10). `reorder` is its own seam (mirroring `activity.move`) so
@@ -387,7 +436,7 @@ export interface FeedPayloadMap {
   "member.setRole": { name: string; role: string };
   "invite.create": { role: string };
   "invite.revoke": Record<string, never>;
-  "activity.create": { title: string; date: string | null };
+  "activity.create": { title: string; date: string | null; type: ItemType };
   "activity.update": { title: string; fields: string[] };
   "activity.move": { title: string; fromDate: string | null; toDate: string | null };
   "activity.delete": { title: string; date: string | null };

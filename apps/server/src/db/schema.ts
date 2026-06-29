@@ -117,6 +117,23 @@ export const activities = sqliteTable(
     listId: text("list_id").references(() => ideaLists.id, { onDelete: "set null" }),
     /** D1 checklist body: JSON-encoded ChecklistItem[]; null for non-checklist rows. */
     checklistItems: text("checklist_items"),
+    /**
+     * Trip Workspace v2.4 booking fields (flight/lodging). All nullable, no
+     * defaults: only `flight`/`lodging` rows populate them. `endDate` is the
+     * check-out (lodging) / arrival (flight) ISO date; the `arr_*` columns mirror
+     * the place-field shape and hold a FLIGHT's arrival place (the `place_*`
+     * columns hold the departure airport / lodging address). `confirmationCode`
+     * and `flightNumber` are reference strings.
+     */
+    endDate: text("end_date"),
+    confirmationCode: text("confirmation_code"),
+    arrPlaceName: text("arr_place_name"),
+    arrAddress: text("arr_address"),
+    arrLat: real("arr_lat"),
+    arrLng: real("arr_lng"),
+    arrPlaceProvider: text("arr_place_provider"),
+    arrPlaceRef: text("arr_place_ref"),
+    flightNumber: text("flight_number"),
     /** Membership id of the creator. */
     createdBy: text("created_by").notNull(),
     createdAt: integer("created_at").notNull(),
@@ -144,6 +161,18 @@ export const days = sqliteTable(
     date: text("date").notNull(),
     /** The only metadata in V2.2; routeMode/cover/pinned-note land later. */
     subtitle: text("subtitle"),
+    /**
+     * Trip Workspace v2.4 day home-base override (D-anchors). When set, this
+     * place OVERRIDES the lodging/flight-derived "where you slept" anchor for the
+     * day; null = fall back to the computed anchor. Same six-field shape as a
+     * place (mirrors the activity `place_*` columns).
+     */
+    homeBasePlaceName: text("home_base_place_name"),
+    homeBaseAddress: text("home_base_address"),
+    homeBaseLat: real("home_base_lat"),
+    homeBaseLng: real("home_base_lng"),
+    homeBasePlaceProvider: text("home_base_place_provider"),
+    homeBasePlaceRef: text("home_base_place_ref"),
     /** Membership id of the creator (no FK — history outlives roles, PD-9). */
     createdBy: text("created_by").notNull(),
     createdAt: integer("created_at").notNull(),

@@ -2,9 +2,10 @@ import type { Activity } from "@caravan/shared";
 import { expect, test } from "vitest";
 import {
   isPlotted,
-  type Plotted,
+  type MapPin,
   stopNumbersByDay,
   toFeatureCollection,
+  toMapPins,
   unplottedWithPlace,
 } from "./geo-features";
 
@@ -32,9 +33,32 @@ function activity(over: Partial<Activity>): Activity {
     estimatedCostMinor: null,
     listId: null,
     checklistItems: null,
+    // V2.4 booking fields — all nullable; only flight/lodging rows populate them.
+    endDate: null,
+    confirmationCode: null,
+    arrPlaceName: null,
+    arrAddress: null,
+    arrLat: null,
+    arrLng: null,
+    arrPlaceProvider: null,
+    arrPlaceRef: null,
+    flightNumber: null,
     createdBy: "c".repeat(32),
     createdAt: 0,
     updatedAt: 0,
+    ...over,
+  };
+}
+
+/** Minimal MapPin builder for the GeoJSON-shape tests. */
+function pin(over: Partial<MapPin>): MapPin {
+  return {
+    id: "a".repeat(32),
+    title: "Somewhere",
+    category: "other",
+    lat: 1,
+    lng: 2,
+    date: null,
     ...over,
   };
 }
@@ -50,6 +74,16 @@ test("isPlotted: lat/lng of 0 still counts (Gulf of Guinea is a real place)", ()
   expect(isPlotted(activity({ lat: 0, lng: 0 }))).toBe(true);
 });
 
+test("isPlotted: a flight is plotted from EITHER endpoint", () => {
+  // Departure only, arrival only, both — all plotted; neither → not.
+  expect(isPlotted(activity({ type: "flight", lat: 1, lng: 2 }))).toBe(true);
+  expect(isPlotted(activity({ type: "flight", arrLat: 3, arrLng: 4 }))).toBe(true);
+  expect(isPlotted(activity({ type: "flight", lat: 1, lng: 2, arrLat: 3, arrLng: 4 }))).toBe(true);
+  expect(isPlotted(activity({ type: "flight" }))).toBe(false);
+  // Arrival coords only matter for a flight — a non-flight ignores arr*.
+  expect(isPlotted(activity({ type: "lodging", arrLat: 3, arrLng: 4 }))).toBe(false);
+});
+
 test("unplottedWithPlace: named-but-uncoordinated only", () => {
   const named = activity({ placeName: "Hidden café" });
   const coordinated = activity({ id: "d".repeat(32), placeName: "Pinned", lat: 1, lng: 2 });
@@ -58,29 +92,140 @@ test("unplottedWithPlace: named-but-uncoordinated only", () => {
   expect(out).toEqual([named]);
 });
 
-test("toFeatureCollection: one Point feature per plotted activity, id+title+category in props", () => {
-  const fc = toFeatureCollection([{ ...activity({ title: "Belém" }), lat: 38.7, lng: -9.2 }]);
+test("toMapPins: one pin per plotted non-booking activity, carrying number + category", () => {
+  const pins = toMapPins(
+    [
+      activity({
+        id: fid("1"),
+        title: "Belém",
+        category: "sights",
+        date: "2026-07-04",
+        lat: 38.7,
+        lng: -9.2,
+      }),
+    ],
+    stopNumbersByDay([activity({ id: fid("1"), date: "2026-07-04", lat: 38.7, lng: -9.2 })]),
+  );
+  expect(pins).toHaveLength(1);
+  expect(pins[0]).toMatchObject({
+    id: fid("1"),
+    title: "Belém",
+    category: "sights",
+    lat: 38.7,
+    lng: -9.2,
+    date: "2026-07-04",
+    number: 1,
+  });
+});
+
+test("toMapPins: numbered pins are a subset of rail numbers, never a renumber", () => {
+  // An UNPLOTTED stop sits between two plotted ones in the day's order. It still
+  // consumes its rail number (#2), so the plotted pins must read 1 and 3.
+  const a = activity({ id: fid("a"), date: "2026-07-04", position: "a0", lat: 1, lng: 2 });
+  const b = activity({ id: fid("b"), date: "2026-07-04", position: "a1" }); // unplotted (no coords)
+  const c = activity({ id: fid("c"), date: "2026-07-04", position: "a2", lat: 3, lng: 4 });
+  const pins = toMapPins([a, b, c], stopNumbersByDay([a, b, c]));
+  expect(pins.map((p) => p.number)).toEqual([1, 3]);
+});
+
+test("toMapPins: a flight emits a departure pin on date and an arrival pin on endDate", () => {
+  const flight = activity({
+    id: fid("f"),
+    type: "flight",
+    category: "transport",
+    title: "LIS → HND",
+    date: "2026-07-04",
+    endDate: "2026-07-05",
+    placeName: "Lisbon",
+    lat: 38.77,
+    lng: -9.13,
+    arrPlaceName: "Haneda",
+    arrLat: 35.55,
+    arrLng: 139.78,
+  });
+  const pins = toMapPins([flight], stopNumbersByDay([flight]));
+  expect(pins).toHaveLength(2);
+  const [dep, arr] = pins;
+  // Departure: place* coords on `date`.
+  expect(dep).toMatchObject({
+    id: fid("f"),
+    title: "LIS → HND",
+    category: "transport",
+    lat: 38.77,
+    lng: -9.13,
+    date: "2026-07-04",
+  });
+  // Arrival: arr* coords on `endDate`, labelled by the arrival place.
+  expect(arr).toMatchObject({
+    id: fid("f"),
+    title: "Haneda",
+    category: "transport",
+    lat: 35.55,
+    lng: 139.78,
+    date: "2026-07-05",
+  });
+  // Bookings are never numbered.
+  expect(dep).not.toHaveProperty("number");
+  expect(arr).not.toHaveProperty("number");
+});
+
+test("toMapPins: a flight emits only the endpoint(s) that have coordinates", () => {
+  const depOnly = activity({ id: fid("1"), type: "flight", date: "2026-07-04", lat: 1, lng: 2 });
+  const arrOnly = activity({
+    id: fid("2"),
+    type: "flight",
+    date: "2026-07-04",
+    endDate: "2026-07-05",
+    arrLat: 3,
+    arrLng: 4,
+  });
+  expect(toMapPins([depOnly])).toEqual([
+    expect.objectContaining({ lat: 1, lng: 2, date: "2026-07-04" }),
+  ]);
+  expect(toMapPins([arrOnly])).toEqual([
+    expect.objectContaining({ lat: 3, lng: 4, date: "2026-07-05" }),
+  ]);
+});
+
+test("toMapPins: a lodging emits one un-numbered pin on its check-in date", () => {
+  const lodging = activity({
+    id: fid("l"),
+    type: "lodging",
+    category: "lodging",
+    title: "Hotel Nikko",
+    date: "2026-07-04",
+    endDate: "2026-07-07",
+    placeName: "Hotel Nikko",
+    lat: 35.66,
+    lng: 139.7,
+  });
+  const pins = toMapPins([lodging], stopNumbersByDay([lodging]));
+  expect(pins).toHaveLength(1);
+  expect(pins[0]).toMatchObject({
+    id: fid("l"),
+    category: "lodging",
+    lat: 35.66,
+    lng: 139.7,
+    date: "2026-07-04", // check-in day, NOT endDate
+  });
+  expect(pins[0]).not.toHaveProperty("number");
+});
+
+test("toFeatureCollection: one Point feature per pin, id+title+category in props", () => {
+  const fc = toFeatureCollection([
+    pin({ title: "Belém", category: "sights", lat: 38.7, lng: -9.2 }),
+  ]);
   expect(fc.type).toBe("FeatureCollection");
   expect(fc.features).toHaveLength(1);
   const f = fc.features[0];
   expect(f?.geometry).toEqual({ type: "Point", coordinates: [-9.2, 38.7] }); // GeoJSON is [lng, lat]
-  // `category` rides on every feature so the pin tint (map-panel's token bridge)
-  // can `match` on it; `activity()` defaults the category to "other".
-  expect(f?.properties).toMatchObject({ title: "Belém", category: "other" });
+  expect(f?.properties).toMatchObject({ title: "Belém", category: "sights" });
 });
 
-test("toFeatureCollection: carries each activity's category for the pin tint", () => {
-  const fc = toFeatureCollection([
-    { ...activity({ id: fid("1"), title: "Ramen", category: "food" }), lat: 1, lng: 2 },
-    { ...activity({ id: fid("2"), title: "Hotel", category: "lodging" }), lat: 3, lng: 4 },
-  ]);
-  expect(fc.features[0]?.properties?.category).toBe("food");
-  expect(fc.features[1]?.properties?.category).toBe("lodging");
-});
-
-test("toFeatureCollection: no `number` property when no lookup is supplied", () => {
-  const fc = toFeatureCollection([{ ...activity({ title: "X" }), lat: 1, lng: 2 }]);
-  expect(fc.features[0]?.properties).not.toHaveProperty("number");
+test("toFeatureCollection: attaches `number` only when the pin carries one", () => {
+  const fc = toFeatureCollection([pin({ number: 2 }), pin({ id: fid("2") })]);
+  expect(fc.features[0]?.properties?.number).toBe(2);
+  expect(fc.features[1]?.properties).not.toHaveProperty("number");
 });
 
 test("stopNumbersByDay: numbers each day independently (resets per day) and merges by id", () => {
@@ -102,26 +247,4 @@ test("stopNumbersByDay: undated (Ideas-pool) items never get a stop number", () 
   ]);
   expect(n.get(fid("1"))).toBe(1);
   expect(n.has(fid("2"))).toBe(false);
-});
-
-test("toFeatureCollection: pins keep their rail number — a subset, never a renumber", () => {
-  // An UNPLOTTED stop sits between two plotted ones in the day's order. It still
-  // consumes its rail number (#2), so the plotted pins must read 1 and 3 — proving
-  // the map shows a faithful subset of the rail numbers, not a 1,2 renumbering.
-  const a: Plotted = {
-    ...activity({ id: fid("a"), date: "2026-07-04", position: "a0" }),
-    lat: 1,
-    lng: 2,
-  };
-  const b = activity({ id: fid("b"), date: "2026-07-04", position: "a1" }); // unplotted (no coords)
-  const c: Plotted = {
-    ...activity({ id: fid("c"), date: "2026-07-04", position: "a2" }),
-    lat: 3,
-    lng: 4,
-  };
-
-  const numbers = stopNumbersByDay([a, b, c]);
-  const fc = toFeatureCollection([a, c], numbers);
-  expect(fc.features[0]?.properties?.number).toBe(1);
-  expect(fc.features[1]?.properties?.number).toBe(3);
 });

@@ -26,6 +26,15 @@ function activity(over: Partial<Activity> = {}): Activity {
     estimatedCostMinor: null,
     listId: null,
     checklistItems: null,
+    endDate: null,
+    confirmationCode: null,
+    arrPlaceName: null,
+    arrAddress: null,
+    arrLat: null,
+    arrLng: null,
+    arrPlaceProvider: null,
+    arrPlaceRef: null,
+    flightNumber: null,
     createdBy: id(98),
     createdAt: 0,
     updatedAt: 0,
@@ -57,6 +66,21 @@ describe("computeStopNumbers", () => {
       activity({ id: id(1), position: "a0", type: "activity" }),
       activity({ id: id(2), position: "a1", type: "note" }),
       activity({ id: id(3), position: "a2", type: "checklist" }),
+      activity({ id: id(4), position: "a3", type: "activity" }),
+    ];
+    const numbers = computeStopNumbers(items);
+    expect(numbers.get(id(1))).toBe(1);
+    expect(numbers.has(id(2))).toBe(false);
+    expect(numbers.has(id(3))).toBe(false);
+    expect(numbers.get(id(4))).toBe(2);
+    expect(numbers.size).toBe(2);
+  });
+
+  it("skips flight and lodging bookings (not numbered, do not consume a number)", () => {
+    const items = [
+      activity({ id: id(1), position: "a0", type: "activity" }),
+      activity({ id: id(2), position: "a1", type: "flight" }),
+      activity({ id: id(3), position: "a2", type: "lodging" }),
       activity({ id: id(4), position: "a3", type: "activity" }),
     ];
     const numbers = computeStopNumbers(items);
