@@ -95,7 +95,7 @@ function HeroBand({
   snapshot: TripSnapshot;
   moneyQuery: UseQueryResult<TripMoney, Error>;
 }) {
-  const { trip, members, days, activities } = snapshot;
+  const { trip, members, activities } = snapshot;
 
   // Active members carry the avatar stack + the headcount, in join order so the
   // person-color assignment matches every other surface (feed, expenses, polls).
@@ -108,13 +108,11 @@ function HeroBand({
 
   const tripDays =
     trip.startDate && trip.endDate ? daysBetween(trip.startDate, trip.endDate) + 1 : null;
-  const homeBase = deriveHomeBase(days, trip.destination);
 
   // The one-line trip summary (mockup `.summary`): bold name, then dotted facts.
   const facts = [
     formatTripDates(trip.startDate, trip.endDate),
     tripDays !== null ? `${tripDays} ${tripDays === 1 ? "day" : "days"}` : null,
-    homeBase ? `${homeBase} base` : null,
     `${activeMembers.length} going`,
   ].filter((f): f is string => Boolean(f));
 
@@ -181,28 +179,6 @@ function buildCountdown(start: string | null, end: string | null): string | null
   const n = daysBetween(start, today) + 1;
   const m = daysBetween(start, end) + 1;
   return `Day ${n} of ${m}`;
-}
-
-/**
- * A single trip "home base" label for the identity line. Prefers the most-set
- * per-day home-base override (the literal home-base concept, V2.4), falling back
- * to the trip destination. Null when neither is present.
- */
-function deriveHomeBase(days: TripSnapshot["days"], destination: string | null): string | null {
-  const counts = new Map<string, number>();
-  for (const d of days) {
-    if (d.homeBasePlaceName)
-      counts.set(d.homeBasePlaceName, (counts.get(d.homeBasePlaceName) ?? 0) + 1);
-  }
-  let best: string | null = null;
-  let bestCount = 0;
-  for (const [name, count] of counts) {
-    if (count > bestCount) {
-      best = name;
-      bestCount = count;
-    }
-  }
-  return best ?? destination;
 }
 
 /* ---------- AttentionChips: triage signals ---------- */
