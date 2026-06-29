@@ -19,6 +19,7 @@ import { AmountMinorSchema, ExpenseCategorySchema } from "./schemas/expense";
 import type { EntityPostImage, FeedEvent } from "./schemas/feed";
 import { IDEA_LIST_NAME_MAX } from "./schemas/idea-list";
 import { POLL_OPTION_MAX, POLL_OPTIONS_LIMIT, POLL_QUESTION_MAX } from "./schemas/poll";
+import { RouteModeSchema } from "./schemas/route";
 import { InviteRoleSchema } from "./schemas/trip";
 
 /**
@@ -151,6 +152,8 @@ export const mutationPayloads = {
       startDate: IsoDateSchema.nullable().optional(),
       endDate: IsoDateSchema.nullable().optional(),
       currency: CurrencySchema.optional(),
+      /** V2.5 trip-wide default routing mode (days inherit it unless overridden). */
+      defaultRouteMode: RouteModeSchema.optional(),
     })
     .refine((p) => Object.keys(p).length > 0, { message: "empty patch" })
     .refine((p) => !p.startDate || !p.endDate || p.startDate <= p.endDate, {
@@ -271,10 +274,16 @@ export const mutationPayloads = {
       // `null` clears it. The refine keeps the upsert from being a no-op.
       subtitle: z.string().max(120).nullable().optional(),
       homeBasePlace: PlaceSchema.nullable().optional(),
+      // V2.5 per-day routing-mode override: absent leaves it untouched, a present
+      // `null` clears it back to inheriting the trip default.
+      routeMode: RouteModeSchema.nullable().optional(),
     })
-    .refine((p) => p.subtitle !== undefined || p.homeBasePlace !== undefined, {
-      message: "day.upsert requires at least one of subtitle or homeBasePlace",
-    }),
+    .refine(
+      (p) => p.subtitle !== undefined || p.homeBasePlace !== undefined || p.routeMode !== undefined,
+      {
+        message: "day.upsert requires at least one of subtitle, homeBasePlace, or routeMode",
+      },
+    ),
 
   /**
    * Idea lists (D10). `reorder` is its own seam (mirroring `activity.move`) so

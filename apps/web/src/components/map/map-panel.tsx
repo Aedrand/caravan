@@ -1,4 +1,4 @@
-import type { Activity, TripSnapshot } from "@caravan/shared";
+import type { Activity, RouteResult, TripSnapshot } from "@caravan/shared";
 import type { Point } from "geojson";
 import { MapPin, MapPinOff, TriangleAlert } from "lucide-react";
 import maplibregl from "maplibre-gl";
@@ -17,6 +17,7 @@ import {
   unplottedWithPlace,
 } from "./geo-features";
 import { pinColorExpression, readPinTints } from "./pin-tint";
+import { buildRouteFeatureCollection, dayColorExpression } from "./route-features";
 import { useMapSelection } from "./selection";
 
 /**
@@ -29,6 +30,14 @@ import { useMapSelection } from "./selection";
  */
 
 const SOURCE_ID = "activities";
+/** Day route-line source/layer ids (V2.5 — Routing). The line layer sits UNDER
+ * the pins/clusters so the ribbons read behind the numbered stops. */
+const ROUTES_SOURCE_ID = "routes";
+const ROUTE_LINE_LAYER_ID = "route-lines";
+
+/** Stable empty default so existing call sites (and the no-route mobile Map tab)
+ * pass a consistent identity instead of churning a fresh Map each render. */
+const EMPTY_DAY_ROUTES: Map<string, RouteResult> = new Map();
 
 /**
  * Day key for the per-day filter (Trip Workspace v2). Dated pins key on their
@@ -44,7 +53,17 @@ const dayKey = (p: MapPinFeature) => p.date ?? UNDATED;
  * split) instead of a self-contained section: no own heading, the card grows to
  * its container. The unplotted affordance, when present, caps to a scroll region.
  */
-export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; fill?: boolean }) {
+export function MapPanel({
+  snapshot,
+  fill = false,
+  dayRoutes = EMPTY_DAY_ROUTES,
+}: {
+  snapshot: TripSnapshot;
+  fill?: boolean;
+  /** Per-day drawn routes (V2.5 — Routing), keyed by ISO date. Optional so the
+   * mobile Map tab and tests can mount the panel without route lines. */
+  dayRoutes?: Map<string, RouteResult>;
+}) {
   const { activities } = snapshot;
   // Per-day stop numbers (1..N, reset each day) keyed by activity id — the same
   // numbers the itinerary rail stamps (§C.6). Computed over the FULL set so
@@ -94,12 +113,12 @@ export function MapPanel({ snapshot, fill = false }: { snapshot: TripSnapshot; f
     );
   }
 
-  if (fill) return <MapView pins={pins} unplotted={unplotted} fill />;
+  if (fill) return <MapView pins={pins} unplotted={unplotted} dayRoutes={dayRoutes} fill />;
 
   return (
     <section className="flex flex-col gap-3">
       <MapHeading count={pins.length} />
-      <MapView pins={pins} unplotted={unplotted} />
+      <MapView pins={pins} unplotted={unplotted} dayRoutes={dayRoutes} />
     </section>
   );
 }
@@ -121,12 +140,15 @@ function MapHeading({ count }: { count: number }) {
 function MapView({
   pins,
   unplotted,
+  dayRoutes = EMPTY_DAY_ROUTES,
   fill = false,
 }: {
   // The FULL render-pin set (a flight is already fanned out into its departure +
   // arrival pins, each carrying its own day/number). See `toMapPins`.
   pins: MapPinFeature[];
   unplotted: Activity[];
+  /** Per-day drawn routes (V2.5), keyed by ISO date. */
+  dayRoutes?: Map<string, RouteResult>;
   fill?: boolean;
 }) {
   const mapConfig = useMapConfig();
@@ -177,6 +199,22 @@ function MapView({
   // and bookings carry none), so day-filtering and numbering are read off the pin.
   const fc = useMemo(() => toFeatureCollection(visiblePins), [visiblePins]);
 
+  // Route lines (V2.5). The day-color `match` keys off each day's ORDINAL over
+  // the trip's dated days — derived from the (stable) dated pin groups, not from
+  // which routes have resolved — so a day's ribbon keeps a stable hue as routes
+  // stream in. Every routed day has ≥2 plotted stops → ≥2 pins → a dated group,
+  // so this covers them all.
+  const orderedDates = useMemo(
+    () => dayGroups.filter((g) => g.key !== UNDATED).map((g) => g.key),
+    [dayGroups],
+  );
+  // Honor the SAME per-day toggle as the pins: a hidden day drops its line at the
+  // data level (the toggle stores the day's ISO key, which is the route's date).
+  const routeFc = useMemo(
+    () => buildRouteFeatureCollection(dayRoutes, hiddenDays),
+    [dayRoutes, hiddenDays],
+  );
+
   const toggleDay = (key: string) => {
     setHiddenDays((prev) => {
       const next = new Set(prev);
@@ -194,6 +232,12 @@ function MapView({
   pinsRef.current = pins;
   const selectRef = useRef(select);
   selectRef.current = select;
+  // Latest route data, read inside the one-time boot effect to seed the source +
+  // paint; the live sync effects below keep them current after.
+  const routeFcRef = useRef(routeFc);
+  routeFcRef.current = routeFc;
+  const orderedDatesRef = useRef(orderedDates);
+  orderedDatesRef.current = orderedDates;
 
   // Boot the map once we have a style URL. Deliberately NOT keyed on activities:
   // rebuilding the map on every edit would be wasteful and jarring.
@@ -227,6 +271,21 @@ function MapView({
         // where dozens of pins would otherwise stack into an unreadable blob.
         clusterRadius: 12,
         clusterMaxZoom: 9,
+      });
+      // Day route lines (V2.5). Added BEFORE the clusters/pins layers so the
+      // ribbons render UNDER the numbered pins. One `LineString` per visible day,
+      // tinted by `dayColorExpression` (a `match` on the feature's `date`).
+      map.addSource(ROUTES_SOURCE_ID, { type: "geojson", data: routeFcRef.current });
+      map.addLayer({
+        id: ROUTE_LINE_LAYER_ID,
+        type: "line",
+        source: ROUTES_SOURCE_ID,
+        layout: { "line-join": "round", "line-cap": "round" },
+        paint: {
+          "line-color": dayColorExpression(orderedDatesRef.current),
+          "line-width": 2.5,
+          "line-opacity": 0.75,
+        },
       });
       map.addLayer({
         id: "clusters",
@@ -350,6 +409,22 @@ function MapView({
     const src = map.getSource(SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
     src?.setData(fc);
   }, [fc, ready]);
+
+  // Push the route geometry as it resolves (and as day toggles hide/show lines).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const src = map.getSource(ROUTES_SOURCE_ID) as maplibregl.GeoJSONSource | undefined;
+    src?.setData(routeFc);
+  }, [routeFc, ready]);
+
+  // Re-apply the day-color match when the ordered date set changes (a day added/
+  // removed shifts ordinals → hues), mirroring the pin re-tint.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !map.getLayer(ROUTE_LINE_LAYER_ID)) return;
+    map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-color", dayColorExpression(orderedDates));
+  }, [orderedDates, ready]);
 
   // Selection → fly to the pin and show a popup (bidirectional highlight, half 2).
   useEffect(() => {

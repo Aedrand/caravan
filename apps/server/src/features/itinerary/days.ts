@@ -26,6 +26,10 @@ registerMutation("day.upsert", {
       values.subtitle = payload.subtitle;
       fields.push("subtitle");
     }
+    if (payload.routeMode !== undefined) {
+      values.routeMode = payload.routeMode;
+      fields.push("routeMode");
+    }
     if (payload.homeBasePlace !== undefined) {
       const p = payload.homeBasePlace;
       values.homeBasePlaceName = p?.name ?? null;

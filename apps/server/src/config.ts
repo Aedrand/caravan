@@ -51,6 +51,17 @@ const EnvSchema = z.object({
   /** Stadia key — alternative keyed tile styles. */
   STADIA_KEY: z.string().min(1).optional(),
 
+  // --- Routing (V2.5). All optional: the default is the keyless donated
+  // public Valhalla instance, so zero config still draws day routes. ---
+  /** Routing engine. Valhalla (default) is keyless; OpenRouteService needs ORS_KEY. */
+  ROUTING_PROVIDER: z.enum(["valhalla", "openrouteservice"]).default("valhalla"),
+  /** Routing base URL — override for a self-hosted Valhalla or an ORS host. */
+  ROUTING_URL: z.url().default("https://valhalla1.openstreetmap.de"),
+  /** OpenRouteService API key — required to actually use the `openrouteservice` provider. */
+  ORS_KEY: z.string().min(1).optional(),
+  /** Per-deployment routing rate limit: max upstream route requests per minute. */
+  ROUTE_RATE_LIMIT_PER_MINUTE: z.coerce.number().int().positive().default(60),
+
   // --- Transactional email (D.1) + daily digest (D.2). All optional: email is
   // OFF until SMTP_HOST and SMTP_FROM are both set, so the default is no email. ---
   /** SMTP server host. Email is considered configured only when this (and SMTP_FROM) are set. */
@@ -121,6 +132,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
       tileProvider: parsed.TILE_PROVIDER,
       maptilerKey: parsed.MAPTILER_KEY,
       stadiaKey: parsed.STADIA_KEY,
+    },
+    routing: {
+      provider: parsed.ROUTING_PROVIDER,
+      url: parsed.ROUTING_URL,
+      orsKey: parsed.ORS_KEY,
+      rateLimitPerMinute: parsed.ROUTE_RATE_LIMIT_PER_MINUTE,
     },
     smtp: {
       host: parsed.SMTP_HOST,

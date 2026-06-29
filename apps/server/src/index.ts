@@ -5,6 +5,7 @@ import { createAuth } from "./auth";
 import { ensureAdminUser } from "./auth/bootstrap";
 import { loadConfig } from "./config";
 import { createJobRegistry } from "./core/jobs";
+import { pruneRouteCache } from "./core/routing";
 import { createTripRooms } from "./core/ws";
 import { createDb } from "./db";
 import { runMigrations } from "./db/migrate";
@@ -59,6 +60,10 @@ async function main() {
   jobs.register("daily-digest", config.digestCron, () =>
     runDailyDigest({ db: db.db, logger, config, email }),
   );
+
+  // Reclaim expired route-cache rows (V2.5) every 6h so the table stays bounded
+  // (entries also expire lazily as misses, but pruning frees the storage).
+  jobs.register("route-cache-prune", "0 */6 * * *", () => pruneRouteCache(db.db));
 
   // noServer is required — the Hono adapter handles the HTTP upgrade itself.
   const wss = new WebSocketServer({ noServer: true });

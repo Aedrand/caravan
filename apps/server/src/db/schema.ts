@@ -5,6 +5,7 @@ import {
   EXPENSE_CATEGORIES,
   ITEM_TYPES,
   MEMBER_STATUSES,
+  ROUTE_MODES,
   TRIP_ROLES,
 } from "@caravan/shared";
 import { index, integer, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
@@ -32,6 +33,12 @@ export const trips = sqliteTable("trips", {
   endDate: text("end_date"),
   /** ISO 4217; single currency per trip in v1 (PD-8). */
   currency: text("currency").notNull().default("USD"),
+  /**
+   * V2.5 trip-wide default routing mode for the day connecting line. NOT NULL
+   * with a default so every existing trip back-fills to `walking`; per-day
+   * `days.routeMode` overrides it.
+   */
+  defaultRouteMode: text("default_route_mode", { enum: ROUTE_MODES }).notNull().default("walking"),
   /** Per-trip monotonic version — the sync/feed cursor (TD-1). */
   version: integer("version").notNull().default(0),
   archivedAt: integer("archived_at"),
@@ -159,8 +166,13 @@ export const days = sqliteTable(
       .references(() => trips.id, { onDelete: "cascade" }),
     /** ISO yyyy-mm-dd local date — the `(tripId, date)` lazy key. */
     date: text("date").notNull(),
-    /** The only metadata in V2.2; routeMode/cover/pinned-note land later. */
+    /** Free-text per-day subtitle (V2.2). */
     subtitle: text("subtitle"),
+    /**
+     * V2.5 per-day routing-mode override. Nullable: null = inherit the trip's
+     * `defaultRouteMode`; a concrete value pins this day's connecting line.
+     */
+    routeMode: text("route_mode", { enum: ROUTE_MODES }),
     /**
      * Trip Workspace v2.4 day home-base override (D-anchors). When set, this
      * place OVERRIDES the lodging/flight-derived "where you slept" anchor for the
@@ -209,6 +221,22 @@ export const geocodeCache = sqliteTable("geocode_cache", {
   /** `<provider>:<op>:<normalized key>` — op is `search` | `reverse`. */
   key: text("key").primaryKey(),
   /** JSON-encoded normalized GeoPlace[] (search) or GeoPlace|null (reverse). */
+  value: text("value").notNull(),
+  createdAt: integer("created_at").notNull(),
+  expiresAt: integer("expires_at").notNull(),
+});
+
+/**
+ * Route response cache (V2.5 — Routing). Mirrors `geocodeCache`: keyed by
+ * `<provider>:<mode>:<sha256 of normalized waypoints>`, stores the normalized
+ * RouteResult JSON the proxy returned. Cuts load on the (often donated) public
+ * routing instance; rows carry a 24h `expiresAt` so the proxy treats stale
+ * entries as misses.
+ */
+export const routeCache = sqliteTable("route_cache", {
+  /** `<provider>:<mode>:<sha256hex of normalized waypoints>`. */
+  key: text("key").primaryKey(),
+  /** JSON-encoded normalized RouteResult. */
   value: text("value").notNull(),
   createdAt: integer("created_at").notNull(),
   expiresAt: integer("expires_at").notNull(),

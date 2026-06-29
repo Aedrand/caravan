@@ -5,10 +5,12 @@ import {
   type DayOverride,
   type DerivedEntry,
   deriveAnchors,
+  effectiveRouteMode,
   type GeoPlace,
   type ItemType,
   type MutationPayload,
   positionBetween,
+  type RouteMode,
   type TripMember,
   type TripSnapshot,
 } from "@caravan/shared";
@@ -33,7 +35,9 @@ import {
 import {
   Building2,
   CalendarRange,
+  Car,
   ChevronDown,
+  Footprints,
   Home,
   Lightbulb,
   ListChecks,
@@ -57,6 +61,7 @@ import {
 import { useFocusedDay } from "@/components/map/focused-day";
 import { PlaceAutocomplete } from "@/components/map/place-autocomplete";
 import { useMapSelection } from "@/components/map/selection";
+import { type DayRouteState, useDayRoutes } from "@/components/routing/day-routes";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -76,6 +81,7 @@ import { dayNumber, deriveDays, formatDayLabel, formatDayShort, todayIso } from 
 import { computeStopNumbers } from "./numbering";
 import { RailRow } from "./rail-row";
 import { SortableRailRow } from "./sortable-activity-card";
+import { TravelLegRow } from "./travel-leg-row";
 
 type EditingHint = { name: string; color: string };
 
@@ -129,6 +135,10 @@ export function ItineraryBoard({
   // each day's subtitle.
   const { daysByDate, upsertDay } = useDays();
   const { ideaLists } = useIdeaLists();
+  // V2.5 routing: the per-day drawn routes, computed once by RoutingProvider (at
+  // PlanView) and shared with the ambient map. Empty outside that provider (tests,
+  // narrow Plan with no map) → the rail just shows no travel-time leg rows.
+  const dayRoutes = useDayRoutes();
   const [dialog, setDialog] = useState<DialogState>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -290,6 +300,12 @@ export function ItineraryBoard({
   const updateActivity = (activityId: string, patch: MutationPayload<"activity.update">["patch"]) =>
     void mutateAsync("activity.update", { activityId, patch }).catch(() => {});
 
+  // V2.5: the trip-wide default routing mode (days inherit it unless overridden).
+  // No trip settings dialog exists yet, so this lives in the Plan toolbar below —
+  // the trip-scoped surface next to the per-day overrides in each DayHeader.
+  const setDefaultRouteMode = (mode: RouteMode) =>
+    void mutateAsync("trip.update", { defaultRouteMode: mode }).catch(() => {});
+
   // The votes + comments rail under each card (Track A). `canEdit` gates voting
   // and commenting (viewers see tallies + threads read-only).
   const renderFooter = (activity: Activity): ReactNode => (
@@ -403,6 +419,9 @@ export function ItineraryBoard({
                 </Button>
               )}
               {canEdit && (
+                <TripRouteModeToggle mode={trip.defaultRouteMode} onChange={setDefaultRouteMode} />
+              )}
+              {canEdit && (
                 // Desktop-only: on mobile the thumb FAB is the sole "add" path,
                 // so this would otherwise be a second control with the same
                 // accessible name at narrow viewports.
@@ -490,6 +509,13 @@ export function ItineraryBoard({
                   onUpdate={updateActivity}
                   onToggleChecklistItem={toggleChecklistItem}
                   renderFooter={renderFooter}
+                  dayRoute={dayRoutes.get(iso)}
+                  tripDefaultMode={trip.defaultRouteMode}
+                  dayRouteMode={daysByDate.get(iso)?.routeMode ?? null}
+                  onSetRouteMode={(mode) =>
+                    void upsertDay(iso, { routeMode: mode }).catch(() => {})
+                  }
+                  onClearRouteMode={() => void upsertDay(iso, { routeMode: null }).catch(() => {})}
                 />
               ))}
             </div>
@@ -625,6 +651,11 @@ function DayBlock({
   onUpdate,
   onToggleChecklistItem,
   renderFooter,
+  dayRoute,
+  tripDefaultMode,
+  dayRouteMode,
+  onSetRouteMode,
+  onClearRouteMode,
 }: {
   sectionRef: (el: HTMLElement | null) => void;
   iso: string;
@@ -665,6 +696,16 @@ function DayBlock({
   onUpdate: (activityId: string, patch: MutationPayload<"activity.update">["patch"]) => void;
   onToggleChecklistItem: (activityId: string, itemId: string, done: boolean) => void;
   renderFooter: (activity: Activity) => ReactNode;
+  /** This day's drawn route (V2.5) — feeds the inter-stop travel-leg rows. */
+  dayRoute: DayRouteState | undefined;
+  /** Trip-wide default routing mode (for the day toggle's "(trip default)" state). */
+  tripDefaultMode: RouteMode;
+  /** This day's mode override, or null when inheriting the trip default. */
+  dayRouteMode: RouteMode | null;
+  /** Pin this day's routing mode (writes the override). */
+  onSetRouteMode: (mode: RouteMode) => void;
+  /** Clear this day's override (back to the trip default). */
+  onClearRouteMode: () => void;
 }) {
   // Drop target sits on the whole day, so a row lands even on a collapsed or
   // empty day (handleDragEnd reads the `col:<iso>` id → appends to that day).
@@ -689,6 +730,25 @@ function DayBlock({
   const ownOverride = dayOverrides.get(iso);
   const ownHomeBase = ownOverride?.homeBasePlaceName ?? null;
   const anchors = deriveAnchors(allBookings, iso, dayOverrides);
+
+  // V2.5 inter-stop travel legs. The plotted stops are EXACTLY the activity-type
+  // items with coordinates, in position order — the same set/order
+  // `buildDayWaypoints` threads into the route waypoints `[start?, ...stops, end?]`.
+  // A leg sits before plotted stop j (j ≥ 1), describing the hop stop(j-1) → stop(j);
+  // that's `legs[legIndexBase + (j - 1)]`, where legIndexBase shifts by 1 when a
+  // start anchor bookends the front of the waypoint list.
+  const plottedStops = items.filter(
+    (a) => a.type === "activity" && a.lat !== null && a.lng !== null,
+  );
+  const plottedIndex = new Map(plottedStops.map((a, i) => [a.id, i] as const));
+  const hasStartAnchor =
+    anchors.start != null && anchors.start.lat !== null && anchors.start.lng !== null;
+  const legIndexBase = hasStartAnchor ? 1 : 0;
+  const routeLegs = dayRoute?.result?.legs ?? null;
+  const routeLoading = dayRoute?.isLoading ?? false;
+  // Fall back to the computed effective mode when no route has resolved yet, so the
+  // leg glyph + directions link still match the day's intended mode.
+  const legMode = dayRoute?.mode ?? effectiveRouteMode(tripDefaultMode, dayRouteMode);
   const displayAnchor: AnchorRef | null =
     ownHomeBase !== null && ownOverride
       ? {
@@ -772,6 +832,10 @@ function DayBlock({
           onFocus={onFocus}
           canEdit={canEdit}
           onAdd={onAdd}
+          tripDefaultMode={tripDefaultMode}
+          dayRouteMode={dayRouteMode}
+          onSetRouteMode={onSetRouteMode}
+          onClearRouteMode={onClearRouteMode}
         />
         {open && (
           // The SortableContext only knows the real activity ids; the woven-in
@@ -785,11 +849,15 @@ function DayBlock({
                 No inter-row gap so each row's spine segment meets the next.
                 isFirst/isLast span the FULL list so the spine reaches end to end. */}
             <ol className="flex list-none flex-col py-1 pl-1">
-              {rows.map((row, index) => {
+              {/* flatMap so a plotted stop can emit a leading TravelLegRow (the hop
+                  from the previous plotted stop) ahead of its own row. Intervening
+                  notes/checklists/derived rows never add a leg — legs connect only
+                  consecutive PLOTTED stops, placed just before the downstream one. */}
+              {rows.flatMap((row, index) => {
                 const isFirst = index === 0;
                 const isLast = index === rows.length - 1;
                 if (row.kind === "derived") {
-                  return (
+                  return [
                     <DerivedEntryRow
                       key={`derived:${row.entry.sourceBookingId}:${row.entry.kind}`}
                       entry={row.entry}
@@ -797,12 +865,12 @@ function DayBlock({
                       isLast={isLast}
                       canEdit={canEdit}
                       onOpenBooking={onOpenBooking}
-                    />
-                  );
+                    />,
+                  ];
                 }
                 const activity = row.activity;
                 const addedByMember = membersById.get(activity.createdBy);
-                return (
+                const stopRow = (
                   <SortableRailRow
                     key={activity.id}
                     activity={activity}
@@ -834,6 +902,23 @@ function DayBlock({
                     footer={renderFooter(activity)}
                   />
                 );
+                const j = plottedIndex.get(activity.id);
+                const prev = j !== undefined && j >= 1 ? plottedStops[j - 1] : undefined;
+                if (j !== undefined && prev) {
+                  const legRow = (
+                    <TravelLegRow
+                      key={`leg:${prev.id}:${activity.id}`}
+                      leg={routeLegs ? (routeLegs[legIndexBase + (j - 1)] ?? null) : null}
+                      isLoading={routeLoading}
+                      fromCoord={{ lat: prev.lat as number, lng: prev.lng as number }}
+                      toCoord={{ lat: activity.lat as number, lng: activity.lng as number }}
+                      mode={legMode}
+                      canEdit={canEdit}
+                    />
+                  );
+                  return [legRow, stopRow];
+                }
+                return [stopRow];
               })}
             </ol>
           </SortableContext>
@@ -878,6 +963,10 @@ function DayHeader({
   onFocus,
   canEdit,
   onAdd,
+  tripDefaultMode,
+  dayRouteMode,
+  onSetRouteMode,
+  onClearRouteMode,
 }: {
   n: number | null;
   iso: string;
@@ -896,6 +985,10 @@ function DayHeader({
   onFocus: () => void;
   canEdit: boolean;
   onAdd: (type?: ItemType) => void;
+  tripDefaultMode: RouteMode;
+  dayRouteMode: RouteMode | null;
+  onSetRouteMode: (mode: RouteMode) => void;
+  onClearRouteMode: () => void;
 }) {
   return (
     <div className="group/day py-1">
@@ -941,6 +1034,13 @@ function DayHeader({
           {stopCount} {stopCount === 1 ? "stop" : "stops"}
           {costTotalMinor > 0 && ` · ~${formatMoney(costTotalMinor, currency)} est`}
         </p>
+        <DayRouteModeToggle
+          tripDefaultMode={tripDefaultMode}
+          dayRouteMode={dayRouteMode}
+          canEdit={canEdit}
+          onSet={onSetRouteMode}
+          onClear={onClearRouteMode}
+        />
       </div>
     </div>
   );
@@ -1048,6 +1148,135 @@ function AnchorChip({
           <X aria-hidden className="size-3" />
         </button>
       )}
+    </span>
+  );
+}
+
+/**
+ * Per-day routing-mode toggle (V2.5). A compact walk/drive segmented control by
+ * the anchor chip: it reflects the EFFECTIVE mode (trip default ⊕ this day's
+ * override). With no override it shows a muted "(trip default)"; picking a mode
+ * pins it for the day (writes `routeMode`), and a hover × clears back to the
+ * default. Editor-gated — viewers get a small read-only mode indicator. Mirrors
+ * the AnchorChip inline idiom (and rides the same `group/day` hover-reveal).
+ */
+function DayRouteModeToggle({
+  tripDefaultMode,
+  dayRouteMode,
+  canEdit,
+  onSet,
+  onClear,
+}: {
+  tripDefaultMode: RouteMode;
+  dayRouteMode: RouteMode | null;
+  canEdit: boolean;
+  onSet: (mode: RouteMode) => void;
+  onClear: () => void;
+}) {
+  const effective = effectiveRouteMode(tripDefaultMode, dayRouteMode);
+  const isDefault = dayRouteMode === null;
+
+  if (!canEdit) {
+    const Icon = effective === "driving" ? Car : Footprints;
+    return (
+      <span
+        className="flex items-center gap-1 font-medium text-muted-foreground"
+        title={`Routes by ${effective}`}
+      >
+        <Icon aria-hidden className="size-3.5 shrink-0" strokeWidth={2.25} />
+        <span className="capitalize">{effective}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="flex items-center gap-1">
+      <span
+        role="toolbar"
+        aria-label="Travel mode for this day's route"
+        className="flex items-center rounded-pill border bg-card p-0.5"
+      >
+        {(["walking", "driving"] as const).map((m) => {
+          const Icon = m === "driving" ? Car : Footprints;
+          const active = effective === m;
+          return (
+            <button
+              key={m}
+              type="button"
+              onClick={() => onSet(m)}
+              aria-pressed={active}
+              aria-label={m === "walking" ? "Walk this day" : "Drive this day"}
+              title={m === "walking" ? "Walk" : "Drive"}
+              className={cn(
+                "flex items-center rounded-pill px-1.5 py-0.5 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                active
+                  ? "bg-accent-soft text-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Icon aria-hidden className="size-3.5" strokeWidth={2.25} />
+            </button>
+          );
+        })}
+      </span>
+      {isDefault ? (
+        <span className="text-[11px] text-muted-foreground">(trip default)</span>
+      ) : (
+        <button
+          type="button"
+          onClick={onClear}
+          aria-label="Use the trip's default travel mode"
+          title="Use trip default"
+          className="rounded-full p-0.5 text-muted-foreground opacity-0 outline-none transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:ring-[3px] focus-visible:ring-ring/50 group-focus-within/day:opacity-100 group-hover/day:opacity-100"
+        >
+          <X aria-hidden className="size-3" />
+        </button>
+      )}
+    </span>
+  );
+}
+
+/**
+ * The trip-wide default routing mode (V2.5) — a compact walk/drive segmented
+ * control in the Plan toolbar. Days inherit this unless they pin an override (see
+ * `DayRouteModeToggle`). Editor-only; writes `trip.defaultRouteMode`. (No trip
+ * settings dialog exists yet, so the Plan toolbar is its trip-scoped home.)
+ */
+function TripRouteModeToggle({
+  mode,
+  onChange,
+}: {
+  mode: RouteMode;
+  onChange: (mode: RouteMode) => void;
+}) {
+  return (
+    <span
+      role="toolbar"
+      aria-label="Default travel mode for routes"
+      className="hidden shrink-0 items-center rounded-control border bg-card p-0.5 shadow-control sm:flex"
+    >
+      {(["walking", "driving"] as const).map((m) => {
+        const Icon = m === "driving" ? Car : Footprints;
+        const active = mode === m;
+        return (
+          <button
+            key={m}
+            type="button"
+            onClick={() => onChange(m)}
+            aria-pressed={active}
+            aria-label={
+              m === "walking" ? "Default travel mode: walking" : "Default travel mode: driving"
+            }
+            title={m === "walking" ? "Routes default to walking" : "Routes default to driving"}
+            className={cn(
+              "flex items-center rounded-control px-2 py-1 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+              active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            <Icon aria-hidden className="size-4" strokeWidth={2.25} />
+          </button>
+        );
+      })}
     </span>
   );
 }

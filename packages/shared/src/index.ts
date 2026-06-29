@@ -1,5 +1,6 @@
 export * from "./id";
 export * from "./lib/bookings";
+export * from "./lib/routing";
 export * from "./mutations";
 export * from "./position";
 export * from "./schemas/activity";
@@ -13,6 +14,7 @@ export * from "./schemas/geo";
 export * from "./schemas/idea-list";
 export * from "./schemas/payment";
 export * from "./schemas/poll";
+export * from "./schemas/route";
 export * from "./schemas/trip";
 export * from "./schemas/vote";
 export * from "./schemas/ws";

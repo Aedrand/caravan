@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { EpochMsSchema, IdSchema, IsoDateSchema } from "./common";
+import { RouteModeSchema } from "./route";
 
 /**
  * A first-class itinerary day (D2, Trip Workspace v2). The calendar still
@@ -22,6 +23,12 @@ export const DaySchema = z.object({
   homeBaseLng: z.number().nullable(),
   homeBasePlaceProvider: z.string().max(40).nullable(),
   homeBasePlaceRef: z.string().max(200).nullable(),
+  /**
+   * V2.5 per-day routing-mode override. `null` = inherit the trip's
+   * `defaultRouteMode`; a concrete mode pins this day's connecting line to
+   * walking/driving regardless of the trip default.
+   */
+  routeMode: RouteModeSchema.nullable(),
   /** Membership id of the creator (no FK — history outlives roles, PD-9). */
   createdBy: IdSchema,
   createdAt: EpochMsSchema,

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { CurrencySchema, EpochMsSchema, IdSchema, IsoDateSchema } from "./common";
+import { RouteModeSchema } from "./route";
 
 export const TRIP_ROLES = ["owner", "editor", "viewer"] as const;
 export const RoleSchema = z.enum(TRIP_ROLES);
@@ -19,6 +20,11 @@ export const TripSchema = z.object({
   startDate: IsoDateSchema.nullable(),
   endDate: IsoDateSchema.nullable(),
   currency: CurrencySchema,
+  /**
+   * V2.5 trip-wide default routing mode for the day connecting line. Per-day
+   * `days.routeMode` overrides it; NOT NULL (defaults to `walking`).
+   */
+  defaultRouteMode: RouteModeSchema,
   /** Per-trip monotonic version — the sync/feed cursor (TD-1). */
   version: z.number().int().nonnegative(),
   archivedAt: EpochMsSchema.nullable(),

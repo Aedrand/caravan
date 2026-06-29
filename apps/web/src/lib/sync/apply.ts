@@ -328,11 +328,12 @@ export function applyMutationOptimistic(
       }));
     }
     case "day.upsert": {
-      const { dayId, date, subtitle, homeBasePlace } = mutation.payload;
+      const { dayId, date, subtitle, homeBasePlace, routeMode } = mutation.payload;
       // Each field is independent: an absent key leaves that column untouched.
       const patch = {
         ...(subtitle !== undefined ? { subtitle } : undefined),
         ...(homeBasePlace !== undefined ? flattenHomeBase(homeBasePlace) : undefined),
+        ...(routeMode !== undefined ? { routeMode } : undefined),
       };
       // Find-or-create by date, mirroring the server's lazy upsert.
       const existing = snap.days.find((d) => d.date === date);
@@ -351,6 +352,7 @@ export function applyMutationOptimistic(
         date,
         subtitle: subtitle ?? null,
         ...homeBase,
+        routeMode: routeMode ?? null,
         createdBy: ctx.memberId,
         createdAt: ctx.now,
         updatedAt: ctx.now,

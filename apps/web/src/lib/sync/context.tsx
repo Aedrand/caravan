@@ -35,6 +35,7 @@ import {
   type PresenceState,
   type PresenceView,
   positionBetween,
+  type RouteMode,
   type ServerWsMessage,
   type TripMember,
   type TripSnapshot,
@@ -309,7 +310,11 @@ export function useDays(): {
   daysByDate: Map<string, Day>;
   upsertDay: (
     date: string,
-    patch: { subtitle?: string | null; homeBasePlace?: GeoPlace | null },
+    patch: {
+      subtitle?: string | null;
+      homeBasePlace?: GeoPlace | null;
+      routeMode?: RouteMode | null;
+    },
   ) => Promise<MutationResponse>;
 } {
   const { data: snapshot } = useTripSnapshot();
@@ -318,10 +323,18 @@ export function useDays(): {
   const daysByDate = useMemo(() => new Map(days.map((d) => [d.date, d] as const)), [days]);
 
   const upsertDay = useCallback(
-    (date: string, patch: { subtitle?: string | null; homeBasePlace?: GeoPlace | null }) => {
+    (
+      date: string,
+      patch: {
+        subtitle?: string | null;
+        homeBasePlace?: GeoPlace | null;
+        routeMode?: RouteMode | null;
+      },
+    ) => {
       const payload: MutationPayload<"day.upsert"> = { dayId: createId(), date };
       if (patch.subtitle !== undefined) payload.subtitle = patch.subtitle;
       if (patch.homeBasePlace !== undefined) payload.homeBasePlace = patch.homeBasePlace;
+      if (patch.routeMode !== undefined) payload.routeMode = patch.routeMode;
       return mutateAsync("day.upsert", payload);
     },
     [mutateAsync],

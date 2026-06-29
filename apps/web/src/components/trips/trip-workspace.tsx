@@ -1,3 +1,4 @@
+import type { RouteResult } from "@caravan/shared";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Archive,
@@ -21,7 +22,16 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import { lazy, type ReactNode, type RefObject, Suspense, useEffect, useRef, useState } from "react";
+import {
+  lazy,
+  type ReactNode,
+  type RefObject,
+  Suspense,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { BrandMark } from "@/components/brand-mark";
 import { IdeasPanel } from "@/components/decisions/ideas-panel";
 import { PollsPanel } from "@/components/decisions/polls-panel";
@@ -29,6 +39,7 @@ import { ExpensesPanel } from "@/components/expenses/expenses-panel";
 import { ItineraryBoard, type ItineraryBoardHandle } from "@/components/itinerary/itinerary-board";
 import { FocusedDayProvider } from "@/components/map/focused-day";
 import { MapSelectionProvider } from "@/components/map/selection";
+import { RoutingProvider, useDayRoutes } from "@/components/routing/day-routes";
 import { FeedPanel } from "@/components/trips/feed-panel";
 import { formatTripDates } from "@/components/trips/format";
 import { MembersPanel } from "@/components/trips/members-panel";
@@ -436,50 +447,74 @@ function PlanView({
     // FocusedDayProvider wraps both panes so the map can follow the itinerary's
     // focused day across the lazy/Suspense boundary (the mobile Map tab has no
     // itinerary, so it renders MapPanel without this provider — fit-all on boot).
+    // RoutingProvider (V2.5) wraps both too: it computes each day's drawn route
+    // ONCE and both the rail (leg labels, via useDayRoutes) and the map (lines,
+    // via PlanMap below) read it. The mobile Map tab renders MapPanel outside
+    // this provider, so it shows pins without route lines.
     <FocusedDayProvider>
       <MapSelectionProvider>
-        <div className="flex h-full min-h-0">
-          {/* Extra bottom padding on mobile clears the add FAB; the map split
-              (and its padding) is desktop-only, so this only affects narrow screens. */}
-          <div className="min-w-0 flex-[1.35] overflow-y-auto px-5 py-5 pb-24 lg:pb-5">
-            <ItineraryBoard
-              snapshot={snapshot}
-              canEdit={canEdit}
-              onOpenDecide={onOpenDecide}
-              handleRef={boardRef}
-            />
-          </div>
+        <RoutingProvider snapshot={snapshot}>
+          <div className="flex h-full min-h-0">
+            {/* Extra bottom padding on mobile clears the add FAB; the map split
+                (and its padding) is desktop-only, so this only affects narrow screens. */}
+            <div className="min-w-0 flex-[1.35] overflow-y-auto px-5 py-5 pb-24 lg:pb-5">
+              <ItineraryBoard
+                snapshot={snapshot}
+                canEdit={canEdit}
+                onOpenDecide={onOpenDecide}
+                handleRef={boardRef}
+              />
+            </div>
 
-          {mapOpen ? (
-            <div className="relative hidden w-[38%] min-w-80 max-w-[34rem] shrink-0 border-l p-3 lg:block">
-              <Suspense fallback={null}>
-                <MapPanel snapshot={snapshot} fill />
-              </Suspense>
+            {mapOpen ? (
+              <div className="relative hidden w-[38%] min-w-80 max-w-[34rem] shrink-0 border-l p-3 lg:block">
+                <Suspense fallback={null}>
+                  <PlanMap snapshot={snapshot} />
+                </Suspense>
+                <button
+                  type="button"
+                  onClick={onToggleMap}
+                  aria-label="Hide map"
+                  title="Hide map"
+                  className="absolute top-5 left-5 z-10 flex size-8 items-center justify-center rounded-md border bg-card text-foreground shadow-control transition-colors hover:bg-muted"
+                >
+                  <PanelRightClose aria-hidden className="size-4" />
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
                 onClick={onToggleMap}
-                aria-label="Hide map"
-                title="Hide map"
-                className="absolute top-5 left-5 z-10 flex size-8 items-center justify-center rounded-md border bg-card text-foreground shadow-control transition-colors hover:bg-muted"
+                aria-label="Show map"
+                title="Show map"
+                className="hidden w-9 shrink-0 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:flex"
               >
-                <PanelRightClose aria-hidden className="size-4" />
+                <PanelRightOpen aria-hidden className="size-5" />
               </button>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onToggleMap}
-              aria-label="Show map"
-              title="Show map"
-              className="hidden w-9 shrink-0 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:flex"
-            >
-              <PanelRightOpen aria-hidden className="size-5" />
-            </button>
-          )}
-        </div>
+            )}
+          </div>
+        </RoutingProvider>
       </MapSelectionProvider>
     </FocusedDayProvider>
   );
+}
+
+/**
+ * The Plan view's ambient map split. Reads the shared per-day routes (computed
+ * once by RoutingProvider) and hands the map only the resolved (non-null)
+ * results as `Map<isoDate, RouteResult>` to draw. Lives INSIDE RoutingProvider
+ * so it can subscribe; the rail subscribes directly via `useDayRoutes`.
+ */
+function PlanMap({ snapshot }: { snapshot: TripSnapshot }) {
+  const dayRoutes = useDayRoutes();
+  const routeResults = useMemo(() => {
+    const map = new Map<string, RouteResult>();
+    for (const [iso, state] of dayRoutes) {
+      if (state.result) map.set(iso, state.result);
+    }
+    return map;
+  }, [dayRoutes]);
+  return <MapPanel snapshot={snapshot} fill dayRoutes={routeResults} />;
 }
 
 function ViewScroll({ children }: { children: ReactNode }) {

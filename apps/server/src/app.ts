@@ -16,6 +16,7 @@ import { createAdminRoutes } from "./features/admin/routes";
 import { createExpensesRoutes } from "./features/expenses/routes";
 import { createGeoRoutes } from "./features/geo/routes";
 import { createNotificationPrefsRoutes } from "./features/notifications/prefs-routes";
+import { createRoutingRoutes } from "./features/routing/routes";
 import { createInviteRoutes } from "./features/trips/invite-routes";
 import { createTripsRoutes } from "./features/trips/routes";
 import type { Logger } from "./logger";
@@ -61,6 +62,11 @@ export function createApp({ config, db, logger, auth, rooms, email }: AppDeps) {
     .use("*", requireUser(auth))
     .route("/", createGeoRoutes({ db, config, logger }));
 
+  // Routing proxy (V2.5): session-gated; keeps router keys + rate limit server-side.
+  const route = new Hono<AuthedEnv>()
+    .use("*", requireUser(auth))
+    .route("/", createRoutingRoutes({ db, config, logger }));
+
   // Instance admin (Track D): session-gated AND admin-only. D.3 fills in the router.
   const admin = new Hono<AuthedEnv>()
     .use("*", requireUser(auth))
@@ -77,6 +83,7 @@ export function createApp({ config, db, logger, auth, rooms, email }: AppDeps) {
     .get("/health", (c) => c.json({ status: "ok", service: "caravan" }))
     .route("/trips", trips)
     .route("/geo", geo)
+    .route("/route", route)
     .route("/admin", admin)
     .route("/me", me)
     // Invite door: GET info is public; accept gates itself on a session.
