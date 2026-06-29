@@ -32,6 +32,7 @@ export function serializeTrip(row: typeof schema.trips.$inferSelect): Trip {
     endDate: row.endDate,
     currency: row.currency,
     defaultRouteMode: row.defaultRouteMode,
+    bulletin: row.bulletin,
     version: row.version,
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,

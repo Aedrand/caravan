@@ -39,7 +39,6 @@ import {
   ChevronDown,
   Footprints,
   Home,
-  Lightbulb,
   ListChecks,
   MapPin,
   Pencil,
@@ -80,7 +79,7 @@ import { useDays, useIdeaLists, useMyMember, usePresence, useTripMutation } from
 import { cn } from "@/lib/utils";
 import { ActivityFormDialog } from "./activity-form-dialog";
 import { DerivedEntryRow } from "./derived-entry-row";
-import { dayNumber, deriveDays, formatDayLabel, formatDayShort, todayIso } from "./format";
+import { dayNumber, deriveDays, formatDayLabel, todayIso } from "./format";
 import { computeStopNumbers } from "./numbering";
 import { RailRow } from "./rail-row";
 import { SortableRailRow } from "./sortable-activity-card";
@@ -123,13 +122,10 @@ export interface ItineraryBoardHandle {
 export function ItineraryBoard({
   snapshot,
   canEdit,
-  onOpenDecide,
   handleRef,
 }: {
   snapshot: TripSnapshot;
   canEdit: boolean;
-  /** Switch the workspace to the Decide view (where the ideas pool now lives). */
-  onOpenDecide?: () => void;
   /** Lets the workspace's mobile FAB trigger "add activity" (see handle). */
   handleRef?: RefObject<ItineraryBoardHandle | null>;
 }) {
@@ -204,9 +200,6 @@ export function ItineraryBoard({
   const commentsByTarget = useCommentsByTarget(snapshot.comments);
   const membersById = useMembersById(snapshot.members);
 
-  // Ideas live in Decide now (C.4); Plan keeps just a pointer with the count.
-  const ideaCount = (byDate.get(null) ?? []).length;
-
   const activeActivity = activeId ? activities.find((a) => a.id === activeId) : null;
 
   const me = useMyMember();
@@ -236,16 +229,6 @@ export function ItineraryBoard({
   // to "today + the days still ahead" so a 40-day trip opens on what's next.
   const today = todayIso();
   const todayInTrip = days.includes(today);
-  const emptyDays = useMemo(
-    () =>
-      new Set(
-        days.filter(
-          (iso) =>
-            (byDate.get(iso) ?? []).length === 0 && (derivedByDate.get(iso)?.length ?? 0) === 0,
-        ),
-      ),
-    [days, byDate, derivedByDate],
-  );
   // Focus is shared with the ambient map (via FocusedDayProvider) so it can
   // frame the focused day's pins — the map lives across a lazy/Suspense boundary
   // in PlanView, so a context beats prop-drilling. Outside a provider (no map,
@@ -258,7 +241,6 @@ export function ItineraryBoard({
   const { selectedId, select } = useMapSelection();
   const toggleSelect = (id: string) => select(id === selectedId ? null : id);
   const initialFocus = todayInTrip ? today : (days[0] ?? "");
-  const focusedIso = focusedDay ?? initialFocus;
   const setFocusedIso = setFocusedDay;
   useEffect(() => {
     if (focusedDay === null && initialFocus) setFocusedDay(initialFocus);
@@ -268,16 +250,6 @@ export function ItineraryBoard({
     ((byDate.get(iso) ?? []).length > 0 || (derivedByDate.get(iso)?.length ?? 0) > 0) &&
     (!todayInTrip || iso >= today);
   const isOpen = (iso: string): boolean => collapseOverride[iso] ?? defaultOpen(iso);
-  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
-
-  const jumpTo = (iso: string) => {
-    if (!iso) return;
-    setFocusedIso(iso);
-    setCollapseOverride((o) => ({ ...o, [iso]: true }));
-    requestAnimationFrame(() =>
-      sectionRefs.current[iso]?.scrollIntoView({ behavior: "smooth", block: "start" }),
-    );
-  };
 
   // Tell the room which activity we're editing, so others see the hint.
   useEffect(() => {
@@ -321,12 +293,6 @@ export function ItineraryBoard({
   // optimistic. Title stays dialog-only (protects the title→pin select).
   const updateActivity = (activityId: string, patch: MutationPayload<"activity.update">["patch"]) =>
     void mutateAsync("activity.update", { activityId, patch }).catch(() => {});
-
-  // V2.5: the trip-wide default routing mode (days inherit it unless overridden).
-  // No trip settings dialog exists yet, so this lives in the Plan toolbar below —
-  // the trip-scoped surface next to the per-day overrides in each DayHeader.
-  const setDefaultRouteMode = (mode: RouteMode) =>
-    void mutateAsync("trip.update", { defaultRouteMode: mode }).catch(() => {});
 
   // The votes + comments rail under each card (Track A). `canEdit` gates voting
   // and commenting (viewers see tallies + threads read-only).
@@ -407,168 +373,88 @@ export function ItineraryBoard({
           />
         </div>
       ) : (
-        <>
-          {/* Sticky day-jump rail — scannable across a 2-day weekend or a 40-day epic. */}
-          <div className="-mx-5 -mt-5 sticky top-0 z-10 mb-1 border-b border-border/70 bg-background/95 px-5 py-2 backdrop-blur">
-            <div className="flex items-center gap-2">
-              <div className="-mx-1 min-w-0 flex-1 overflow-x-auto px-1">
-                <DayRail
-                  days={days}
-                  focusedIso={focusedIso}
-                  today={todayInTrip ? today : null}
-                  emptyDays={emptyDays}
-                  onJump={jumpTo}
-                />
-              </div>
-              {todayInTrip && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="shrink-0"
-                  onClick={() => jumpTo(today)}
-                >
-                  Today
-                </Button>
-              )}
-              {days.length > 1 && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  className="hidden shrink-0 sm:inline-flex"
-                  onClick={() => jumpTo(days[0] ?? "")}
-                >
-                  Trip start
-                </Button>
-              )}
-              {canEdit && (
-                <TripRouteModeToggle mode={trip.defaultRouteMode} onChange={setDefaultRouteMode} />
-              )}
-              {canEdit && (
-                // Desktop-only: on mobile the thumb FAB is the sole "add" path,
-                // so this would otherwise be a second control with the same
-                // accessible name at narrow viewports.
-                <Button
-                  size="sm"
-                  className="hidden shrink-0 lg:inline-flex"
-                  onClick={() => openCreate(days[0] ?? null)}
-                >
-                  <Plus aria-hidden />
-                  Add activity
-                </Button>
-              )}
-            </div>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveId(null)}
+        >
+          {/* Windowing note: if a long-trip day list is ever virtualized, every
+              day MUST still keep a zero-height `<div id={`day-${iso}`}>` stub
+              mounted so the scrollspy + index rail can observe/scroll to it. */}
+          <div className="flex flex-col gap-1.5">
+            {days.map((iso) => (
+              <DayBlock
+                key={iso}
+                iso={iso}
+                n={dayNumber(iso, trip.startDate)}
+                items={byDate.get(iso) ?? []}
+                isToday={iso === today}
+                open={isOpen(iso)}
+                onToggle={() => setCollapseOverride((o) => ({ ...o, [iso]: !isOpen(iso) }))}
+                onFocus={() => setFocusedIso(iso)}
+                canEdit={canEdit}
+                currency={trip.currency}
+                allBookings={allBookings}
+                dayOverrides={dayOverrides}
+                derived={derivedByDate.get(iso) ?? []}
+                onOpenBooking={openBookingById}
+                onSetHomeBase={(place) =>
+                  void upsertDay(iso, { homeBasePlace: place }).catch(() => {})
+                }
+                onClearHomeBase={() => void upsertDay(iso, { homeBasePlace: null }).catch(() => {})}
+                subtitle={daysByDate.get(iso)?.subtitle ?? null}
+                onSubtitleCommit={(subtitle) => void upsertDay(iso, { subtitle }).catch(() => {})}
+                editingHints={editingHints}
+                flashing={flashing}
+                selectedId={selectedId}
+                onSelectActivity={toggleSelect}
+                membersById={membersById}
+                colors={colors}
+                votesByActivity={votesByActivity}
+                commentsByTarget={commentsByTarget}
+                onAdd={(type) => openCreate(iso, type)}
+                onEdit={openEdit}
+                onDelete={remove}
+                onLogAsExpense={openLogAsExpense}
+                linkedExpenseIds={linkedExpenseIds}
+                onUpdate={updateActivity}
+                onToggleChecklistItem={toggleChecklistItem}
+                renderFooter={renderFooter}
+                dayRoute={dayRoutes.get(iso)}
+                tripDefaultMode={trip.defaultRouteMode}
+                dayRouteMode={daysByDate.get(iso)?.routeMode ?? null}
+                onSetRouteMode={(mode) => void upsertDay(iso, { routeMode: mode }).catch(() => {})}
+                onClearRouteMode={() => void upsertDay(iso, { routeMode: null }).catch(() => {})}
+              />
+            ))}
           </div>
 
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={(e: DragStartEvent) => setActiveId(String(e.active.id))}
-            onDragEnd={handleDragEnd}
-            onDragCancel={() => setActiveId(null)}
-          >
-            {/* Ideas moved to Decide — Plan keeps a compact pointer. Sits at the
-                top so it's seen even on a long trip you'd otherwise scroll past. */}
-            <button
-              type="button"
-              onClick={onOpenDecide}
-              className="mb-2 flex w-full items-center gap-3 rounded-card border bg-accent-soft px-4 py-3 text-left shadow-control transition-colors hover:bg-accent"
-            >
-              <Lightbulb aria-hidden className="size-5 shrink-0 text-[var(--accent-strong)]" />
-              <span className="min-w-0 flex-1">
-                <span className="block font-display font-bold">
-                  {ideaCount > 0
-                    ? `${ideaCount} ${ideaCount === 1 ? "idea" : "ideas"} the group's floating`
-                    : "No ideas yet"}
-                </span>
-                <span className="block text-sm text-muted-foreground">
-                  {ideaCount > 0
-                    ? "Vote on them in Decide — top picks become days"
-                    : "Float a place the group can vote on"}
-                </span>
-              </span>
-              <span className="shrink-0 font-body text-sm font-bold">Open Decide →</span>
-            </button>
-
-            <div className="flex flex-col gap-1.5">
-              {days.map((iso) => (
-                <DayBlock
-                  key={iso}
-                  sectionRef={(el) => {
-                    sectionRefs.current[iso] = el;
-                  }}
-                  iso={iso}
-                  n={dayNumber(iso, trip.startDate)}
-                  items={byDate.get(iso) ?? []}
-                  isToday={iso === today}
-                  open={isOpen(iso)}
-                  onToggle={() => setCollapseOverride((o) => ({ ...o, [iso]: !isOpen(iso) }))}
-                  onFocus={() => setFocusedIso(iso)}
-                  canEdit={canEdit}
-                  currency={trip.currency}
-                  allBookings={allBookings}
-                  dayOverrides={dayOverrides}
-                  derived={derivedByDate.get(iso) ?? []}
-                  onOpenBooking={openBookingById}
-                  onSetHomeBase={(place) =>
-                    void upsertDay(iso, { homeBasePlace: place }).catch(() => {})
-                  }
-                  onClearHomeBase={() =>
-                    void upsertDay(iso, { homeBasePlace: null }).catch(() => {})
-                  }
-                  subtitle={daysByDate.get(iso)?.subtitle ?? null}
-                  onSubtitleCommit={(subtitle) => void upsertDay(iso, { subtitle }).catch(() => {})}
-                  editingHints={editingHints}
-                  flashing={flashing}
-                  selectedId={selectedId}
-                  onSelectActivity={toggleSelect}
-                  membersById={membersById}
-                  colors={colors}
-                  votesByActivity={votesByActivity}
-                  commentsByTarget={commentsByTarget}
-                  onAdd={(type) => openCreate(iso, type)}
-                  onEdit={openEdit}
-                  onDelete={remove}
-                  onLogAsExpense={openLogAsExpense}
-                  linkedExpenseIds={linkedExpenseIds}
-                  onUpdate={updateActivity}
-                  onToggleChecklistItem={toggleChecklistItem}
-                  renderFooter={renderFooter}
-                  dayRoute={dayRoutes.get(iso)}
-                  tripDefaultMode={trip.defaultRouteMode}
-                  dayRouteMode={daysByDate.get(iso)?.routeMode ?? null}
-                  onSetRouteMode={(mode) =>
-                    void upsertDay(iso, { routeMode: mode }).catch(() => {})
-                  }
-                  onClearRouteMode={() => void upsertDay(iso, { routeMode: null }).catch(() => {})}
-                />
-              ))}
-            </div>
-
-            {/* No drop animation: our reorder lands via the async activity.move
+          {/* No drop animation: our reorder lands via the async activity.move
                 optimistic update, so the default settle would animate the overlay
                 back to the (not-yet-moved) source slot before the list re-renders
                 — the "snap back, then jump" glitch. Dropping instantly into the
                 new slot reads clean. */}
-            <DragOverlay dropAnimation={null}>
-              {activeActivity ? (
-                <ul className="cv-card list-none bg-card px-2">
-                  <RailRow
-                    activity={activeActivity}
-                    number={
-                      computeStopNumbers(byDate.get(activeActivity.date) ?? []).get(
-                        activeActivity.id,
-                      ) ?? null
-                    }
-                    isFirst
-                    isLast
-                    canEdit={false}
-                    currency={trip.currency}
-                  />
-                </ul>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        </>
+          <DragOverlay dropAnimation={null}>
+            {activeActivity ? (
+              <ul className="cv-card list-none bg-card px-2">
+                <RailRow
+                  activity={activeActivity}
+                  number={
+                    computeStopNumbers(byDate.get(activeActivity.date) ?? []).get(
+                      activeActivity.id,
+                    ) ?? null
+                  }
+                  isFirst
+                  isLast
+                  canEdit={false}
+                  currency={trip.currency}
+                />
+              </ul>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
 
       <ActivityFormDialog
@@ -666,7 +552,6 @@ function mergeDayRows(items: Activity[], derived: DerivedEntry[]): DisplayRow[] 
 }
 
 function DayBlock({
-  sectionRef,
   iso,
   n,
   items,
@@ -706,7 +591,6 @@ function DayBlock({
   onSetRouteMode,
   onClearRouteMode,
 }: {
-  sectionRef: (el: HTMLElement | null) => void;
   iso: string;
   n: number | null;
   items: Activity[];
@@ -837,7 +721,7 @@ function DayBlock({
       </>
     );
     return (
-      <div ref={sectionRef} className="scroll-mt-20">
+      <div id={`day-${iso}`} tabIndex={-1} className="scroll-mt-4 outline-none">
         {canEdit ? (
           <button
             ref={setNodeRef}
@@ -865,7 +749,7 @@ function DayBlock({
   }
 
   return (
-    <div ref={sectionRef} className="scroll-mt-20">
+    <div id={`day-${iso}`} tabIndex={-1} className="scroll-mt-4 outline-none">
       <div ref={setNodeRef} className={cn("rounded-card", isOver && "bg-accent/30")}>
         <DayHeader
           n={n}
@@ -1293,11 +1177,12 @@ function DayRouteModeToggle({
 
 /**
  * The trip-wide default routing mode (V2.5) — a compact walk/drive segmented
- * control in the Plan toolbar. Days inherit this unless they pin an override (see
- * `DayRouteModeToggle`). Editor-only; writes `trip.defaultRouteMode`. (No trip
- * settings dialog exists yet, so the Plan toolbar is its trip-scoped home.)
+ * control. Days inherit this unless they pin an override (see
+ * `DayRouteModeToggle`). Editor-only; writes `trip.defaultRouteMode`. Exported so
+ * the V2.7 ItinerarySection can host it in the section heading (the board no
+ * longer renders its own toolbar).
  */
-function TripRouteModeToggle({
+export function TripRouteModeToggle({
   mode,
   onChange,
 }: {
@@ -1454,49 +1339,6 @@ function DayAddMenu({
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-function DayRail({
-  days,
-  focusedIso,
-  today,
-  emptyDays,
-  onJump,
-}: {
-  days: string[];
-  focusedIso: string;
-  today: string | null;
-  emptyDays: Set<string>;
-  onJump: (iso: string) => void;
-}) {
-  return (
-    <div className="flex items-center gap-1.5">
-      {days.map((iso) => {
-        const focused = iso === focusedIso;
-        const empty = emptyDays.has(iso);
-        return (
-          <button
-            key={iso}
-            type="button"
-            onClick={() => onJump(iso)}
-            aria-current={focused ? "true" : undefined}
-            className={cn(
-              "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-control border-2 px-2.5 py-1 font-body font-semibold text-xs transition-colors",
-              focused
-                ? "border-border bg-card text-foreground shadow-control"
-                : "border-transparent text-muted-foreground hover:text-foreground",
-              empty && !focused && "opacity-55",
-            )}
-          >
-            {formatDayShort(iso)}
-            {iso === today && (
-              <span aria-hidden className="size-1.5 rounded-full bg-[var(--accent-strong)]" />
-            )}
-          </button>
-        );
-      })}
-    </div>
   );
 }
 

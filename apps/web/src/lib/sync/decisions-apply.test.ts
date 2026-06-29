@@ -36,6 +36,7 @@ function makeTrip(version = 5): Trip {
     endDate: null,
     currency: "USD",
     defaultRouteMode: "walking",
+    bulletin: null,
     version,
     archivedAt: null,
     createdAt: NOW,

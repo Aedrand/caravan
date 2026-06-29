@@ -25,6 +25,11 @@ export const TripSchema = z.object({
    * `days.routeMode` overrides it; NOT NULL (defaults to `walking`).
    */
   defaultRouteMode: RouteModeSchema,
+  /**
+   * V2.7 group bulletin — a free-text shared note surfaced on the Overview
+   * section. Null = no bulletin set; edited via `trip.update`.
+   */
+  bulletin: z.string().max(5000).nullable(),
   /** Per-trip monotonic version — the sync/feed cursor (TD-1). */
   version: z.number().int().nonnegative(),
   archivedAt: EpochMsSchema.nullable(),

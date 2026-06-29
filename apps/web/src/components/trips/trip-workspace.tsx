@@ -11,8 +11,6 @@ import {
   LogOut,
   Map as MapIcon,
   MapPin,
-  PanelRightClose,
-  PanelRightOpen,
   Pencil,
   Plus,
   Route as RouteIcon,
@@ -22,27 +20,15 @@ import {
   Wallet,
   X,
 } from "lucide-react";
-import {
-  lazy,
-  type ReactNode,
-  type RefObject,
-  Suspense,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { lazy, type RefObject, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/brand-mark";
-import { IdeasPanel } from "@/components/decisions/ideas-panel";
-import { PollsPanel } from "@/components/decisions/polls-panel";
-import { ExpensesPanel } from "@/components/expenses/expenses-panel";
-import { ItineraryBoard, type ItineraryBoardHandle } from "@/components/itinerary/itinerary-board";
-import { FocusedDayProvider } from "@/components/map/focused-day";
+import { deriveDays, todayIso } from "@/components/itinerary/format";
+import type { ItineraryBoardHandle } from "@/components/itinerary/itinerary-board";
+import { FocusedDayProvider, useFocusedDay } from "@/components/map/focused-day";
 import { MapSelectionProvider } from "@/components/map/selection";
 import { RoutingProvider, useDayRoutes } from "@/components/routing/day-routes";
 import { FeedPanel } from "@/components/trips/feed-panel";
 import { formatTripDates } from "@/components/trips/format";
-import { MembersPanel } from "@/components/trips/members-panel";
 import { PresenceStrip } from "@/components/trips/presence-strip";
 import { ThemeToggle } from "@/components/trips/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -54,41 +40,26 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { BookingsSection } from "@/components/workspace/bookings-section";
+import { GroupSection } from "@/components/workspace/group-section";
+import { IdeasSection } from "@/components/workspace/ideas-section";
+import { IndexRail } from "@/components/workspace/index-rail";
+import { ItinerarySection } from "@/components/workspace/itinerary-section";
+import { MoneySection } from "@/components/workspace/money-section";
+import { OverviewSection } from "@/components/workspace/overview-section";
+import { useScrollSpy } from "@/components/workspace/use-scroll-spy";
 import { authClient } from "@/lib/auth-client";
+import { useMoney } from "@/lib/expenses/use-money";
 import { useConnectionStatus, useFeed, useMarkSeen, useUnreadCount } from "@/lib/sync";
 import type { TripSnapshot } from "@/lib/sync/shared";
-import { useIsDesktop } from "@/lib/use-media-query";
 import { cn } from "@/lib/utils";
 
 // Lazy: maplibre-gl is heavy (~300 kB gzip). Keep it off the route's initial
-// chunk; it streams in with the (default) Plan view's ambient split, or the
-// mobile Map tab.
+// chunk; it streams in with the ambient map track (desktop) and the mobile Map
+// overlay.
 const MapPanel = lazy(() =>
   import("@/components/map/map-panel").then((m) => ({ default: m.MapPanel })),
 );
-
-// `map` is a mobile-only view: on desktop the map stays a split inside Plan, so
-// it never appears in the desktop rail (and a resize to desktop falls back to
-// Plan — see TripWorkspace).
-type View = "plan" | "map" | "decide" | "money" | "group";
-
-type NavItem = { id: View; label: string; icon: typeof RouteIcon };
-
-const NAV: NavItem[] = [
-  { id: "plan", label: "Plan", icon: RouteIcon },
-  { id: "decide", label: "Decide", icon: Vote },
-  { id: "money", label: "Money", icon: Wallet },
-  { id: "group", label: "Group", icon: Users },
-];
-
-// Mobile bottom tabs add a dedicated Map tab between Plan and Decide.
-const MOBILE_NAV: NavItem[] = [
-  { id: "plan", label: "Plan", icon: RouteIcon },
-  { id: "map", label: "Map", icon: MapIcon },
-  { id: "decide", label: "Decide", icon: Vote },
-  { id: "money", label: "Money", icon: Wallet },
-  { id: "group", label: "Group", icon: Users },
-];
 
 export interface TripWorkspaceProps {
   snapshot: TripSnapshot;
@@ -105,34 +76,25 @@ export interface TripWorkspaceProps {
 }
 
 /**
- * The trip-page workspace shell (C.4). Replaces the old one-long-column stack
- * with a four-view frame: a left rail switches Plan / Decide / Money / Group,
- * Plan keeps the itinerary alongside an ambient (collapsible) map, and the
- * activity feed lives in a bell-triggered drawer. Full-bleed under the app's
- * global header — `__root` stays untouched (the breakout escapes its centered
- * `max-w-6xl` main and cancels its vertical padding).
+ * The trip-page workspace shell (Trip Workspace V2.7). Replaces the old
+ * five-view tab frame with ONE continuously-scrolling canvas: every section
+ * (Overview → Bookings → Itinerary → Ideas → Money → Group) is always mounted in
+ * document order, a left index rail tracks the visible section via scrollspy and
+ * jumps to any of them, and the ambient map reveals itself (CSS width, never an
+ * unmount — gotcha #1) while the Itinerary is in view. The three map providers
+ * are lifted to wrap the whole frame so all sections + the map share one
+ * context. Mobile keeps a bottom-tab nav; the activity feed lives in a
+ * bell-triggered drawer. Full-bleed under the app's global header.
  */
 export function TripWorkspace(props: TripWorkspaceProps) {
   const { snapshot, archived, isOwner, pending, onToggleArchive, canEdit } = props;
-  const [view, setView] = useState<View>("plan");
-  const [mapOpen, setMapOpen] = useState(true);
   const [feedOpen, setFeedOpen] = useState(false);
-  const isDesktop = useIsDesktop();
   const boardRef = useRef<ItineraryBoardHandle | null>(null);
-
-  // `map` is mobile-only. If the viewport grows to desktop while it's active,
-  // fall back to Plan (whose ambient split surfaces the same map) so the rail —
-  // which has no Map tab — never shows a selection it can't represent.
-  useEffect(() => {
-    if (isDesktop && view === "map") setView("plan");
-  }, [isDesktop, view]);
-
-  // Render Plan when desktop coerces the map view away, before the effect runs.
-  const activeView: View = isDesktop && view === "map" ? "plan" : view;
+  const onOpenFeed = () => setFeedOpen(true);
 
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-background">
-      <TopBar {...props} onOpenFeed={() => setFeedOpen(true)} />
+      <TopBar {...props} onOpenFeed={onOpenFeed} />
 
       {archived && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-amber-600/30 border-b bg-amber-500/10 px-4 py-2 text-amber-900 text-sm">
@@ -146,65 +108,22 @@ export function TripWorkspace(props: TripWorkspaceProps) {
         </div>
       )}
 
-      <div className="flex min-h-0 flex-1">
-        <Rail view={activeView} onView={setView} />
-
-        <main className="min-w-0 flex-1">
-          {activeView === "plan" ? (
-            <PlanView
+      {/* The three map providers wrap the WHOLE frame so every section + the
+          ambient map share one context instance (the RoutingProvider's renderless
+          day subscribers ride along as children of the workspace root). */}
+      <FocusedDayProvider>
+        <MapSelectionProvider>
+          <RoutingProvider snapshot={snapshot}>
+            <WorkspaceBody
               snapshot={snapshot}
               canEdit={canEdit}
-              mapOpen={mapOpen}
-              onToggleMap={() => setMapOpen((v) => !v)}
-              onOpenDecide={() => setView("decide")}
+              archived={archived}
               boardRef={boardRef}
+              onOpenFeed={onOpenFeed}
             />
-          ) : activeView === "map" ? (
-            // Mobile-only full-area map (the Map bottom tab).
-            <MapSelectionProvider>
-              <div className="h-full p-3">
-                <Suspense fallback={null}>
-                  <MapPanel snapshot={snapshot} fill />
-                </Suspense>
-              </div>
-            </MapSelectionProvider>
-          ) : (
-            <ViewScroll>
-              {activeView === "decide" && (
-                <div className="flex flex-col gap-8">
-                  <IdeasPanel snapshot={snapshot} canEdit={canEdit} />
-                  <PollsPanel snapshot={snapshot} canEdit={canEdit} />
-                </div>
-              )}
-              {activeView === "money" && (
-                <ExpensesPanel
-                  tripId={snapshot.trip.id}
-                  members={snapshot.members}
-                  currency={snapshot.trip.currency}
-                  canEdit={canEdit}
-                  activities={snapshot.activities}
-                />
-              )}
-              {activeView === "group" && <MembersPanel />}
-            </ViewScroll>
-          )}
-        </main>
-      </div>
-
-      {/* Mobile add FAB — wired for Plan (add activity); Decide/Money keep their
-          in-panel "Add" buttons. Sits above the bottom tab bar, thumb-reachable. */}
-      {activeView === "plan" && canEdit && !archived && (
-        <button
-          type="button"
-          aria-label="Add activity"
-          onClick={() => boardRef.current?.addActivity()}
-          className="absolute right-4 bottom-20 z-20 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-overlay transition-transform hover:scale-105 active:scale-95 lg:hidden"
-        >
-          <Plus aria-hidden className="size-7" />
-        </button>
-      )}
-
-      <BottomNav view={activeView} onView={setView} />
+          </RoutingProvider>
+        </MapSelectionProvider>
+      </FocusedDayProvider>
 
       <FeedDrawer
         open={feedOpen}
@@ -216,56 +135,258 @@ export function TripWorkspace(props: TripWorkspaceProps) {
   );
 }
 
-/* ---------- left rail (desktop only — mobile uses BottomNav) ---------- */
-function Rail({ view, onView }: { view: View; onView: (v: View) => void }) {
+/**
+ * The scrolling workspace body — lives INSIDE the three map providers so it can
+ * (a) run scrollspy on the canvas, (b) push the active day into the shared
+ * focused-day signal, and (c) host the ambient map + mobile map overlay, which
+ * read the shared routes/selection. Owns the canvas ref, scrollspy, and the
+ * mobile-map-open state.
+ */
+function WorkspaceBody({
+  snapshot,
+  canEdit,
+  archived,
+  boardRef,
+  onOpenFeed,
+}: {
+  snapshot: TripSnapshot;
+  canEdit: boolean;
+  archived: boolean;
+  boardRef: RefObject<ItineraryBoardHandle | null>;
+  onOpenFeed: () => void;
+}) {
+  const { trip, activities } = snapshot;
+  const canvasRef = useRef<HTMLElement>(null);
+  const [mobileMapOpen, setMobileMapOpen] = useState(false);
+
+  const days = useMemo(
+    () => deriveDays(trip.startDate, trip.endDate, activities),
+    [trip.startDate, trip.endDate, activities],
+  );
+  // A day is "empty" (dimmed in the rail) when nothing is dated on it.
+  const emptyDays = useMemo(() => {
+    const dated = new Set(activities.filter((a) => a.date !== null).map((a) => a.date as string));
+    return new Set(days.filter((iso) => !dated.has(iso)));
+  }, [days, activities]);
+  const today = todayIso();
+  const todayInTrip = days.includes(today);
+  const bookingCount = useMemo(
+    () => activities.filter((a) => a.type === "flight" || a.type === "lodging").length,
+    [activities],
+  );
+
+  // Anchor ids in document order — sections, with the day anchors interleaved
+  // inside the Itinerary block (gotcha: must match the rendered DOM order).
+  const anchorIds = useMemo(
+    () => [
+      "overview",
+      "bookings",
+      "itinerary",
+      ...days.map((iso) => `day-${iso}`),
+      "ideas",
+      "money",
+      "group",
+    ],
+    [days],
+  );
+  const { activeId, scrollTo } = useScrollSpy({ containerRef: canvasRef, anchorIds });
+
+  // Push the active day into the shared focused-day signal so the ambient map
+  // reframes as the reader scrolls the itinerary (scrollspy itself stays pure).
+  const { setFocusedDay } = useFocusedDay();
+  useEffect(() => {
+    if (activeId?.startsWith("day-")) setFocusedDay(activeId.slice(4));
+  }, [activeId, setFocusedDay]);
+
+  // The ambient map is "released" (collapsed) outside the Itinerary — only the
+  // Itinerary (and its days) keep it open (the itinerary-only rule).
+  const showMap = activeId === "itinerary" || (activeId?.startsWith("day-") ?? false);
+
+  // Shared money/feed reads (React Query dedupes with the panels' own calls).
+  const moneyQuery = useMoney(trip.id);
+  const feedQuery = useFeed(trip.id);
+
   return (
-    <nav
-      aria-label="Trip sections"
-      className="hidden w-20 shrink-0 flex-col items-center gap-1.5 border-r bg-muted px-2.5 py-3.5 lg:flex"
-    >
-      {NAV.map((item) => {
-        const active = view === item.id;
-        const Icon = item.icon;
-        return (
-          <button
-            key={item.id}
-            type="button"
-            onClick={() => onView(item.id)}
-            aria-current={active ? "page" : undefined}
+    <>
+      <div className="flex min-h-0 flex-1">
+        <IndexRail
+          days={days}
+          emptyDays={emptyDays}
+          activeId={activeId}
+          bookingCount={bookingCount}
+          moneyData={moneyQuery.data}
+          scrollTo={scrollTo}
+          today={todayInTrip ? today : null}
+          startDate={trip.startDate}
+          canEdit={canEdit}
+        />
+
+        {/* The ONE scroll container — scrollspy's IntersectionObserver root. */}
+        <main ref={canvasRef} className="relative min-w-0 flex-1 overflow-y-auto">
+          <div
             className={cn(
-              "flex w-full flex-col items-center gap-1 rounded-card border-2 border-transparent px-1 py-2.5 transition-colors",
-              active
-                ? "border-border bg-card text-foreground shadow-control"
-                : "text-muted-foreground hover:text-foreground",
+              "mx-auto flex w-full flex-col gap-4 px-5 pt-6 pb-24 sm:px-7 lg:pb-8",
+              // Map-released (full-width) sections go wider per the mockup `.col.wide`.
+              showMap ? "max-w-[680px]" : "max-w-[900px]",
             )}
           >
-            <Icon aria-hidden className="size-5" />
-            <span className="font-body font-bold text-[11px] uppercase tracking-wide">
-              {item.label}
-            </span>
-          </button>
-        );
-      })}
-      <ThemeToggle className="mt-auto" />
-    </nav>
+            <OverviewSection
+              snapshot={snapshot}
+              canEdit={canEdit}
+              moneyQuery={moneyQuery}
+              feedQuery={feedQuery}
+              scrollTo={scrollTo}
+              onOpenFeed={onOpenFeed}
+            />
+            <BookingsSection snapshot={snapshot} canEdit={canEdit} />
+            <ItinerarySection
+              snapshot={snapshot}
+              canEdit={canEdit}
+              boardRef={boardRef}
+              scrollTo={scrollTo}
+            />
+            <IdeasSection snapshot={snapshot} canEdit={canEdit} />
+            <MoneySection snapshot={snapshot} canEdit={canEdit} />
+            <GroupSection />
+          </div>
+        </main>
+
+        <AmbientMapTrack snapshot={snapshot} showMap={showMap} />
+      </div>
+
+      {/* Mobile add FAB — the sole add path at narrow widths (the desktop
+          "Add activity" button lives in the Itinerary heading). */}
+      {canEdit && !archived && (
+        <button
+          type="button"
+          aria-label="Add activity"
+          onClick={() => boardRef.current?.addActivity()}
+          className="absolute right-4 bottom-20 z-20 flex size-14 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-overlay transition-transform hover:scale-105 active:scale-95 lg:hidden"
+        >
+          <Plus aria-hidden className="size-7" />
+        </button>
+      )}
+
+      <BottomNav activeId={activeId} scrollTo={scrollTo} onOpenMap={() => setMobileMapOpen(true)} />
+
+      {mobileMapOpen && (
+        <MobileMapOverlay snapshot={snapshot} onClose={() => setMobileMapOpen(false)} />
+      )}
+    </>
   );
 }
 
-/* ---------- bottom tab nav (mobile only — desktop uses Rail) ----------
- * `lg:hidden` (display:none at desktop) keeps these buttons OUT of the a11y
- * tree at ≥lg, so they don't duplicate the rail's Plan/Decide/Money/Group for
- * role queries during the (Desktop Chrome) e2e run. Map is mobile-only here. */
-function BottomNav({ view, onView }: { view: View; onView: (v: View) => void }) {
+/**
+ * The desktop ambient map column (gotcha #1). Always mounted: when "released" it
+ * collapses the OUTER width to 0 and clips a fixed-width inner, so MapLibre never
+ * resizes (no cold-start re-init) — only the reveal animates. `hidden lg:block`,
+ * since mobile uses the full-screen overlay instead.
+ */
+function AmbientMapTrack({ snapshot, showMap }: { snapshot: TripSnapshot; showMap: boolean }) {
+  return (
+    <aside
+      aria-label="Map"
+      className={cn(
+        "hidden shrink-0 overflow-hidden transition-[width] duration-200 motion-reduce:transition-none lg:block",
+        showMap ? "w-[460px] border-l" : "w-0",
+      )}
+    >
+      <div className="h-full w-[460px] py-[18px] pr-[18px] pl-1.5">
+        <Suspense fallback={null}>
+          <AmbientMapPanel snapshot={snapshot} />
+        </Suspense>
+      </div>
+    </aside>
+  );
+}
+
+/**
+ * The ambient map itself: reads the shared per-day routes (computed once by
+ * RoutingProvider) and hands the map only the resolved results to draw. Shared
+ * by the desktop track and the mobile overlay.
+ */
+function AmbientMapPanel({ snapshot }: { snapshot: TripSnapshot }) {
+  const dayRoutes = useDayRoutes();
+  const routeResults = useMemo(() => {
+    const map = new Map<string, RouteResult>();
+    for (const [iso, state] of dayRoutes) {
+      if (state.result) map.set(iso, state.result);
+    }
+    return map;
+  }, [dayRoutes]);
+  return <MapPanel snapshot={snapshot} fill dayRoutes={routeResults} />;
+}
+
+/** The mobile full-screen map (the BottomNav "Map" tab). Lives inside the map
+ * providers, so it draws the same routes/selection as the desktop track. */
+function MobileMapOverlay({ snapshot, onClose }: { snapshot: TripSnapshot; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex flex-col bg-background p-3 lg:hidden">
+      <div className="mb-2 flex justify-end">
+        <Button variant="outline" size="icon-sm" onClick={onClose} aria-label="Close map">
+          <X aria-hidden />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1">
+        <Suspense fallback={null}>
+          <AmbientMapPanel snapshot={snapshot} />
+        </Suspense>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- bottom tab nav (mobile only — desktop uses IndexRail) ----------
+ * `lg:hidden` (display:none at desktop) keeps these buttons OUT of the a11y tree
+ * at ≥lg, so they don't duplicate the index rail's section buttons for role
+ * queries during the (Desktop Chrome) e2e run. Each tab scrolls the canvas to
+ * its section; the Map tab opens the full-screen overlay. */
+type BottomTab = {
+  id: string;
+  label: string;
+  icon: typeof RouteIcon;
+  section?: string;
+  map?: boolean;
+};
+
+const BOTTOM_NAV: BottomTab[] = [
+  { id: "itinerary", label: "Itinerary", icon: RouteIcon, section: "itinerary" },
+  { id: "map", label: "Map", icon: MapIcon, map: true },
+  { id: "ideas", label: "Ideas", icon: Vote, section: "ideas" },
+  { id: "money", label: "Money", icon: Wallet, section: "money" },
+  { id: "group", label: "Group", icon: Users, section: "group" },
+];
+
+function activeIdToTab(activeId: string | null): string | null {
+  if (!activeId) return null;
+  if (activeId === "itinerary" || activeId.startsWith("day-")) return "itinerary";
+  if (activeId === "ideas" || activeId === "money" || activeId === "group") return activeId;
+  return null; // overview / bookings have no bottom tab
+}
+
+function BottomNav({
+  activeId,
+  scrollTo,
+  onOpenMap,
+}: {
+  activeId: string | null;
+  scrollTo: (id: string) => void;
+  onOpenMap: () => void;
+}) {
+  const activeTab = activeIdToTab(activeId);
   return (
     <nav aria-label="Trip sections" className="flex shrink-0 border-t bg-muted lg:hidden">
-      {MOBILE_NAV.map((item) => {
-        const active = view === item.id;
+      {BOTTOM_NAV.map((item) => {
+        const active = item.id === activeTab;
         const Icon = item.icon;
         return (
           <button
             key={item.id}
             type="button"
-            onClick={() => onView(item.id)}
+            onClick={() => {
+              if (item.map) onOpenMap();
+              else if (item.section) scrollTo(item.section);
+            }}
             aria-current={active ? "page" : undefined}
             className={cn(
               "-mt-px flex flex-1 flex-col items-center gap-1 border-t-[3px] px-1 pt-2 pb-1.5 transition-colors",
@@ -373,9 +494,9 @@ function TopBar({
             )}
           </DropdownMenuContent>
         </DropdownMenu>
-        {/* Theme toggle lives in the desktop rail; surface it here on mobile
-            (where the rail is hidden) so it stays reachable. */}
-        <ThemeToggle className="size-8 lg:hidden" />
+        {/* Theme toggle: the desktop rail no longer carries it, so surface it
+            here at every width (V2.7 drops the old `lg:hidden`). */}
+        <ThemeToggle className="size-8" />
         <AccountMenu />
       </div>
     </header>
@@ -425,105 +546,6 @@ function AccountMenu() {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
-  );
-}
-
-/* ---------- Plan: itinerary + ambient map ---------- */
-function PlanView({
-  snapshot,
-  canEdit,
-  mapOpen,
-  onToggleMap,
-  onOpenDecide,
-  boardRef,
-}: {
-  snapshot: TripSnapshot;
-  canEdit: boolean;
-  mapOpen: boolean;
-  onToggleMap: () => void;
-  onOpenDecide: () => void;
-  boardRef: RefObject<ItineraryBoardHandle | null>;
-}) {
-  return (
-    // FocusedDayProvider wraps both panes so the map can follow the itinerary's
-    // focused day across the lazy/Suspense boundary (the mobile Map tab has no
-    // itinerary, so it renders MapPanel without this provider — fit-all on boot).
-    // RoutingProvider (V2.5) wraps both too: it computes each day's drawn route
-    // ONCE and both the rail (leg labels, via useDayRoutes) and the map (lines,
-    // via PlanMap below) read it. The mobile Map tab renders MapPanel outside
-    // this provider, so it shows pins without route lines.
-    <FocusedDayProvider>
-      <MapSelectionProvider>
-        <RoutingProvider snapshot={snapshot}>
-          <div className="flex h-full min-h-0">
-            {/* Extra bottom padding on mobile clears the add FAB; the map split
-                (and its padding) is desktop-only, so this only affects narrow screens. */}
-            <div className="min-w-0 flex-[1.35] overflow-y-auto px-5 py-5 pb-24 lg:pb-5">
-              <ItineraryBoard
-                snapshot={snapshot}
-                canEdit={canEdit}
-                onOpenDecide={onOpenDecide}
-                handleRef={boardRef}
-              />
-            </div>
-
-            {mapOpen ? (
-              <div className="relative hidden w-[38%] min-w-80 max-w-[34rem] shrink-0 border-l p-3 lg:block">
-                <Suspense fallback={null}>
-                  <PlanMap snapshot={snapshot} />
-                </Suspense>
-                <button
-                  type="button"
-                  onClick={onToggleMap}
-                  aria-label="Hide map"
-                  title="Hide map"
-                  className="absolute top-5 left-5 z-10 flex size-8 items-center justify-center rounded-md border bg-card text-foreground shadow-control transition-colors hover:bg-muted"
-                >
-                  <PanelRightClose aria-hidden className="size-4" />
-                </button>
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={onToggleMap}
-                aria-label="Show map"
-                title="Show map"
-                className="hidden w-9 shrink-0 items-center justify-center border-l text-muted-foreground transition-colors hover:bg-muted hover:text-foreground lg:flex"
-              >
-                <PanelRightOpen aria-hidden className="size-5" />
-              </button>
-            )}
-          </div>
-        </RoutingProvider>
-      </MapSelectionProvider>
-    </FocusedDayProvider>
-  );
-}
-
-/**
- * The Plan view's ambient map split. Reads the shared per-day routes (computed
- * once by RoutingProvider) and hands the map only the resolved (non-null)
- * results as `Map<isoDate, RouteResult>` to draw. Lives INSIDE RoutingProvider
- * so it can subscribe; the rail subscribes directly via `useDayRoutes`.
- */
-function PlanMap({ snapshot }: { snapshot: TripSnapshot }) {
-  const dayRoutes = useDayRoutes();
-  const routeResults = useMemo(() => {
-    const map = new Map<string, RouteResult>();
-    for (const [iso, state] of dayRoutes) {
-      if (state.result) map.set(iso, state.result);
-    }
-    return map;
-  }, [dayRoutes]);
-  return <MapPanel snapshot={snapshot} fill dayRoutes={routeResults} />;
-}
-
-function ViewScroll({ children }: { children: ReactNode }) {
-  return (
-    // pb clears the mobile bottom tab bar; trimmed back to py-6 at desktop.
-    <div className="h-full overflow-y-auto px-5 pt-6 pb-20 lg:pb-6">
-      <div className="mx-auto max-w-3xl">{children}</div>
-    </div>
   );
 }
 

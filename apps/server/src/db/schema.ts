@@ -39,6 +39,12 @@ export const trips = sqliteTable("trips", {
    * `days.routeMode` overrides it.
    */
   defaultRouteMode: text("default_route_mode", { enum: ROUTE_MODES }).notNull().default("walking"),
+  /**
+   * V2.7 group bulletin — a free-text shared note surfaced on the Overview
+   * section. Nullable: null = no bulletin (the empty state); a string is the
+   * current note. Edited via `trip.update` (no per-bulletin attribution yet).
+   */
+  bulletin: text("bulletin"),
   /** Per-trip monotonic version — the sync/feed cursor (TD-1). */
   version: integer("version").notNull().default(0),
   archivedAt: integer("archived_at"),

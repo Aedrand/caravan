@@ -29,6 +29,7 @@ function makeTrip(overrides: Partial<Trip> = {}): Trip {
     endDate: "2026-10-08",
     currency: "USD",
     defaultRouteMode: "walking",
+    bulletin: null,
     version: 5,
     archivedAt: null,
     createdAt: NOW,

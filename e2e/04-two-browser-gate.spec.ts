@@ -51,11 +51,14 @@ async function openEdit(page: Page, title: string) {
 // read the attributed rows, then dismiss so it stops covering the itinerary.
 async function expectFeed(page: Page, ...lines: string[]) {
   await page.getByRole("button", { name: "What changed" }).click();
+  // Scope to the drawer: these feed lines also surface in the Overview
+  // "Recently" peek (V2.7), so an unscoped getByText matches both surfaces.
+  const drawer = page.getByRole("dialog", { name: "What changed" });
   for (const line of lines) {
-    await expect(page.getByText(line)).toBeVisible({ timeout: LIVE });
+    await expect(drawer.getByText(line)).toBeVisible({ timeout: LIVE });
   }
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "What changed" })).toBeHidden();
+  await expect(drawer).toBeHidden();
 }
 
 test("two members, two browsers: edits, presence, feed, convergence, catch-up", async ({
@@ -81,8 +84,9 @@ test("two members, two browsers: edits, presence, feed, convergence, catch-up", 
   const members = a.getByRole("region", { name: "Members" });
   await members.getByRole("button", { name: "Create invite link" }).click();
   const inviteUrl = await members.getByRole("textbox", { name: "Invite link" }).inputValue();
-  // Back to Plan for the itinerary work below.
-  await a.getByRole("button", { name: "Plan", exact: true }).click();
+  // Back to the Itinerary for the work below (V2.7: the index rail replaces the
+  // old Plan tab; "Itinerary" is the section button).
+  await a.getByRole("button", { name: "Itinerary", exact: true }).click();
 
   // Editor (already has an account) accepts the invite and lands in the trip.
   await signIn(b, editor.email, editor.password);

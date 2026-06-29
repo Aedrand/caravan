@@ -154,6 +154,8 @@ export const mutationPayloads = {
       currency: CurrencySchema.optional(),
       /** V2.5 trip-wide default routing mode (days inherit it unless overridden). */
       defaultRouteMode: RouteModeSchema.optional(),
+      /** V2.7 group bulletin: present `null` clears it, a string sets it. */
+      bulletin: z.string().max(5000).nullable().optional(),
     })
     .refine((p) => Object.keys(p).length > 0, { message: "empty patch" })
     .refine((p) => !p.startDate || !p.endDate || p.startDate <= p.endDate, {
