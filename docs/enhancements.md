@@ -7,6 +7,15 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
+## 2026-06-29 — V2.5 routing build: deferred review items (orchestrator, owner away)
+
+Surfaced while building V2.4/V2.5 autonomously; flagged for owner review (not commitments).
+
+- [ ] **MAP-PIN-DAY-COLOR** — V2.5 ships **day-colored route lines** while **pins keep their category tint** (V2.3). Now that routes are day-colored, decide whether to also color **pins by day** (the owner's earlier "color pins by day" ask): replace category coloring outright, or keep category as a secondary cue (glyph/icon in the pin) with day as the fill. `pin-tint.ts`'s `pinColorExpression` is already swappable — a ~20-line change once decided. _Best reviewed by looking at the map with route lines in context._
+- [ ] **ROUTING-PERF-LAZY-LOAD** — a day route is fetched per day; a 30-day trip fires up to ~30 `/api/route` calls on first load (capped by the server 24h `route_cache` + the rate limiter; self-host Valhalla has no concern). If the public FOSSGIS instance throttles bursts, lazy-load each day's route on scroll (`IntersectionObserver` gating `useRouteForDay`'s `enabled`) — a single-file change in the `RoutingProvider`/`DayRouteSubscriber`.
+- [ ] **TRIP-SETTINGS-DIALOG** — there is no trip settings/edit dialog (currency is set at creation; the only post-create `trip.update` is the inline rename). The new **trip-default route mode** toggle was placed in the Plan toolbar as a result; relocate it (and surface currency, etc.) when a real trip-settings dialog lands.
+- [ ] **FLIGHT-COST-FIELD** — the V2.4 flight booking form has no cost field (the spec's flight field list omitted it; `estimatedCostMinor` is schema-supported on any type). Add it if flight cost should roll into the day/trip budget.
+
 ## 2026-06-28 (later) — Trip Workspace v2 review-session notes (owner)
 
 Captured live during a hands-on review of the V2.3 build — not yet triaged.
