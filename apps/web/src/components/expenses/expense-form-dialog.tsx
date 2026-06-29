@@ -44,6 +44,19 @@ type SplitKind = "equal" | "exact";
 const SELECT_CLASS =
   "flex h-9 w-full rounded-md border border-input bg-card px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50";
 
+/**
+ * Pre-seed values for a CREATE-mode dialog (V2.6 "Log as expense"). When
+ * `activityId` is present the dialog wears the "convert an estimate" framing and
+ * links the resulting expense back to its activity.
+ */
+export type ExpenseInitialValues = {
+  description?: string;
+  amountMinor?: number;
+  date?: string | null;
+  category?: ExpenseCategory;
+  activityId?: string;
+};
+
 export function ExpenseFormDialog(props: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -52,20 +65,30 @@ export function ExpenseFormDialog(props: {
   members: TripMember[];
   currency: string;
   mutateAsync: MutateAsync;
+  initialValues?: ExpenseInitialValues;
 }) {
-  const { open, onOpenChange, mode, expense } = props;
+  const { open, onOpenChange, mode, expense, initialValues } = props;
+  // A "convert" = a create dialog pre-seeded from an activity's estimate.
+  const isConvert = mode === "create" && initialValues?.activityId != null;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{mode === "create" ? "Add an expense" : "Edit expense"}</DialogTitle>
+          <DialogTitle>
+            {isConvert ? "Log as expense" : mode === "create" ? "Add an expense" : "Edit expense"}
+          </DialogTitle>
           <DialogDescription>
-            {mode === "create"
-              ? "Log what was spent and split it among the group."
-              : "Update the amount, split, or details — balances recompute for everyone."}
+            {isConvert
+              ? "Confirm who paid and how to split it — your plan's estimate stays put."
+              : mode === "create"
+                ? "Log what was spent and split it among the group."
+                : "Update the amount, split, or details — balances recompute for everyone."}
           </DialogDescription>
         </DialogHeader>
-        <ExpenseForm key={`${mode}:${expense?.id ?? "new"}`} {...props} />
+        <ExpenseForm
+          key={`${mode}:${expense?.id ?? initialValues?.activityId ?? "new"}`}
+          {...props}
+        />
       </DialogContent>
     </Dialog>
   );
@@ -84,6 +107,7 @@ function ExpenseForm({
   members,
   currency,
   mutateAsync,
+  initialValues,
 }: {
   onOpenChange: (open: boolean) => void;
   mode: "create" | "edit";
@@ -91,18 +115,28 @@ function ExpenseForm({
   members: TripMember[];
   currency: string;
   mutateAsync: MutateAsync;
+  initialValues?: ExpenseInitialValues;
 }) {
   const pool = useMemo(() => participantPool(members, expense), [members, expense]);
   const payers = pool;
 
-  const [description, setDescription] = useState(expense?.description ?? "");
+  // Pre-seed only applies in create mode (edit reads from `expense`).
+  const seed = mode === "create" ? initialValues : undefined;
+
+  const [description, setDescription] = useState(expense?.description ?? seed?.description ?? "");
   const [amountInput, setAmountInput] = useState(
-    expense ? minorToInput(expense.amountMinor, currency) : "",
+    expense
+      ? minorToInput(expense.amountMinor, currency)
+      : seed?.amountMinor != null
+        ? minorToInput(seed.amountMinor, currency)
+        : "",
   );
-  const [category, setCategory] = useState<ExpenseCategory>(expense?.category ?? "other");
+  const [category, setCategory] = useState<ExpenseCategory>(
+    expense?.category ?? seed?.category ?? "other",
+  );
   const [paidBy, setPaidBy] = useState(expense?.paidBy ?? pool[0]?.id ?? "");
   const [notes, setNotes] = useState(expense?.notes ?? "");
-  const [dateValue, setDateValue] = useState(expense?.date ?? "");
+  const [dateValue, setDateValue] = useState(expense?.date ?? seed?.date ?? "");
 
   const [splitKind, setSplitKind] = useState<SplitKind>(
     // An edit with uneven shares opens in exact mode.
@@ -221,7 +255,7 @@ function ExpenseForm({
           category,
           notes,
           date: dateValue || null,
-          activityId: null,
+          activityId: seed?.activityId ?? null,
           split,
         });
       } else if (expense) {

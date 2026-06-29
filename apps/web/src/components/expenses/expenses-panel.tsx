@@ -1,4 +1,5 @@
 import {
+  type Activity,
   computeBalances,
   type Expense,
   type Payment,
@@ -16,11 +17,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Skeleton } from "@/components/ui/skeleton";
+import { plannedMinor } from "@/lib/expenses/budget";
 import { formatMoney } from "@/lib/expenses/money";
 import { useMoney } from "@/lib/expenses/use-money";
 import { FALLBACK_PERSON_COLOR, personColors } from "@/lib/person-colors";
 import { useMyMember, useTripMutation } from "@/lib/sync";
 import { cn } from "@/lib/utils";
+import { BudgetBar } from "./budget-bar";
 import { EXPENSE_CATEGORY_META } from "./categories";
 import { ExpenseFormDialog } from "./expense-form-dialog";
 import { PaymentFormDialog } from "./payment-form-dialog";
@@ -37,11 +40,14 @@ export function ExpensesPanel({
   members,
   currency,
   canEdit,
+  activities,
 }: {
   tripId: string;
   members: TripMember[];
   currency: string;
   canEdit: boolean;
+  /** Itinerary activities — their estimates form the planned-vs-actual budget (V2.6). */
+  activities: Activity[];
 }) {
   const moneyQuery = useMoney(tripId);
   const { mutateAsync } = useTripMutation();
@@ -73,6 +79,10 @@ export function ExpensesPanel({
   const transfers = useMemo(() => settleBalances(balances), [balances]);
   const catTotals = useMemo(() => categoryTotals(expenses), [expenses]);
   const spend = totalSpend(expenses);
+  // V2.6 planned-vs-actual: planned = Σ estimate over dated activities (any
+  // type). A converted item counts in BOTH sides (its estimate here, its expense
+  // in `spend`) — a comparison, not a sum. 0 → no plan; show the bare total.
+  const planned = plannedMinor(activities);
 
   const hasMoney = expenses.length > 0 || payments.length > 0;
 
@@ -127,13 +137,20 @@ export function ExpensesPanel({
         />
       ) : (
         <div className="grid gap-5">
-          {/* Budget overview */}
-          <div className="flex items-baseline gap-2">
-            <span className="font-display text-2xl font-bold">{formatMoney(spend, currency)}</span>
-            <span className="text-sm text-muted-foreground">
-              spent across {expenses.length} expense{expenses.length === 1 ? "" : "s"}
-            </span>
-          </div>
+          {/* Budget overview — a planned-vs-actual bar once any estimate exists,
+              else the bare running total. */}
+          {planned > 0 ? (
+            <BudgetBar plannedMinor={planned} actualMinor={spend} currency={currency} />
+          ) : (
+            <div className="flex items-baseline gap-2">
+              <span className="font-display text-2xl font-bold">
+                {formatMoney(spend, currency)}
+              </span>
+              <span className="text-sm text-muted-foreground">
+                spent across {expenses.length} expense{expenses.length === 1 ? "" : "s"}
+              </span>
+            </div>
+          )}
 
           {/* Settlement: who pays whom */}
           <SettlementSummary

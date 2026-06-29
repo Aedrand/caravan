@@ -7,6 +7,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plane,
+  Receipt,
   StickyNote,
   Trash2,
 } from "lucide-react";
@@ -73,6 +74,12 @@ export interface RailRowProps {
   onSelect?: () => void;
   onEdit?: (activity: Activity) => void;
   onDelete?: (activity: Activity) => void;
+  /** Convert this stop's estimate into an expense (V2.6) — opens a pre-seeded
+   * `ExpenseFormDialog`. Only offered on `type === "activity"` rows. */
+  onLogAsExpense?: (activity: Activity) => void;
+  /** True once an expense links back to this activity → the menu item becomes a
+   * disabled "Already logged" (idempotency). */
+  hasLinkedExpense?: boolean;
   /** Commit an inline edit on this row's activity (optimistic `activity.update`).
    * Powers the click-to-edit cost chip and time fields (§C.3). Absent → those
    * fields render read-only. */
@@ -781,8 +788,11 @@ function RowAttribution({ addedBy, editingBy }: Ctx) {
   );
 }
 
-function RowMenu({ activity, canEdit, onEdit, onDelete }: Ctx) {
+function RowMenu({ activity, canEdit, onEdit, onDelete, onLogAsExpense, hasLinkedExpense }: Ctx) {
   if (!canEdit || !onEdit || !onDelete) return null;
+  // "Log as expense" is a stop-only affordance (V2.6); bookings/notes/checklists
+  // never offer it.
+  const canLog = activity.type === "activity" && Boolean(onLogAsExpense);
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -800,6 +810,18 @@ function RowMenu({ activity, canEdit, onEdit, onDelete }: Ctx) {
           <Pencil aria-hidden />
           Edit details
         </DropdownMenuItem>
+        {canLog &&
+          (hasLinkedExpense ? (
+            <DropdownMenuItem disabled>
+              <Receipt aria-hidden />
+              Already logged
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onSelect={() => onLogAsExpense?.(activity)}>
+              <Receipt aria-hidden />
+              Log as expense
+            </DropdownMenuItem>
+          ))}
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={() => onDelete(activity)}>
           <Trash2 aria-hidden />

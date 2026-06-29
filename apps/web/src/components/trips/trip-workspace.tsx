@@ -182,6 +182,7 @@ export function TripWorkspace(props: TripWorkspaceProps) {
                   members={snapshot.members}
                   currency={snapshot.trip.currency}
                   canEdit={canEdit}
+                  activities={snapshot.activities}
                 />
               )}
               {activeView === "group" && <MembersPanel />}

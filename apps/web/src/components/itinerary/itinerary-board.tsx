@@ -58,6 +58,7 @@ import {
   useMembersById,
   useVotesByActivity,
 } from "@/components/decisions/use-decisions";
+import { ExpenseFormDialog } from "@/components/expenses/expense-form-dialog";
 import { useFocusedDay } from "@/components/map/focused-day";
 import { PlaceAutocomplete } from "@/components/map/place-autocomplete";
 import { useMapSelection } from "@/components/map/selection";
@@ -71,7 +72,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Input } from "@/components/ui/input";
+import { activityCategoryToExpenseCategory } from "@/lib/expenses/budget";
 import { formatMoney } from "@/lib/expenses/money";
+import { useMoney } from "@/lib/expenses/use-money";
 import { FALLBACK_PERSON_COLOR } from "@/lib/person-colors";
 import { useDays, useIdeaLists, useMyMember, usePresence, useTripMutation } from "@/lib/sync";
 import { cn } from "@/lib/utils";
@@ -88,6 +91,8 @@ type EditingHint = { name: string; color: string };
 type DialogState =
   | { mode: "create"; defaultDate: string | null; defaultType?: ItemType }
   | { mode: "edit"; activity: Activity }
+  // V2.6: "Log as expense" — opens a pre-seeded ExpenseFormDialog for this stop.
+  | { mode: "convert"; activity: Activity }
   | null;
 
 const colId = (date: string | null): string => `col:${date ?? "ideas"}`;
@@ -139,6 +144,20 @@ export function ItineraryBoard({
   // PlanView) and shared with the ambient map. Empty outside that provider (tests,
   // narrow Plan with no map) → the rail just shows no travel-time leg rows.
   const dayRoutes = useDayRoutes();
+  // V2.6 money bridge. Shares the `["trip", id, "money"]` query key with the
+  // Expenses panel, so the two `useMoney` callers fold into a single fetch. We
+  // only need the linked-expense set here: which activities already have an
+  // expense pointing at them (drives the idempotent "Already logged" state).
+  const moneyQuery = useMoney(trip.id);
+  const linkedExpenseIds = useMemo(
+    () =>
+      new Set(
+        (moneyQuery.data?.expenses ?? [])
+          .filter((e) => e.activityId != null)
+          .map((e) => e.activityId as string),
+      ),
+    [moneyQuery.data],
+  );
   const [dialog, setDialog] = useState<DialogState>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
 
@@ -274,6 +293,9 @@ export function ItineraryBoard({
   const openCreate = (date: string | null, type?: ItemType) =>
     setDialog({ mode: "create", defaultDate: date, defaultType: type });
   const openEdit = (activity: Activity) => setDialog({ mode: "edit", activity });
+  // V2.6: open the pre-seeded expense dialog for a stop (user confirms payer +
+  // split before anything is written; the estimate is never auto-converted).
+  const openLogAsExpense = (activity: Activity) => setDialog({ mode: "convert", activity });
   // A booking-derived row links back to its source booking (D-anchors) — open
   // that booking in the edit dialog.
   const openBookingById = (bookingId: string) => {
@@ -506,6 +528,8 @@ export function ItineraryBoard({
                   onAdd={(type) => openCreate(iso, type)}
                   onEdit={openEdit}
                   onDelete={remove}
+                  onLogAsExpense={openLogAsExpense}
+                  linkedExpenseIds={linkedExpenseIds}
                   onUpdate={updateActivity}
                   onToggleChecklistItem={toggleChecklistItem}
                   renderFooter={renderFooter}
@@ -548,11 +572,11 @@ export function ItineraryBoard({
       )}
 
       <ActivityFormDialog
-        open={dialog !== null}
+        open={dialog?.mode === "create" || dialog?.mode === "edit"}
         onOpenChange={(open) => {
           if (!open) setDialog(null);
         }}
-        mode={dialog?.mode ?? "create"}
+        mode={dialog?.mode === "edit" ? "edit" : "create"}
         activity={dialog?.mode === "edit" ? dialog.activity : undefined}
         defaultDate={dialog?.mode === "create" ? dialog.defaultDate : undefined}
         defaultType={dialog?.mode === "create" ? dialog.defaultType : undefined}
@@ -563,6 +587,29 @@ export function ItineraryBoard({
         mutateAsync={mutateAsync}
         appendPositionFor={appendPositionFor}
       />
+
+      {/* V2.6 "Log as expense": a CREATE expense dialog pre-seeded from the
+          stop's estimate (description, amount, date, mapped category) + linked
+          back via activityId. Mounted only while converting so it seeds fresh. */}
+      {dialog?.mode === "convert" && (
+        <ExpenseFormDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDialog(null);
+          }}
+          mode="create"
+          members={snapshot.members}
+          currency={trip.currency}
+          mutateAsync={mutateAsync}
+          initialValues={{
+            description: dialog.activity.title,
+            amountMinor: dialog.activity.estimatedCostMinor ?? undefined,
+            date: dialog.activity.date,
+            category: activityCategoryToExpenseCategory(dialog.activity.category),
+            activityId: dialog.activity.id,
+          }}
+        />
+      )}
     </section>
   );
 }
@@ -648,6 +695,8 @@ function DayBlock({
   onAdd,
   onEdit,
   onDelete,
+  onLogAsExpense,
+  linkedExpenseIds,
   onUpdate,
   onToggleChecklistItem,
   renderFooter,
@@ -693,6 +742,10 @@ function DayBlock({
   onAdd: (type?: ItemType) => void;
   onEdit: (activity: Activity) => void;
   onDelete: (activity: Activity) => void;
+  /** V2.6: open the pre-seeded expense dialog for a stop (stop rows only). */
+  onLogAsExpense: (activity: Activity) => void;
+  /** Activity ids that already have a linked expense → "Already logged". */
+  linkedExpenseIds: Set<string>;
   onUpdate: (activityId: string, patch: MutationPayload<"activity.update">["patch"]) => void;
   onToggleChecklistItem: (activityId: string, itemId: string, done: boolean) => void;
   renderFooter: (activity: Activity) => ReactNode;
@@ -895,6 +948,8 @@ function DayBlock({
                     onSelect={() => onSelectActivity(activity.id)}
                     onEdit={onEdit}
                     onDelete={onDelete}
+                    onLogAsExpense={onLogAsExpense}
+                    hasLinkedExpense={linkedExpenseIds.has(activity.id)}
                     onUpdate={(patch) => onUpdate(activity.id, patch)}
                     onToggleChecklistItem={(itemId, done) =>
                       onToggleChecklistItem(activity.id, itemId, done)
