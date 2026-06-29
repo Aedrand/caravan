@@ -7,6 +7,25 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
+## 2026-06-29 — Self-hosting / privacy: a "no third-party egress" deployment posture (owner ask — look into later)
+
+**Potential self-hosting requirement to investigate.** Caravan's geo features call **public third-party OpenStreetMap services by default**, so a default deployment sends data off-box:
+- **Routing** (V2.5) → FOSSGIS **Valhalla** (`valhalla1.openstreetmap.de`): the server proxy sends day **waypoint coordinates + mode**.
+- **Geocoding** (TD-5) → **Photon**: place-name search queries.
+- **Map tiles** → **OpenFreeMap**: viewport tile requests (reveal where you're looking).
+
+No user identity/trip data leaves (it's the server's IP + bare coords/queries), and routing degrades gracefully — but for **privacy-sensitive, data-residency-bound, or air-gapped** deployments this off-box egress may be a **hard requirement to eliminate**, not just a nice-to-have.
+
+**The building blocks already exist** — each is swappable to a self-hosted instance via env: `ROUTING_URL` (own Valhalla container + regional OSM extract), `PHOTON_URL` (own Photon), `TILE_PROVIDER`/tile config (own tile server). So this is mostly a **documentation + supported-posture** task, not new code.
+
+**Look into (later):**
+- A documented **"fully self-contained / zero third-party egress" deployment profile** in `docs/self-hosting/` — compose file wiring own Valhalla + Photon + tiles, the env overrides, and resource/sizing notes (OSM extracts, container footprint).
+- An exact **"what leaves the box per feature"** table (egress audit) so operators can reason about it; optionally a startup log/warning when any geo URL points at a public host.
+- Whether to surface a privacy note in the admin/self-host docs (and whether some deployments should default to geo-off until self-hosted endpoints are configured).
+- Folds naturally into the **M6 security pass** (`plan.md` §M6) and the self-host docs cluster (Track D).
+
+_Not a commitment — a flagged consideration for when self-hosting hardening gets attention._
+
 ## 2026-06-29 — V2.6 money: one decision to confirm (orchestrator, owner away)
 
 - [ ] **BUDGET-PLANNED-SEMANTICS** — the planned-vs-actual `BudgetBar` is built as a **comparison**: **Planned** = Σ all activity estimates on the itinerary (dated items, all types); **Actual** = Σ all logged expenses. A converted item counts in BOTH (its estimate in Planned, its expense in Actual) — i.e. "we planned $1,200, we've spent $1,310." **Confirm this is the intended reading**, vs the alternative "remaining budget" view where converting an estimate *removes* it from Planned (so the bar shows only estimates for items not yet expensed). It's a **one-line flip** in the pure `apps/web/src/lib/expenses/budget.ts` `plannedMinor` selector (filter out activities that already have a linked expense) — no schema/UI rework. Also low-stakes: there's no hard "one expense per activity" constraint (a deposit + final payment can both link to one activity); flag if you want uniqueness enforced.
