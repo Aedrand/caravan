@@ -20,7 +20,7 @@ type RoutingConfig = Config["routing"];
 
 const ROUTE_TTL_MS = 24 * 60 * 60 * 1000; // 24h — road geometry between two points is stable enough.
 const FETCH_TIMEOUT_MS = 10_000;
-/** Routing upstreams (Valhalla/ORS) ask for a descriptive UA + contact. */
+/** Routing upstreams (OSRM/Valhalla/ORS) ask for a descriptive UA + contact. */
 const USER_AGENT = "Caravan/1.0 (self-hosted; https://github.com/Aedrand/caravan)";
 
 export class RoutingError extends Error {
@@ -141,12 +141,18 @@ export function pruneRouteCache(db: Db, now: number = Date.now()): void {
 
 // --- Provider selection + costing translation --------------------------------
 
-export type EffectiveRoutingProvider = "valhalla" | "openrouteservice";
+export type EffectiveRoutingProvider = "osrm" | "valhalla" | "openrouteservice";
 
-/** ORS only when explicitly selected AND a key is present; else keyless Valhalla. */
+/**
+ * Resolve the provider that will actually be hit. ORS is honoured only when
+ * explicitly selected AND a key is present; Valhalla when explicitly selected;
+ * everything else (the default, plus keyless-ORS misconfig) falls back to the
+ * keyless OSRM default so a clean `git clone` still draws routes.
+ */
 export function effectiveProvider(cfg: RoutingConfig): EffectiveRoutingProvider {
   if (cfg.provider === "openrouteservice" && cfg.orsKey) return "openrouteservice";
-  return "valhalla";
+  if (cfg.provider === "valhalla") return "valhalla";
+  return "osrm";
 }
 
 /** Mode → Valhalla costing. The translation lives here, never on the wire. */
@@ -157,6 +163,18 @@ function valhallaCosting(mode: RouteMode): "pedestrian" | "auto" {
 /** Mode → OpenRouteService profile. */
 function orsProfile(mode: RouteMode): "foot-walking" | "driving-car" {
   return mode === "walking" ? "foot-walking" : "driving-car";
+}
+
+/**
+ * Mode → FOSSGIS OSRM path segments. FOSSGIS runs one OSRM engine per profile
+ * behind per-profile path prefixes on a single host (`/routed-foot`,
+ * `/routed-car`); `profile` is the OSRM service profile name in the route path.
+ * We only support walking/driving (no cycling). Lives here, never on the wire.
+ */
+function osrmProfile(mode: RouteMode): { prefix: string; profile: string } {
+  return mode === "walking"
+    ? { prefix: "routed-foot", profile: "foot" }
+    : { prefix: "routed-car", profile: "driving" };
 }
 
 // --- Provider response parsers ------------------------------------------------
@@ -237,6 +255,42 @@ export function parseORS(json: unknown): RouteResult {
   return { geometry, legs, durationSeconds, distanceMeters };
 }
 
+/**
+ * OSRM `/route/v1/{profile}` response → RouteResult. Because we request
+ * `geometries=geojson`, the geometry is already `[lng, lat]` GeoJSON — NO
+ * polyline decode (unlike Valhalla/ORS). Leg/route `distance` is meters and
+ * `duration` seconds already. A `code !== "Ok"`, a missing/empty `routes`, or
+ * (upstream) a non-200 throws RoutingError so the route handler can graceful-off.
+ */
+export function parseOSRM(json: unknown): RouteResult {
+  const obj = json as { code?: unknown; routes?: unknown } | undefined;
+  const routes = Array.isArray(obj?.routes) ? obj.routes : undefined;
+  const route = routes?.[0] as Record<string, unknown> | undefined;
+  if (obj?.code !== "Ok" || !route) {
+    throw new RoutingError(502, "route_unparseable", "osrm response had no routed path");
+  }
+  const coordinates = (route.geometry as { coordinates?: unknown } | undefined)?.coordinates;
+  const geometry: [number, number][] = Array.isArray(coordinates)
+    ? coordinates.map((c) => {
+        const pair = c as [unknown, unknown];
+        return [finiteNum(pair?.[0]) ?? 0, finiteNum(pair?.[1]) ?? 0] as [number, number];
+      })
+    : [];
+  const rawLegs = Array.isArray(route.legs) ? route.legs : [];
+  const legs: RouteResult["legs"] = rawLegs.map((raw) => {
+    const leg = raw as { duration?: unknown; distance?: unknown };
+    return {
+      durationSeconds: finiteNum(leg.duration) ?? 0,
+      distanceMeters: finiteNum(leg.distance) ?? 0,
+    };
+  });
+  const durationSeconds =
+    finiteNum(route.duration) ?? legs.reduce((a, l) => a + l.durationSeconds, 0);
+  const distanceMeters =
+    finiteNum(route.distance) ?? legs.reduce((a, l) => a + l.distanceMeters, 0);
+  return { geometry, legs, durationSeconds, distanceMeters };
+}
+
 // --- Upstream fetch -----------------------------------------------------------
 
 async function postJson(
@@ -270,12 +324,46 @@ async function postJson(
   }
 }
 
+async function getJson(url: string): Promise<unknown> {
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "GET",
+      headers: { "User-Agent": USER_AGENT, Accept: "application/json" },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+  } catch (err) {
+    throw new RoutingError(502, "route_upstream_unreachable", `router unreachable: ${String(err)}`);
+  }
+  if (!res.ok) {
+    throw new RoutingError(502, "route_upstream_error", `router returned ${res.status}`);
+  }
+  try {
+    return await res.json();
+  } catch (err) {
+    throw new RoutingError(502, "route_unparseable", `router returned non-JSON: ${String(err)}`);
+  }
+}
+
 function valhallaUrl(cfg: RoutingConfig): string {
   return new URL("/route", cfg.url).toString();
 }
 
 function orsUrl(cfg: RoutingConfig, mode: RouteMode): string {
   return new URL(`/v2/directions/${orsProfile(mode)}/json`, cfg.url).toString();
+}
+
+/**
+ * OSRM GET URL: per-profile path prefix + service profile + `;`-joined
+ * `lng,lat` waypoints (OSRM is lng,lat — same as our geometry order). We ask
+ * for the full GeoJSON geometry plus per-leg distance/duration annotations.
+ */
+function osrmUrl(cfg: RoutingConfig, waypoints: Coord[], mode: RouteMode): string {
+  const { prefix, profile } = osrmProfile(mode);
+  const coords = waypoints.map((w) => `${w.lng},${w.lat}`).join(";");
+  const url = new URL(`/${prefix}/route/v1/${profile}/${coords}`, cfg.url);
+  url.search = "overview=full&geometries=geojson&annotations=distance,duration";
+  return url.toString();
 }
 
 async function fetchValhalla(
@@ -300,6 +388,15 @@ async function fetchORS(
   const body = { coordinates: waypoints.map((w) => [w.lng, w.lat]) };
   const headers: Record<string, string> = cfg.orsKey ? { Authorization: cfg.orsKey } : {};
   return parseORS(await postJson(orsUrl(cfg, mode), body, headers));
+}
+
+async function fetchOSRM(
+  cfg: RoutingConfig,
+  waypoints: Coord[],
+  mode: RouteMode,
+): Promise<RouteResult> {
+  // OSRM is a keyless GET; geometry comes back as GeoJSON (no polyline decode).
+  return parseOSRM(await getJson(osrmUrl(cfg, waypoints, mode)));
 }
 
 // --- Public entry -------------------------------------------------------------
@@ -343,7 +440,9 @@ export async function getRoute(
   const result =
     provider === "openrouteservice"
       ? await fetchORS(cfg, waypoints, mode)
-      : await fetchValhalla(cfg, waypoints, mode);
+      : provider === "valhalla"
+        ? await fetchValhalla(cfg, waypoints, mode)
+        : await fetchOSRM(cfg, waypoints, mode);
 
   writeRouteCache(deps.db, key, result, now);
   return result;

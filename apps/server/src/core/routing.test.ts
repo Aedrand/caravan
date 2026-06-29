@@ -16,6 +16,7 @@ import {
   getRoute,
   normalizeCoords,
   parseORS,
+  parseOSRM,
   parseValhalla,
   type RoutingDeps,
   RoutingError,
@@ -100,6 +101,26 @@ function valhallaResponse(legShapes: string[]): unknown {
   };
 }
 
+/**
+ * FOSSGIS OSRM `/route/v1` response. `geometries=geojson` means geometry is
+ * already `[lng, lat]` (TOKYO_LNGLAT), distances in meters, durations seconds.
+ */
+function osrmResponse(
+  legs: { distance: number; duration: number }[] = [{ distance: 500, duration: 120 }],
+): unknown {
+  return {
+    code: "Ok",
+    routes: [
+      {
+        geometry: { coordinates: TOKYO_LNGLAT },
+        legs,
+        distance: legs.reduce((a, l) => a + l.distance, 0),
+        duration: legs.reduce((a, l) => a + l.duration, 0),
+      },
+    ],
+  };
+}
+
 function mockFetch(json: unknown, ok = true, status = 200) {
   const fn = vi.fn(async (_url: string, _init?: RequestInit) => ({
     ok,
@@ -148,6 +169,7 @@ test("buildCacheKey: stable for coords agreeing within 5 dp, varies by mode/prov
   expect(a).toBe(b); // 6th-decimal jitter collapses to the same key
   expect(a).not.toBe(buildCacheKey("valhalla", "driving", WAYPOINTS));
   expect(a).not.toBe(buildCacheKey("openrouteservice", "walking", WAYPOINTS));
+  expect(a).not.toBe(buildCacheKey("osrm", "walking", WAYPOINTS)); // provider is part of the key
   expect(a.startsWith("valhalla:walking:")).toBe(true);
 });
 
@@ -211,10 +233,37 @@ test("parseORS: no routes throws a 502 RoutingError", () => {
   expect(() => parseORS({ routes: [] })).toThrow(RoutingError);
 });
 
+// --- parseOSRM ----------------------------------------------------------------
+
+test("parseOSRM: maps legs, uses GeoJSON geometry as-is (no decode), m + s units", () => {
+  const result = parseOSRM(
+    osrmResponse([
+      { distance: 400, duration: 100 },
+      { distance: 834, duration: 233 },
+    ]),
+  );
+  expectGeometryClose(result.geometry, TOKYO_LNGLAT);
+  expect(result.legs).toEqual([
+    { durationSeconds: 100, distanceMeters: 400 },
+    { durationSeconds: 233, distanceMeters: 834 },
+  ]);
+  expect(result.durationSeconds).toBe(333);
+  expect(result.distanceMeters).toBe(1234);
+});
+
+test("parseOSRM: a non-Ok code throws a 502 RoutingError", () => {
+  expect(() => parseOSRM({ code: "NoRoute", routes: [] })).toThrow(RoutingError);
+});
+
+test("parseOSRM: missing/empty routes throws a 502 RoutingError", () => {
+  expect(() => parseOSRM({ code: "Ok", routes: [] })).toThrow(RoutingError);
+  expect(() => parseOSRM({ code: "Ok" })).toThrow(RoutingError);
+});
+
 // --- getRoute (cache + rate limit) -------------------------------------------
 
-test("getRoute: cache miss calls upstream and returns a RouteResult", async () => {
-  const fetchMock = mockFetch(valhallaResponse([encodePolyline(TOKYO_PATH, 1e6)]));
+test("getRoute: cache miss calls upstream and returns a RouteResult (default OSRM)", async () => {
+  const fetchMock = mockFetch(osrmResponse());
   const d = deps();
   const result = await getRoute(d, WAYPOINTS, "walking");
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -222,8 +271,24 @@ test("getRoute: cache miss calls upstream and returns a RouteResult", async () =
   expectGeometryClose(result?.geometry ?? [], TOKYO_LNGLAT);
 });
 
+test("getRoute: default OSRM hits the per-profile foot/car path with geojson geometry", async () => {
+  const fetchMock = mockFetch(osrmResponse());
+  const d = deps();
+  await getRoute(d, WAYPOINTS, "walking");
+  const walkUrl = String(fetchMock.mock.calls[0]?.[0]);
+  expect(walkUrl).toBe(
+    "https://routing.openstreetmap.de/routed-foot/route/v1/foot/139.7454,35.6586;139.7488,35.661?overview=full&geometries=geojson&annotations=distance,duration",
+  );
+  expect(fetchMock.mock.calls[0]?.[1]?.method).toBe("GET");
+
+  const d2 = deps();
+  await getRoute(d2, WAYPOINTS, "driving");
+  const driveUrl = String(fetchMock.mock.calls[1]?.[0]);
+  expect(driveUrl).toContain("/routed-car/route/v1/driving/");
+});
+
 test("getRoute: a second identical call is a cache hit (no upstream, no token spent)", async () => {
-  const fetchMock = mockFetch(valhallaResponse([encodePolyline(TOKYO_PATH, 1e6)]));
+  const fetchMock = mockFetch(osrmResponse());
   const d = deps();
   await getRoute(d, WAYPOINTS, "walking");
   await getRoute(d, WAYPOINTS, "walking");
@@ -233,7 +298,7 @@ test("getRoute: a second identical call is a cache hit (no upstream, no token sp
 
 test("getRoute: walking sends Valhalla pedestrian costing + kilometers units", async () => {
   const fetchMock = mockFetch(valhallaResponse([encodePolyline(TOKYO_PATH, 1e6)]));
-  const d = deps();
+  const d = deps({ ROUTING_PROVIDER: "valhalla" });
   await getRoute(d, WAYPOINTS, "walking");
   const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
   expect(body.costing).toBe("pedestrian");
@@ -246,7 +311,7 @@ test("getRoute: walking sends Valhalla pedestrian costing + kilometers units", a
 
 test("getRoute: driving sends Valhalla auto costing", async () => {
   const fetchMock = mockFetch(valhallaResponse([encodePolyline(TOKYO_PATH, 1e6)]));
-  const d = deps();
+  const d = deps({ ROUTING_PROVIDER: "valhalla" });
   await getRoute(d, WAYPOINTS, "driving");
   const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body));
   expect(body.costing).toBe("auto");
@@ -297,12 +362,13 @@ test("getRoute: ORS provider with a key routes through the ORS profile endpoint"
   expect(result?.distanceMeters).toBe(100);
 });
 
-test("getRoute: ORS selected but keyless falls back to keyless Valhalla", async () => {
-  const fetchMock = mockFetch(valhallaResponse([encodePolyline(TOKYO_PATH, 1e6)]));
+test("getRoute: ORS selected but keyless falls back to the keyless OSRM default", async () => {
+  const fetchMock = mockFetch(osrmResponse());
   const d = deps({ ROUTING_PROVIDER: "openrouteservice" }); // no ORS_KEY
-  await getRoute(d, WAYPOINTS, "walking");
+  const result = await getRoute(d, WAYPOINTS, "walking");
   const url = String(fetchMock.mock.calls[0]?.[0]);
-  expect(url).toContain("/route"); // Valhalla endpoint, not ORS
+  expect(url).toContain("/routed-foot/route/v1/foot/"); // OSRM default, not ORS
+  expect(result?.distanceMeters).toBe(500);
 });
 
 // --- Integration via app.request ---------------------------------------------
@@ -326,7 +392,7 @@ function postRoute(app: Hono, body: unknown) {
 }
 
 test("POST /api/route: valid body returns the resolved route", async () => {
-  mockFetch(valhallaResponse([encodePolyline(TOKYO_PATH, 1e6)]));
+  mockFetch(osrmResponse());
   const res = await postRoute(routeApp(), { waypoints: WAYPOINTS, mode: "walking" });
   expect(res.status).toBe(200);
   const body = (await res.json()) as { route: { geometry: unknown[] } | null };
@@ -335,7 +401,7 @@ test("POST /api/route: valid body returns the resolved route", async () => {
 });
 
 test("POST /api/route: a malformed upstream is graceful-off — { route: null } at HTTP 200", async () => {
-  mockFetch({ trip: { status: 1, legs: [] } }); // no routed trip
+  mockFetch({ code: "NoRoute", routes: [] }); // no routed path
   const res = await postRoute(routeApp(), { waypoints: WAYPOINTS, mode: "walking" });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ route: null });

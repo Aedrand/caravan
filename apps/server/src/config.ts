@@ -52,11 +52,19 @@ const EnvSchema = z.object({
   STADIA_KEY: z.string().min(1).optional(),
 
   // --- Routing (V2.5). All optional: the default is the keyless donated
-  // public Valhalla instance, so zero config still draws day routes. ---
-  /** Routing engine. Valhalla (default) is keyless; OpenRouteService needs ORS_KEY. */
-  ROUTING_PROVIDER: z.enum(["valhalla", "openrouteservice"]).default("valhalla"),
-  /** Routing base URL — override for a self-hosted Valhalla or an ORS host. */
-  ROUTING_URL: z.url().default("https://valhalla1.openstreetmap.de"),
+  // public OSRM instance (FOSSGIS), so zero config still draws day routes. ---
+  /**
+   * Routing engine. OSRM (default) and Valhalla are keyless; OpenRouteService
+   * needs ORS_KEY. The default upstream host is provider-aware (see ROUTING_URL).
+   */
+  ROUTING_PROVIDER: z.enum(["osrm", "valhalla", "openrouteservice"]).default("osrm"),
+  /**
+   * Routing base URL. When unset it defaults to the right host for the chosen
+   * provider (OSRM → FOSSGIS `routing.openstreetmap.de`, Valhalla →
+   * `valhalla1.openstreetmap.de`, ORS → the public ORS API). Set it to point at
+   * a self-hosted engine or an alternate host.
+   */
+  ROUTING_URL: z.url().optional(),
   /** OpenRouteService API key — required to actually use the `openrouteservice` provider. */
   ORS_KEY: z.string().min(1).optional(),
   /** Per-deployment routing rate limit: max upstream route requests per minute. */
@@ -135,7 +143,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     },
     routing: {
       provider: parsed.ROUTING_PROVIDER,
-      url: parsed.ROUTING_URL,
+      url: parsed.ROUTING_URL ?? defaultRoutingUrl(parsed.ROUTING_PROVIDER),
       orsKey: parsed.ORS_KEY,
       rateLimitPerMinute: parsed.ROUTE_RATE_LIMIT_PER_MINUTE,
     },
@@ -159,6 +167,23 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env) {
     /** Trust X-Forwarded-For for client identity — only behind a trusted proxy. */
     trustProxy: parsed.TRUST_PROXY,
   };
+}
+
+/**
+ * Keyless/canonical upstream host per routing provider, used when `ROUTING_URL`
+ * is unset. OSRM and Valhalla resolve to their donated FOSSGIS public hosts;
+ * OpenRouteService resolves to its public API (a key is still required, and
+ * self-hosters override this with `ROUTING_URL`).
+ */
+function defaultRoutingUrl(provider: "osrm" | "valhalla" | "openrouteservice"): string {
+  switch (provider) {
+    case "valhalla":
+      return "https://valhalla1.openstreetmap.de";
+    case "openrouteservice":
+      return "https://api.openrouteservice.org";
+    default:
+      return "https://routing.openstreetmap.de";
+  }
 }
 
 function loadOrCreateSecretKey(dataDir: string): string {

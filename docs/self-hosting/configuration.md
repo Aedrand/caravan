@@ -69,6 +69,35 @@ the shared public endpoints. See [Track C / TD-5] in the plan for the rationale.
 | `MAPTILER_KEY` | string | — | MapTiler API key — nicer tile styles (non-commercial free tier). |
 | `STADIA_KEY` | string | — | Stadia Maps API key — alternative keyed tile styles. |
 
+## Routing
+
+Draws the road/footpath line between a day's ordered stops. All optional — the
+default is the **keyless** FOSSGIS **OSRM** instance, so zero config still draws
+day routes out of the box. (The previous default, FOSSGIS Valhalla, remains a
+selectable keyless alternative.) The user-facing mode is `walking`/`driving`;
+the provider-specific profile/costing name is translated server-side and never
+leaves the proxy. If the upstream is unreachable the proxy fails **graceful-off**
+— the map still shows the stop pins, just without a connecting line.
+
+> Public keyless routing hosts are donated and carry **no SLA**. If the default
+> degrades, point `ROUTING_URL` at a self-hosted engine or switch to a keyed
+> provider rather than depending on the public instance.
+
+| Variable | Type | Default | Description |
+| --- | --- | --- | --- |
+| `ROUTING_PROVIDER` | enum: `osrm` \| `valhalla` \| `openrouteservice` | `osrm` | Routing engine. `osrm` (default) and `valhalla` are keyless; `openrouteservice` requires `ORS_KEY` (falls back to the keyless OSRM default if the key is missing). |
+| `ROUTING_URL` | url | provider-aware (see below) | Routing base URL. When unset it resolves to the right host for the chosen provider. Set it to point at a self-hosted engine or an alternate host. **OSRM note:** FOSSGIS runs one engine per profile behind per-profile path prefixes on a single host (`/routed-foot` for walking, `/routed-car` for driving) — point `ROUTING_URL` at that host's root and the proxy appends the right prefix. |
+| `ORS_KEY` | string | — | OpenRouteService API key — required to actually use the `openrouteservice` provider. |
+| `ROUTE_RATE_LIMIT_PER_MINUTE` | number | `60` | Per-deployment cap on upstream route requests per minute (protects the donated providers). |
+
+When `ROUTING_URL` is unset, the default host depends on `ROUTING_PROVIDER`:
+
+| Provider | Default host |
+| --- | --- |
+| `osrm` | `https://routing.openstreetmap.de` |
+| `valhalla` | `https://valhalla1.openstreetmap.de` |
+| `openrouteservice` | `https://api.openrouteservice.org` |
+
 ## Backups (Litestream)
 
 Opt-in continuous replication. Off by default — see
