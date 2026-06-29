@@ -7,7 +7,19 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
+## 2026-06-29 — Routing provider swap + public-transit decision (owner)
+
+**Routing default is DOWN — swap to keyless OSRM (near-term fix, not just an idea).** The FOSSGIS Valhalla default (`valhalla1.openstreetmap.de`) is unreachable from every network tried — confirmed it's the **host**, not a code bug (the proxy + graceful-off behave correctly, so walk/drive legs just render blank). **Fix:** add a keyless **OSRM** adapter targeting FOSSGIS `routing.openstreetmap.de` (separate `routed-foot` / `routed-car` profiles — both confirmed up, response shape captured) and make it the default provider; keep `ROUTING_PROVIDER` + `ROUTING_URL` (own Valhalla/OSRM) + key-optional ORS as alternatives. Promote to a near-term task. _Caveat: OSRM public is also a no-SLA donated host — the durable answer is the `ROUTING_URL` escape hatch or a keyed provider; "keyless default that works on `git clone`" is just the immediate priority._
+
+**Public transit — DECIDED out of scope for now; revisit at the end.** In-app routing stays **walking/driving only**; the transit story is the existing **Google Maps link-out** (keyless, compliant, no second map). Now baked into `plan.md` as a deferred post-v1.0 revisit ("Public transit — deferred revisit") with three options: (1) Google Maps **Embed API** iframe panel [cheapest, no second renderer], (2) an **open transit provider** in-app (Transitous/MOTIS → self-host) [coverage gaps], (3) a **separate Google renderer** [full ~2× map cost]. Rationale: worldwide transit-with-schedules is effectively Google-only data; open engines cover only EU / US-metros / Tokyo (blank for Kansai/Shinkansen/Seoul) and self-hosting can't fix missing data; Google's terms block drawing its transit on our OSM map.
+
 ## 2026-06-29 — Self-hosting / privacy: a "no third-party egress" deployment posture (owner ask — look into later)
+
+> **Update 2026-06-29 (investigated with owner).** Untangled the two motivations conflated here:
+> - **Reliability is *not* a reason to self-host.** The fix when a public host dies (as `valhalla1.openstreetmap.de` just did) is a **provider swap** (→ keyless FOSSGIS OSRM) + the existing `ROUTING_URL` escape hatch — not running our own Valhalla. "Public keyless = no SLA" is the real lesson.
+> - **Privacy / air-gap / data-residency** is the *only* justification for full zero-egress, and stays an **open** posture for the M6 security pass (do not close).
+> - One concrete code gap: tiles can target named providers but **not an arbitrary self-hosted tile server** — there's no `TILE_STYLE_URL`/custom-style override (routing & geocoding already have URL overrides). Small, well-scoped M6 add.
+> - Transit egress is moot — public transit is out of scope (link-out only); see the 2026-06-29 routing/transit entry above + `plan.md`.
 
 **Potential self-hosting requirement to investigate.** Caravan's geo features call **public third-party OpenStreetMap services by default**, so a default deployment sends data off-box:
 - **Routing** (V2.5) → FOSSGIS **Valhalla** (`valhalla1.openstreetmap.de`): the server proxy sends day **waypoint coordinates + mode**.
