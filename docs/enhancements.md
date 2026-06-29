@@ -7,6 +7,36 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
+## 2026-06-29 — Bookings section: more booking types beyond flight + lodging (owner)
+
+**Context:** V2.7 promotes **Bookings** from a strip into its own top-level workspace
+section, internally grouped by category (**Transport** / **Lodging**). For V2.7 the
+section is populated only by the existing two booking types — flights (→ Transport)
+and hotels (→ Lodging) — and the category structure is built to grow. The owner
+explicitly wants the section to **accommodate more booking types in the future**.
+
+**Idea (open, not scoped):** add further first-class booking types so the categories
+fill out, e.g.:
+
+- **Transport:** trains (Shinkansen!), ferries, rental car / car transfers, private
+  drivers. (Note: this is *manual booking entry* — confirmation, date/time, cost —
+  and is **independent** of the deferred public-transit *routing* question; you can
+  log a train booking without any transit-routing engine.)
+- **Lodging:** already covered by the hotel type; could extend to ryokan / rental /
+  hostel sub-kinds if useful.
+- **New category — Tickets / Reservations:** event tickets, attraction passes,
+  restaurant reservations (e.g. a museum slot, a teamLab ticket, a dinner booking).
+
+**Cost when promoted:** each new type is a data-model addition (an enum value on the
+activities table + per-type form fields) plus a row renderer + the category it slots
+into — the section's grouping and the in-day shim references are already designed to
+absorb them. No shell rework. Smallest first slice is probably a generic **train**
+transport type for the Japan trip.
+
+**Cross-ref:** the deferred *public-transit routing* revisit (the 2026-06-29 routing
+entry below) is a **different** thing — that's live transit *directions/times*; this
+is just *recording a booking you already made*. Keep them distinct when promoting.
+
 ## 2026-06-29 — Routing provider swap + public-transit decision (owner)
 
 **Routing default is DOWN — swap to keyless OSRM (near-term fix, not just an idea).** The FOSSGIS Valhalla default (`valhalla1.openstreetmap.de`) is unreachable from every network tried — confirmed it's the **host**, not a code bug (the proxy + graceful-off behave correctly, so walk/drive legs just render blank). **Fix:** add a keyless **OSRM** adapter targeting FOSSGIS `routing.openstreetmap.de` (separate `routed-foot` / `routed-car` profiles — both confirmed up, response shape captured) and make it the default provider; keep `ROUTING_PROVIDER` + `ROUTING_URL` (own Valhalla/OSRM) + key-optional ORS as alternatives. Promote to a near-term task. _Caveat: OSRM public is also a no-SLA donated host — the durable answer is the `ROUTING_URL` escape hatch or a keyed provider; "keyless default that works on `git clone`" is just the immediate priority._
