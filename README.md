@@ -6,6 +6,13 @@ run by one tech-savvy friend for their circle.
 
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL--3.0-blue.svg)](LICENSE)
 
+> ⚠️ **Early development.** Caravan is under active development — the schema,
+> APIs, and UI are still in flux and may change without notice, and it isn't
+> ready for production use yet. You're welcome to look around, but it's **not
+> open for outside contributions right now** — please hold off on issues and
+> pull requests until things settle (around the first tagged release). The
+> [`CONTRIBUTING`](CONTRIBUTING.md) guide is here for when that opens up.
+
 Caravan is one container: a Hono + SQLite server that serves a React SPA. No
 external database, cache, or queue — one process, one volume. Bring your own
 domain and a reverse proxy and a whole friend group can plan a trip together,
