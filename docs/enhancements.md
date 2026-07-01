@@ -7,7 +7,53 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
-## 2026-06-29 — Bookings section: more booking types beyond flight + lodging (owner)
+## 2026-07-01 — Post-v2 polish notes (owner)
+
+Raw notes from a hands-on pass after the v2.8 chrome merge (PR #3). Unlike most
+inbox entries, these were **promoted immediately**: the owner scoped all nine —
+plus MAP-PIN-DAY-COLOR, FLIGHT-COST-FIELD, and TRIP-SETTINGS-DIALOG from the
+existing queue — into an active enhancements pass the same day (branch
+`worktree-post-v2-enhancements` off `817cded`).
+
+**Map**
+
+- [ ] **Map-layers popup layout** — the layers popup takes up too much map
+  space. Make it collapsible or better integrated; reclaiming map area is the
+  core problem.
+- [ ] **Resizable map partition** — let the user drag the divider between the
+  left scroll canvas and the map to resize how much screen the map takes.
+- [ ] **Pin/number clipping** — when pins sit very close together their numbers
+  clip over each other and neither is readable. One pin fully covering another
+  is acceptable (unavoidable); merged half-readable numbers are not.
+- [ ] **Walk/drive toggle restyle** — the current segmented-toggle styling is
+  visually indistinguishable from a well-known competitor's; restyle it into
+  something unique to Caravan's own brand identity. (Per repo convention the
+  competitor is deliberately not named.)
+
+**Ideas + map**
+
+- [ ] **Ideas on the map** — associate an idea with a location and show it on
+  the map; the map should be present on the Ideas section; idea **lists become
+  map layers the same way days are**.
+
+**Workspace shell**
+
+- [ ] **Collapsible rail sections** — the left index rail can't collapse
+  Itinerary (days always stay expanded); enable collapse for Itinerary, Ideas,
+  and any section that expands into a larger list.
+- [ ] **Scroll-through map-focus bug** — clicking a section header below
+  Itinerary scrolls *through* the itinerary, which pops the map out and rapidly
+  auto-focuses day by day in passing. Skip the auto-focus (and pop-out churn)
+  when the user is merely passing over a section rather than working in it.
+- [ ] **Section spacing** — a bit more space before each section header so the
+  section boundary reads more clearly.
+
+**Overview**
+
+- [ ] **Rich-text bulletin** — the group bulletin should support rich text
+  (bullets, emphasis, structure), not just plain text.
+
+
 
 **Context:** V2.7 promotes **Bookings** from a strip into its own top-level workspace
 section, internally grouped by category (**Transport** / **Lodging**). For V2.7 the
