@@ -82,6 +82,7 @@ import { DerivedEntryRow } from "./derived-entry-row";
 import { dayNumber, deriveDays, formatDayLabel, todayIso } from "./format";
 import { computeStopNumbers } from "./numbering";
 import { RailRow } from "./rail-row";
+import { RouteModeSegmented } from "./route-mode-toggle";
 import { SortableRailRow } from "./sortable-activity-card";
 import { TravelLegRow } from "./travel-leg-row";
 
@@ -1130,34 +1131,7 @@ function DayRouteModeToggle({
 
   return (
     <span className="flex items-center gap-1">
-      <span
-        role="toolbar"
-        aria-label="Travel mode for this day's route"
-        className="flex items-center rounded-pill border bg-card p-0.5"
-      >
-        {(["walking", "driving"] as const).map((m) => {
-          const Icon = m === "driving" ? Car : Footprints;
-          const active = effective === m;
-          return (
-            <button
-              key={m}
-              type="button"
-              onClick={() => onSet(m)}
-              aria-pressed={active}
-              aria-label={m === "walking" ? "Walk this day" : "Drive this day"}
-              title={m === "walking" ? "Walk" : "Drive"}
-              className={cn(
-                "flex items-center rounded-pill px-1.5 py-0.5 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                active
-                  ? "bg-accent-soft text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon aria-hidden className="size-3.5" strokeWidth={2.25} />
-            </button>
-          );
-        })}
-      </span>
+      <RouteModeSegmented value={effective} onChange={onSet} />
       {isDefault ? (
         <span className="text-[11px] text-muted-foreground">(trip default)</span>
       ) : (
@@ -1171,52 +1145,6 @@ function DayRouteModeToggle({
           <X aria-hidden className="size-3" />
         </button>
       )}
-    </span>
-  );
-}
-
-/**
- * The trip-wide default routing mode (V2.5) — a compact walk/drive segmented
- * control. Days inherit this unless they pin an override (see
- * `DayRouteModeToggle`). Editor-only; writes `trip.defaultRouteMode`. Exported so
- * the V2.7 ItinerarySection can host it in the section heading (the board no
- * longer renders its own toolbar).
- */
-export function TripRouteModeToggle({
-  mode,
-  onChange,
-}: {
-  mode: RouteMode;
-  onChange: (mode: RouteMode) => void;
-}) {
-  return (
-    <span
-      role="toolbar"
-      aria-label="Default travel mode for routes"
-      className="hidden shrink-0 items-center rounded-control border bg-card p-0.5 shadow-control sm:flex"
-    >
-      {(["walking", "driving"] as const).map((m) => {
-        const Icon = m === "driving" ? Car : Footprints;
-        const active = mode === m;
-        return (
-          <button
-            key={m}
-            type="button"
-            onClick={() => onChange(m)}
-            aria-pressed={active}
-            aria-label={
-              m === "walking" ? "Default travel mode: walking" : "Default travel mode: driving"
-            }
-            title={m === "walking" ? "Routes default to walking" : "Routes default to driving"}
-            className={cn(
-              "flex items-center rounded-control px-2 py-1 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
-              active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon aria-hidden className="size-4" strokeWidth={2.25} />
-          </button>
-        );
-      })}
     </span>
   );
 }

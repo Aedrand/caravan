@@ -5,9 +5,11 @@ import { type RefObject, useCallback, useEffect, useRef, useState } from "react"
  * watches every section + day anchor inside the canvas scroll container and
  * reports which one the reader is "in"; `scrollTo(id)` smooth-scrolls the canvas
  * to an anchor (reduced-motion aware) and moves focus there for keyboard/SR
- * users. The hook is the ONLY place an IntersectionObserver is created for
- * scrollspy — callers see just `{ activeId, scrollTo }`, so the mechanism is
- * swappable without touching them.
+ * users. While a `scrollTo` is in flight, `activeId` is pinned to the target
+ * (suppressing the observer's intermediate reports) until `scrollend` or a
+ * fallback timeout. The hook is the ONLY place an IntersectionObserver is
+ * created for scrollspy — callers see just `{ activeId, scrollTo }`, so the
+ * mechanism is swappable without touching them.
  */
 export interface UseScrollSpyReturn {
   activeId: string | null;
@@ -34,6 +36,16 @@ export function useScrollSpy({
   const orderRef = useRef(anchorIds);
   orderRef.current = anchorIds;
 
+  // While a programmatic scroll (`scrollTo`) is in flight, `activeId` is frozen
+  // to the scroll target and the observer's intermediate enter/exit reports are
+  // ignored. Without this, a smooth scroll past the Itinerary's day anchors
+  // thrashes `activeId` through every `day-…` value it crosses (popping the
+  // ambient map open and re-framing it per day). Cleared by `scrollend`
+  // (primary) or a 1s timeout (fallback for engines without `scrollend`, or a
+  // same-position scroll where no scroll events fire at all).
+  const suppressedRef = useRef(false);
+  const suppressTimeoutRef = useRef<number | null>(null);
+
   // A stable primitive dependency so the effect re-subscribes only when the SET
   // of anchors changes (a date edit adds/removes a day), not on every render.
   const anchorKey = anchorIds.join("|");
@@ -53,6 +65,10 @@ export function useScrollSpy({
 
     const flush = () => {
       rafRef.current = null;
+      // Frozen during a programmatic scroll: `scrollTo` already set `activeId`
+      // to the target optimistically. `flags` keeps recording throughout, so
+      // the `scrollend` resync below sees the observer's true state.
+      if (suppressedRef.current) return;
       // `activeId` = the LAST anchor (in document order) currently intersecting
       // the top strip — i.e. "which section am I in?".
       let last: string | null = null;
@@ -78,18 +94,53 @@ export function useScrollSpy({
       if (el) observer.observe(el);
     }
 
+    // Primary suppression clear: the moment the native smooth scroll settles,
+    // trust the observer again and resync `activeId` to its true state.
+    const clearSuppression = () => {
+      if (suppressTimeoutRef.current !== null) {
+        window.clearTimeout(suppressTimeoutRef.current);
+        suppressTimeoutRef.current = null;
+      }
+      if (!suppressedRef.current) return;
+      suppressedRef.current = false;
+      flush();
+    };
+    root.addEventListener("scrollend", clearSuppression);
+
     return () => {
       observer.disconnect();
+      root.removeEventListener("scrollend", clearSuppression);
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
       }
+      if (suppressTimeoutRef.current !== null) {
+        window.clearTimeout(suppressTimeoutRef.current);
+        suppressTimeoutRef.current = null;
+      }
+      // Don't leave the spy frozen across a re-subscribe (anchor set changed
+      // mid-scroll): the new subscription starts un-suppressed.
+      suppressedRef.current = false;
     };
   }, [anchorKey]);
 
   const scrollTo = useCallback((id: string) => {
     const el = document.getElementById(id);
     if (!el) return;
+    // Optimistic jump: the rail highlight (and everything keyed off `activeId`,
+    // e.g. the ambient map) lands on the destination immediately instead of
+    // walking through every anchor the smooth scroll sweeps past.
+    suppressedRef.current = true;
+    setActiveId(id);
+    if (suppressTimeoutRef.current !== null) {
+      window.clearTimeout(suppressTimeoutRef.current);
+    }
+    // Fallback clear — `scrollend` never fires on engines without it, nor when
+    // the target is already in view (no movement ⇒ no scroll events at all).
+    suppressTimeoutRef.current = window.setTimeout(() => {
+      suppressedRef.current = false;
+      suppressTimeoutRef.current = null;
+    }, 1000);
     const reduced =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;

@@ -52,9 +52,10 @@ describe("plannedMinor", () => {
     const total = plannedMinor([
       activity({ estimatedCostMinor: 1000 }),
       activity({ type: "lodging", estimatedCostMinor: 5000 }),
+      activity({ type: "flight", estimatedCostMinor: 32000 }),
       activity({ type: "note", estimatedCostMinor: 250 }),
     ]);
-    expect(total).toBe(6250);
+    expect(total).toBe(38250);
   });
 
   test("excludes ideas (date === null) even when they carry an estimate", () => {

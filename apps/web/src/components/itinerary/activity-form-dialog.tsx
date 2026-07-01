@@ -216,8 +216,9 @@ function ActivityForm({
   const isFlight = type === "flight";
   const isLodging = type === "lodging";
   const isBooking = isFlight || isLodging;
-  // Cost is the stop's estimate and the lodging's whole-stay total (PD-13).
-  const showCost = isStop || isLodging;
+  // Cost is the stop's estimate, the lodging's whole-stay total, and the
+  // flight's fare (PD-13).
+  const showCost = isStop || isBooking;
   const isIdea = dateValue === ""; // undated → lives in Ideas; can join a list
 
   // The trip-day <option>s, shared by the day / check-out / arrival selects.
@@ -676,7 +677,7 @@ function ActivityForm({
         </>
       )}
 
-      {/* Flight: arrival day + flight #, departs/arrives times, confirmation #. */}
+      {/* Flight: arrival day + flight #, cost + confirmation #, departs/arrives times. */}
       {isFlight && (
         <>
           <div className="grid grid-cols-2 gap-3">
@@ -706,6 +707,29 @@ function ActivityForm({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="grid gap-2">
+              <Label htmlFor="activity-cost">Est. cost ({currency})</Label>
+              <Input
+                id="activity-cost"
+                inputMode="decimal"
+                value={costInput}
+                placeholder="0.00"
+                onChange={(e) => setCostInput(e.target.value)}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="activity-confirmation">Confirmation #</Label>
+              <Input
+                id="activity-confirmation"
+                value={confirmationCode}
+                maxLength={100}
+                placeholder="Booking reference (optional)"
+                onChange={(e) => setConfirmationCode(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="grid gap-2">
               <Label htmlFor="activity-start">Departs at</Label>
               <Input
                 id="activity-start"
@@ -723,17 +747,6 @@ function ActivityForm({
                 onChange={(e) => setEndTime(e.target.value)}
               />
             </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="activity-confirmation">Confirmation #</Label>
-            <Input
-              id="activity-confirmation"
-              value={confirmationCode}
-              maxLength={100}
-              placeholder="Booking reference (optional)"
-              onChange={(e) => setConfirmationCode(e.target.value)}
-            />
           </div>
         </>
       )}

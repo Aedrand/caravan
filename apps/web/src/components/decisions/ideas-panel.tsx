@@ -444,6 +444,7 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
                       <SortableIdeaListSection
                         key={list.id}
                         list={list}
+                        id={`list-${list.id}`}
                         name={list.name}
                         count={sorted.length}
                         canEdit={canEdit}

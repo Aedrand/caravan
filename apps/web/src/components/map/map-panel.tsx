@@ -1,8 +1,8 @@
-import type { Activity, RouteResult, TripSnapshot } from "@caravan/shared";
+import type { Activity, IdeaList, RouteResult, TripSnapshot } from "@caravan/shared";
 import type { Point } from "geojson";
 import { MapPin, MapPinOff, TriangleAlert } from "lucide-react";
 import maplibregl from "maplibre-gl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
 import { formatDayShort } from "@/components/itinerary/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useMapConfig } from "@/lib/geo";
@@ -10,13 +10,19 @@ import { cn } from "@/lib/utils";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { useFocusedDay } from "./focused-day";
 import {
+  buildDayGroups,
+  buildListGroups,
   type MapPin as MapPinFeature,
+  PIN_NUMBER_LAYOUT,
+  PIN_NUMBER_PAINT,
   stopNumbersByDay,
   toFeatureCollection,
   toMapPins,
+  UNLISTED_LIST_KEY,
   unplottedWithPlace,
 } from "./geo-features";
-import { pinColorExpression, readPinTints } from "./pin-tint";
+import { MapLayersControl } from "./map-layers-control";
+import { IDEA_PIN_COLOR, pinColorExpression, readPinTints } from "./pin-tint";
 import { buildRouteFeatureCollection, dayColorExpression } from "./route-features";
 import { useMapSelection } from "./selection";
 
@@ -38,15 +44,6 @@ const ROUTE_LINE_LAYER_ID = "route-lines";
 /** Stable empty default so existing call sites (and the no-route mobile Map tab)
  * pass a consistent identity instead of churning a fresh Map each render. */
 const EMPTY_DAY_ROUTES: Map<string, RouteResult> = new Map();
-
-/**
- * Day key for the per-day filter (Trip Workspace v2). Dated pins key on their
- * ISO `YYYY-MM-DD`; undated pins (an Ideas-pool place with no date) collapse to
- * a sentinel. The leading space can't collide with a real ISO date and sorts
- * ahead of all of them.
- */
-const UNDATED = " undated";
-const dayKey = (p: MapPinFeature) => p.date ?? UNDATED;
 
 /**
  * `fill` renders the map as a height-filling pane (the trip workspace's ambient
@@ -75,6 +72,16 @@ export function MapPanel({
   // a departure pin (on `date`) + an arrival pin (on `endDate`) (V2.4 bookings).
   const pins = useMemo(() => toMapPins(activities, stopNumbers), [activities, stopNumbers]);
   const unplotted = useMemo(() => unplottedWithPlace(activities), [activities]);
+  // Idea lists in display order (sorted by fractional `position`, the same
+  // inline comparator the sync hooks use) — they label the per-list layer
+  // toggles for undated pins in the layers control.
+  const ideaLists = useMemo(
+    () =>
+      [...snapshot.ideaLists].sort((a, b) =>
+        a.position < b.position ? -1 : a.position > b.position ? 1 : 0,
+      ),
+    [snapshot.ideaLists],
+  );
 
   if (activities.length === 0) {
     if (!fill) return null;
@@ -113,12 +120,15 @@ export function MapPanel({
     );
   }
 
-  if (fill) return <MapView pins={pins} unplotted={unplotted} dayRoutes={dayRoutes} fill />;
+  if (fill)
+    return (
+      <MapView pins={pins} unplotted={unplotted} dayRoutes={dayRoutes} ideaLists={ideaLists} fill />
+    );
 
   return (
     <section className="flex flex-col gap-3">
       <MapHeading count={pins.length} />
-      <MapView pins={pins} unplotted={unplotted} dayRoutes={dayRoutes} />
+      <MapView pins={pins} unplotted={unplotted} dayRoutes={dayRoutes} ideaLists={ideaLists} />
     </section>
   );
 }
@@ -141,6 +151,7 @@ function MapView({
   pins,
   unplotted,
   dayRoutes = EMPTY_DAY_ROUTES,
+  ideaLists,
   fill = false,
 }: {
   // The FULL render-pin set (a flight is already fanned out into its departure +
@@ -149,6 +160,8 @@ function MapView({
   unplotted: Activity[];
   /** Per-day drawn routes (V2.5), keyed by ISO date. */
   dayRoutes?: Map<string, RouteResult>;
+  /** Idea lists in display order — the per-list layer toggles for undated pins. */
+  ideaLists: IdeaList[];
   fill?: boolean;
 }) {
   const mapConfig = useMapConfig();
@@ -156,34 +169,29 @@ function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const popupRef = useRef<maplibregl.Popup | null>(null);
   const [ready, setReady] = useState(false);
-  // Per-day pin filter (Trip Workspace v2). We track HIDDEN days (default empty
-  // = everything visible) so a newly-added day shows up automatically.
+  // Per-day / per-idea-list pin filters (Trip Workspace v2). We track HIDDEN
+  // keys (default empty = everything visible) so a newly-added day or list
+  // shows up automatically. Dated pins key on their ISO date; undated pins key
+  // on their idea list (UNLISTED_LIST_KEY for the listless).
   const [hiddenDays, setHiddenDays] = useState<Set<string>>(() => new Set());
+  const [hiddenLists, setHiddenLists] = useState<Set<string>>(() => new Set());
   const { selectedId, select } = useMapSelection();
   // Shared with the itinerary (PlanView): the rail-highlighted day. Null on the
   // mobile Map tab (no provider) → the day-follow effect is inert there.
   const { focusedDay } = useFocusedDay();
 
-  // Ordered groups for the filter control: unique dated days ascending, then the
-  // undated "Ideas" group last (only if any undated pins exist).
-  const dayGroups = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const p of pins) {
-      const k = dayKey(p);
-      counts.set(k, (counts.get(k) ?? 0) + 1);
-    }
-    const groups = [...counts.keys()]
-      .filter((k) => k !== UNDATED)
-      .sort()
-      .map((key) => ({ key, label: formatDayShort(key), count: counts.get(key) ?? 0 }));
-    const undated = counts.get(UNDATED);
-    if (undated) groups.push({ key: UNDATED, label: "Ideas", count: undated });
-    return groups;
-  }, [pins]);
+  // Ordered groups for the layers control: unique dated days ascending, and the
+  // idea lists (display order, then "Unlisted") that own undated pins. Undated
+  // pins never enter dayGroups — they're toggled per LIST instead.
+  const dayGroups = useMemo(() => buildDayGroups(pins, formatDayShort), [pins]);
+  const listGroups = useMemo(() => buildListGroups(pins, ideaLists), [pins, ideaLists]);
 
   const visiblePins = useMemo(
-    () => pins.filter((p) => !hiddenDays.has(dayKey(p))),
-    [pins, hiddenDays],
+    () =>
+      pins.filter((p) =>
+        p.date !== null ? !hiddenDays.has(p.date) : !hiddenLists.has(p.listId ?? UNLISTED_LIST_KEY),
+      ),
+    [pins, hiddenDays, hiddenLists],
   );
 
   // CLUSTERING CORRECTNESS: the source has `cluster: true`, and clusters are
@@ -199,15 +207,12 @@ function MapView({
   // and bookings carry none), so day-filtering and numbering are read off the pin.
   const fc = useMemo(() => toFeatureCollection(visiblePins), [visiblePins]);
 
-  // Route lines (V2.5). The day-color `match` keys off each day's ORDINAL over
-  // the trip's dated days — derived from the (stable) dated pin groups, not from
-  // which routes have resolved — so a day's ribbon keeps a stable hue as routes
-  // stream in. Every routed day has ≥2 plotted stops → ≥2 pins → a dated group,
-  // so this covers them all.
-  const orderedDates = useMemo(
-    () => dayGroups.filter((g) => g.key !== UNDATED).map((g) => g.key),
-    [dayGroups],
-  );
+  // Day ordinals for the day-color `match` (route lines AND pin fills). Keyed
+  // off each day's ORDINAL over the trip's dated days — derived from the
+  // (stable) dated pin groups, not from which routes have resolved — so a day's
+  // ribbon/pins keep a stable hue as routes stream in. Every routed day has ≥2
+  // plotted stops → ≥2 pins → a dated group, so this covers them all.
+  const orderedDates = useMemo(() => dayGroups.map((g) => g.key), [dayGroups]);
   // Honor the SAME per-day toggle as the pins: a hidden day drops its line at the
   // data level (the toggle stores the day's ISO key, which is the route's date).
   const routeFc = useMemo(
@@ -215,14 +220,16 @@ function MapView({
     [dayRoutes, hiddenDays],
   );
 
-  const toggleDay = (key: string) => {
-    setHiddenDays((prev) => {
+  const toggleIn = (setHidden: Dispatch<SetStateAction<Set<string>>>, key: string) => {
+    setHidden((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
       return next;
     });
   };
+  const toggleDay = (key: string) => toggleIn(setHiddenDays, key);
+  const toggleList = (key: string) => toggleIn(setHiddenLists, key);
 
   // Latest data, read inside the (one-time) boot effect without re-running it —
   // the live sync effects below keep the source + selection current.
@@ -311,50 +318,44 @@ function MapView({
         id: "pins",
         type: "circle",
         source: SOURCE_ID,
-        filter: ["!", ["has", "point_count"]],
         paint: {
-          // Tint each pin by its activity category via the JS token bridge (paint
-          // can't read CSS vars): a `match` on the feature's `category` → the
-          // resolved `--cat-*` color, falling back to the legacy orange. The
-          // theme-reactivity effect below re-reads + re-applies this on theme
-          // change so pins track the active color theme. See pin-tint.ts.
-          "circle-color": pinColorExpression(readPinTints()),
+          // FILL = the pin's DAY color: the same `match` on `date` (and the same
+          // hue ramp) the route lines use, so pin ↔ ribbon read as one system.
+          // Undated (Ideas-pool) pins have `date: null` → the fallback arm →
+          // the neutral IDEA_PIN_COLOR. Repainted by the orderedDates effect
+          // below when days shift ordinals.
+          "circle-color": dayColorExpression(orderedDatesRef.current, IDEA_PIN_COLOR),
           // A touch larger than the v1 radius (8) so the stop number reads on the
           // marker; still comfortably below the cluster min radius (16) so the
           // pin/cluster hierarchy holds.
           "circle-radius": 11,
-          "circle-stroke-width": 2.5,
-          "circle-stroke-color": "#fffbf1",
+          // RING = the activity's category tint via the JS token bridge (paint
+          // can't read CSS vars): a `match` on `category` → the resolved
+          // `--cat-*` color (demoted from fill by the pins-by-day pass). A hair
+          // wider than the old white stroke (2.5) so the category signal stays
+          // readable in its new supporting role. The theme-reactivity effect
+          // below re-reads + re-applies it on theme change. See pin-tint.ts.
+          "circle-stroke-width": 3,
+          "circle-stroke-color": pinColorExpression(readPinTints()),
         },
+        filter: ["!", ["has", "point_count"]],
       });
       // The per-day stop number, rendered ON each pin so the map and the rail are
       // cross-referenceable (pin ② ↔ rail stop ②, §C.6). A `symbol` layer over
       // the circle `pins` — the same source/feature, filtered to individual
-      // (non-cluster) pins that carry a `number`. The circle below it is now
-      // category-tinted, so the white number gets a translucent dark halo to stay
-      // legible on lighter tints (e.g. the gold lodging pin). Literal palette
-      // values — paint can't read CSS vars, and white+dark-halo reads on every
-      // tint in both color themes.
+      // (non-cluster) pins that carry a `number`. Layout/paint live in
+      // geo-features.ts as exported constants (PIN_NUMBER_LAYOUT / _PAINT) so a
+      // unit test can guard the collision tuning: native collision is ON, so
+      // when two pins truly overlap the lower-numbered label wins and the
+      // loser's number culls cleanly (its circle stays visible/clickable)
+      // instead of both merging into unreadable glyph soup.
       map.addLayer({
         id: "pin-numbers",
         type: "symbol",
         source: SOURCE_ID,
         filter: ["all", ["!", ["has", "point_count"]], ["has", "number"]],
-        layout: {
-          "text-field": ["to-string", ["get", "number"]],
-          "text-size": 12,
-          // Every pin's number must stay visible even when pins crowd together —
-          // the rail cross-reference breaks if MapLibre's symbol collision culls
-          // overlapping labels, so opt out of placement collision entirely.
-          "text-allow-overlap": true,
-          "text-ignore-placement": true,
-        },
-        paint: {
-          "text-color": "#fffbf1",
-          "text-halo-color": "rgba(40,30,18,0.55)",
-          "text-halo-width": 1.3,
-          "text-halo-blur": 0.3,
-        },
+        layout: PIN_NUMBER_LAYOUT,
+        paint: PIN_NUMBER_PAINT,
       });
 
       // Pin click → select + popup (bidirectional highlight, half 1). Bind both
@@ -419,11 +420,21 @@ function MapView({
   }, [routeFc, ready]);
 
   // Re-apply the day-color match when the ordered date set changes (a day added/
-  // removed shifts ordinals → hues), mirroring the pin re-tint.
+  // removed shifts ordinals → hues) — both the route lines and the pin fills key
+  // on the same ordinals, so they repaint together and never drift apart.
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !ready || !map.getLayer(ROUTE_LINE_LAYER_ID)) return;
-    map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-color", dayColorExpression(orderedDates));
+    if (!map || !ready) return;
+    if (map.getLayer(ROUTE_LINE_LAYER_ID)) {
+      map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-color", dayColorExpression(orderedDates));
+    }
+    if (map.getLayer("pins")) {
+      map.setPaintProperty(
+        "pins",
+        "circle-color",
+        dayColorExpression(orderedDates, IDEA_PIN_COLOR),
+      );
+    }
   }, [orderedDates, ready]);
 
   // Selection → fly to the pin and show a popup (bidirectional highlight, half 2).
@@ -464,21 +475,23 @@ function MapView({
     fitToPlotted(map, ofDay, 600);
   }, [focusedDay, ready]);
 
-  // Re-tint pins when the active color theme changes. The two-axis theming
-  // (TD-11) lives on `<html>`'s `data-theme` (color) attribute; MapLibre paint
-  // can't read CSS vars, so the rest of the UI re-themes automatically but the
-  // map can't — we mirror that here by re-reading the resolved `--cat-*` tokens
-  // and pushing a fresh `match` onto the pins layer. `data-style` is the
-  // STRUCTURE axis (no hue change), so we watch `data-theme` only. The initial
-  // tint is set at addLayer; `retint()` also runs once here to cover a theme flip
-  // between boot and `ready`.
+  // Re-tint the pins' category RING when the active color theme changes. The
+  // two-axis theming (TD-11) lives on `<html>`'s `data-theme` (color) attribute;
+  // MapLibre paint can't read CSS vars, so the rest of the UI re-themes
+  // automatically but the map can't — we mirror that here by re-reading the
+  // resolved `--cat-*` tokens and pushing a fresh `match` onto the pins layer's
+  // stroke (the FILL is day-colored from a literal palette, so it's theme-inert;
+  // the ring is the only theme-reactive part). `data-style` is the STRUCTURE
+  // axis (no hue change), so we watch `data-theme` only. The initial tint is set
+  // at addLayer; `retint()` also runs once here to cover a theme flip between
+  // boot and `ready`.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
     const root = document.documentElement;
     const retint = () => {
       if (map.getLayer("pins")) {
-        map.setPaintProperty("pins", "circle-color", pinColorExpression(readPinTints(root)));
+        map.setPaintProperty("pins", "circle-stroke-color", pinColorExpression(readPinTints(root)));
       }
     };
     retint();
@@ -507,54 +520,23 @@ function MapView({
             </p>
           </div>
         )}
-        {/* Per-day filter overlay (Trip Workspace v2). Lives inside the map's
-            relative container; NavigationControl owns top-right, so this sits
-            top-left. Toggling a day hides/shows its pins purely by filtering the
-            GeoJSON data feeding the source (see the `fc` memo above) — never a
-            layer filter — so clusters recompute correctly. Only shown once pins
-            span ≥2 day groups. */}
-        {dayGroups.length >= 2 && (
-          <div
-            role="toolbar"
-            aria-label="Filter pins by day"
-            className="cv-card absolute top-3 left-3 z-10 flex max-h-[calc(100%-1.5rem)] max-w-[min(60%,15rem)] flex-col gap-1.5 overflow-y-auto p-2"
-          >
-            <p className="px-0.5 font-semibold text-[11px] text-muted-foreground uppercase tracking-wide">
-              Days
-            </p>
-            <div className="flex flex-wrap gap-1">
-              {dayGroups.map(({ key, label, count }) => {
-                const visible = !hiddenDays.has(key);
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => toggleDay(key)}
-                    aria-pressed={visible}
-                    className={cn(
-                      "flex shrink-0 items-center gap-1 whitespace-nowrap rounded-control border-2 px-2 py-0.5 font-body font-semibold text-xs transition-colors",
-                      visible
-                        ? "border-border bg-card text-foreground shadow-control"
-                        : "border-transparent text-muted-foreground opacity-55 hover:text-foreground",
-                    )}
-                  >
-                    {label}
-                    <span className="text-[10px] tabular-nums opacity-70">{count}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {hiddenDays.size > 0 && (
-              <button
-                type="button"
-                onClick={() => setHiddenDays(new Set())}
-                className="self-start rounded-control px-1.5 py-0.5 font-semibold text-[11px] text-muted-foreground hover:text-foreground"
-              >
-                All
-              </button>
-            )}
-          </div>
-        )}
+        {/* Layers control (Trip Workspace v2, compact since the V2.8 map pass).
+            Lives inside the map's relative container; NavigationControl owns
+            top-right, so this sits top-left — a closed-by-default pill that
+            expands to the per-day + per-idea-list toggles. Toggling hides/shows
+            pins purely by filtering the GeoJSON data feeding the source (see the
+            `fc` memo above) — never a layer filter — so clusters recompute
+            correctly. Renders nothing when there's nothing to toggle. */}
+        <MapLayersControl
+          dayGroups={dayGroups}
+          listGroups={listGroups}
+          hiddenDays={hiddenDays}
+          hiddenLists={hiddenLists}
+          onToggleDay={toggleDay}
+          onToggleList={toggleList}
+          onShowAllDays={() => setHiddenDays(new Set())}
+          onShowAllLists={() => setHiddenLists(new Set())}
+        />
       </div>
       {mapConfig.data && (
         // Visible attribution (C.5, TD-5 / provider terms).

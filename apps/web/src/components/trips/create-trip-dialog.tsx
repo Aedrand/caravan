@@ -12,29 +12,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, apiPost } from "@/lib/api";
+import { CURRENCIES } from "@/lib/currencies";
 import { tripKeys } from "@/lib/sync";
 import type { CreateTripInput, Trip } from "@/lib/sync/shared";
 import { cn } from "@/lib/utils";
-
-/** Single currency per trip (PD-8) — a curated ISO 4217 shortlist for v1. */
-const CURRENCIES = [
-  "USD",
-  "EUR",
-  "GBP",
-  "JPY",
-  "CAD",
-  "AUD",
-  "CHF",
-  "NZD",
-  "SEK",
-  "NOK",
-  "DKK",
-  "MXN",
-  "BRL",
-  "INR",
-  "SGD",
-  "HKD",
-] as const;
 
 export function CreateTripDialog({
   open,

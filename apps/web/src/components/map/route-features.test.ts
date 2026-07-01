@@ -70,6 +70,27 @@ test("dayColorExpression handles empty dates without a malformed match", () => {
   expect(expr).toContain(DAY_ROUTE_FALLBACK_COLOR);
 });
 
+test("dayColorExpression defaults its fallback to the route grey", () => {
+  const expr = dayColorExpression(["2026-05-01"]) as unknown as unknown[];
+  expect(expr[expr.length - 1]).toBe(DAY_ROUTE_FALLBACK_COLOR);
+});
+
+test("dayColorExpression threads a custom fallback into the match arm", () => {
+  // The pin fill passes IDEA_PIN_COLOR here so undated pins (date: null → no
+  // branch matched) land on the neutral idea color, not the route grey.
+  const expr = dayColorExpression(["2026-05-01", "2026-05-02"], "#123456") as unknown as unknown[];
+  expect(expr[0]).toBe("match");
+  expect(expr[expr.length - 1]).toBe("#123456");
+  expect(expr).not.toContain(DAY_ROUTE_FALLBACK_COLOR);
+});
+
+test("dayColorExpression empty-dates guard honors a custom fallback", () => {
+  const expr = dayColorExpression([], "#123456") as unknown as unknown[];
+  expect(expr[0]).toBe("to-color");
+  expect(expr).toContain("#123456");
+  expect(expr).not.toContain(DAY_ROUTE_FALLBACK_COLOR);
+});
+
 test("buildRouteFeatureCollection emits one LineString per visible day", () => {
   const routes = new Map<string, RouteResult>([
     ["2026-05-01", route(LINE)],

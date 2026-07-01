@@ -10,7 +10,8 @@ import type { ExpressionSpecification } from "maplibre-gl";
  *
  * The tint MUST match how categories are colored elsewhere: this mirrors
  * `CATEGORY_META` in apps/web/src/components/itinerary/categories.ts (the visual
- * source of truth) so a pin's fill lines up with its rail stop's glyph. The
+ * source of truth) so a pin's category ring lines up with its rail stop's glyph
+ * (the pin FILL is day-colored — see `dayColorExpression`). The
  * values below are the SAME semantic tokens the rail consumes — `--cat-activity`
  * / `--cat-shopping` / `--cat-other` were added to index.css to round out the
  * `--cat-*` family (they alias `--info` / `--primary` / `--muted-foreground`,
@@ -34,6 +35,12 @@ const CATEGORY_TINT_TOKEN: Record<ActivityCategory, string> = {
  */
 export const PIN_FALLBACK_COLOR = "#c05621";
 
+/** Fill for undated (Ideas-pool) pins — neutral, deliberately outside the day
+ *  hue ramp AND distinct from DAY_ROUTE_FALLBACK_COLOR (that one means "shouldn't
+ *  happen"; this one is a normal, expected state). Literal hex — paint can't read
+ *  CSS vars. */
+export const IDEA_PIN_COLOR = "#57606f";
+
 /**
  * Read the resolved category tints off the themed root element. `<html>` carries
  * the `data-theme` (color) / `data-style` (structure) axes, and
@@ -55,9 +62,11 @@ export function readPinTints(
 }
 
 /**
- * Build the pin `circle-color` paint: a `match` on the feature's `category`
+ * Build the pin category-tint paint: a `match` on the feature's `category`
  * property → its resolved tint, falling back to the legacy orange for any
- * unknown/absent category.
+ * unknown/absent category. Since the pins-by-day pass, this drives the pin's
+ * `circle-stroke-color` (a category RING) — the FILL is day-colored via
+ * `dayColorExpression` in route-features.ts.
  */
 export function pinColorExpression(
   tints: Record<ActivityCategory, string> = readPinTints(),

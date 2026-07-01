@@ -1,11 +1,15 @@
 import type { Activity } from "@caravan/shared";
 import { expect, test } from "vitest";
 import {
+  buildDayGroups,
+  buildListGroups,
   isPlotted,
   type MapPin,
+  PIN_NUMBER_LAYOUT,
   stopNumbersByDay,
   toFeatureCollection,
   toMapPins,
+  UNLISTED_LIST_KEY,
   unplottedWithPlace,
 } from "./geo-features";
 
@@ -59,6 +63,7 @@ function pin(over: Partial<MapPin>): MapPin {
     lat: 1,
     lng: 2,
     date: null,
+    listId: null,
     ...over,
   };
 }
@@ -247,4 +252,152 @@ test("stopNumbersByDay: undated (Ideas-pool) items never get a stop number", () 
   ]);
   expect(n.get(fid("1"))).toBe(1);
   expect(n.has(fid("2"))).toBe(false);
+});
+
+// ---------------------------------------------------------------------------
+// listId propagation (pins-by-list map layers)
+// ---------------------------------------------------------------------------
+
+test("toMapPins: an idea's listId rides on its pin", () => {
+  const pins = toMapPins([activity({ listId: fid("9"), lat: 1, lng: 2 })]);
+  expect(pins[0]?.listId).toBe(fid("9"));
+});
+
+test("toMapPins: an Unlisted idea carries listId null", () => {
+  const pins = toMapPins([activity({ listId: null, lat: 1, lng: 2 })]);
+  expect(pins[0]?.listId).toBeNull();
+});
+
+test("toMapPins: a flight carries listId on BOTH endpoint pins", () => {
+  const pins = toMapPins([
+    activity({
+      type: "flight",
+      listId: fid("9"),
+      date: "2026-07-04",
+      endDate: "2026-07-05",
+      lat: 1,
+      lng: 2,
+      arrLat: 3,
+      arrLng: 4,
+    }),
+  ]);
+  expect(pins).toHaveLength(2);
+  expect(pins[0]?.listId).toBe(fid("9"));
+  expect(pins[1]?.listId).toBe(fid("9"));
+});
+
+test("toMapPins: a dated stop still carries its listId", () => {
+  // listId is set on the pin regardless of dating; the LAYER grouping (not the
+  // pin) decides that dated pins group by day and undated ones by list.
+  const pins = toMapPins([
+    activity({ listId: fid("9"), date: "2026-07-04", lat: 1, lng: 2 }),
+    activity({ id: fid("2"), listId: null, date: "2026-07-04", lat: 3, lng: 4 }),
+  ]);
+  expect(pins[0]?.listId).toBe(fid("9"));
+  expect(pins[1]?.listId).toBeNull();
+});
+
+test("toFeatureCollection: emits `date` on every feature (null for undated)", () => {
+  const fc = toFeatureCollection([pin({ date: "2026-07-04" }), pin({ id: fid("2"), date: null })]);
+  expect(fc.features[0]?.properties?.date).toBe("2026-07-04");
+  // Present-but-null, so the day-color `match` falls through to its fallback arm.
+  expect(fc.features[1]?.properties).toHaveProperty("date", null);
+});
+
+// ---------------------------------------------------------------------------
+// buildDayGroups / buildListGroups (map layers control)
+// ---------------------------------------------------------------------------
+
+const label = (iso: string) => `label:${iso}`;
+
+test("buildDayGroups: empty pins → no groups", () => {
+  expect(buildDayGroups([], label)).toEqual([]);
+});
+
+test("buildDayGroups: dated-only pins group ascending with counts", () => {
+  const groups = buildDayGroups(
+    [
+      pin({ date: "2026-07-05" }),
+      pin({ date: "2026-07-04" }),
+      pin({ date: "2026-07-05" }),
+      pin({ date: "2026-07-05" }),
+    ],
+    label,
+  );
+  expect(groups).toEqual([
+    { key: "2026-07-04", label: "label:2026-07-04", count: 1 },
+    { key: "2026-07-05", label: "label:2026-07-05", count: 3 },
+  ]);
+});
+
+test("buildDayGroups: undated pins never enter day groups", () => {
+  const groups = buildDayGroups([pin({ date: "2026-07-04" }), pin({ date: null })], label);
+  expect(groups).toEqual([{ key: "2026-07-04", label: "label:2026-07-04", count: 1 }]);
+});
+
+test("buildListGroups: empty pins → no groups", () => {
+  expect(buildListGroups([], [{ id: fid("9"), name: "Museums" }])).toEqual([]);
+});
+
+test("buildListGroups: rows follow the ideaLists (display) order, not pin order", () => {
+  const groups = buildListGroups(
+    [pin({ listId: fid("2") }), pin({ listId: fid("1") }), pin({ listId: fid("2") })],
+    [
+      { id: fid("1"), name: "Food" },
+      { id: fid("2"), name: "Museums" },
+    ],
+  );
+  expect(groups).toEqual([
+    { key: fid("1"), label: "Food", count: 1 },
+    { key: fid("2"), label: "Museums", count: 2 },
+  ]);
+});
+
+test("buildListGroups: Unlisted-only pins yield a single Unlisted row", () => {
+  const groups = buildListGroups([pin({ listId: null }), pin({ listId: null })], []);
+  expect(groups).toEqual([{ key: UNLISTED_LIST_KEY, label: "Unlisted", count: 2 }]);
+});
+
+test("buildListGroups: mixed — lists in order, Unlisted last, dated pins excluded", () => {
+  const groups = buildListGroups(
+    [
+      pin({ listId: null }),
+      pin({ listId: fid("1") }),
+      // Dated → belongs to a day group, never a list group, even with a listId.
+      pin({ listId: fid("1"), date: "2026-07-04" }),
+      pin({ listId: null, date: "2026-07-04" }),
+    ],
+    [{ id: fid("1"), name: "Food" }],
+  );
+  expect(groups).toEqual([
+    { key: fid("1"), label: "Food", count: 1 },
+    { key: UNLISTED_LIST_KEY, label: "Unlisted", count: 1 },
+  ]);
+});
+
+test("buildListGroups: a list with zero pinned ideas is omitted", () => {
+  const groups = buildListGroups(
+    [pin({ listId: fid("1") })],
+    [
+      { id: fid("1"), name: "Food" },
+      { id: fid("2"), name: "Empty list" },
+    ],
+  );
+  expect(groups).toEqual([{ key: fid("1"), label: "Food", count: 1 }]);
+});
+
+// ---------------------------------------------------------------------------
+// pin-number collision tuning (regression guard)
+// ---------------------------------------------------------------------------
+
+test("PIN_NUMBER_LAYOUT: native collision stays ON, tuned to actual overlaps only", () => {
+  // Regression guard against reverting to "always show" — allow-overlap true let
+  // half-overlapping numbers merge into unreadable glyph soup. With collision on
+  // and a tight 1px padding, only a genuinely covered pin loses its number (and
+  // its circle stays visible/clickable).
+  expect(PIN_NUMBER_LAYOUT["text-allow-overlap"]).toBe(false);
+  expect(PIN_NUMBER_LAYOUT["text-ignore-placement"]).toBe(false);
+  expect(PIN_NUMBER_LAYOUT["text-padding"]).toBe(1);
+  // Deterministic tie-break: earlier stops in a day win a collision.
+  expect(PIN_NUMBER_LAYOUT["symbol-sort-key"]).toEqual(["get", "number"]);
 });

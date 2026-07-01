@@ -41,6 +41,7 @@ export const UNLISTED_DROP_ID = "__unlisted__";
  * rendered cards as `children`; this owns only the header chrome + collapse.
  */
 export function IdeaListSection({
+  id,
   name,
   count,
   canEdit,
@@ -52,6 +53,8 @@ export function IdeaListSection({
   onAddIdea,
   children,
 }: {
+  /** Scroll-spy anchor id (`list-${listId}`) — makes this a rail jump target. */
+  id?: string;
   name: string;
   count: number;
   canEdit: boolean;
@@ -83,8 +86,13 @@ export function IdeaListSection({
 
   return (
     <section
+      id={id}
+      // Anchored sections take programmatic focus after a rail jump (a11y —
+      // mirrors the workspace section/day anchors).
+      tabIndex={id ? -1 : undefined}
       className={cn(
         "cv-card overflow-hidden transition-[box-shadow,background-color]",
+        id && "scroll-mt-4 outline-none",
         isDropTarget && "bg-accent/20 ring-2 ring-[var(--accent-strong)]",
       )}
       aria-label={`Idea list: ${name}`}
@@ -186,6 +194,8 @@ export function SortableIdeaListSection({
   ...props
 }: {
   list: IdeaList;
+  /** Scroll-spy anchor id, threaded through to the section root. */
+  id?: string;
   name: string;
   count: number;
   canEdit: boolean;
