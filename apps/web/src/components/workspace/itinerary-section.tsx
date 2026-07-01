@@ -1,7 +1,6 @@
 import type { RouteMode, TripSnapshot } from "@caravan/shared";
-import { Plus } from "lucide-react";
+import { Luggage, Plus } from "lucide-react";
 import type { RefObject } from "react";
-import { deriveDays, todayIso } from "@/components/itinerary/format";
 import {
   ItineraryBoard,
   type ItineraryBoardHandle,
@@ -12,30 +11,25 @@ import { useTripMutation } from "@/lib/sync";
 import { SectionHeading } from "./section-heading";
 
 /**
- * The Itinerary section (§8). A thin wrapper that lifts the day-jump controls,
- * the trip-wide travel-mode toggle, and the (desktop) "Add activity" button —
- * all formerly inside `ItineraryBoard`'s sticky DayRail — into the canvas
- * section heading, then renders the board itself (now toolbar-free). The
- * "Add activity" button is the e2e anchor (gotcha #5): desktop-only, since the
- * mobile add path is the thumb FAB.
+ * The Itinerary section (§8). A thin wrapper that lifts the trip-wide
+ * travel-mode toggle and the (desktop) "Add activity" button — formerly inside
+ * `ItineraryBoard`'s sticky DayRail — into the canvas section heading, then
+ * renders the board itself (now toolbar-free). The day-jump buttons (Today /
+ * Trip start) live only in the IndexRail foot now (v2.8 declutter — they used
+ * to be duplicated here). The "Add activity" button is the e2e anchor
+ * (gotcha #5): desktop-only, since the mobile add path is the thumb FAB.
  */
 export function ItinerarySection({
   snapshot,
   canEdit,
   boardRef,
-  scrollTo,
 }: {
   snapshot: TripSnapshot;
   canEdit: boolean;
   boardRef: RefObject<ItineraryBoardHandle | null>;
-  scrollTo: (id: string) => void;
 }) {
-  const { trip, activities } = snapshot;
+  const { trip } = snapshot;
   const { mutateAsync } = useTripMutation();
-
-  const days = deriveDays(trip.startDate, trip.endDate, activities);
-  const today = todayIso();
-  const todayInTrip = days.includes(today);
 
   const setDefaultRouteMode = (mode: RouteMode) =>
     void mutateAsync("trip.update", { defaultRouteMode: mode }).catch(() => {});
@@ -50,24 +44,9 @@ export function ItinerarySection({
       <SectionHeading
         id="itinerary"
         title="Itinerary"
-        glyph="🧳"
+        icon={Luggage}
         actions={
           <>
-            {todayInTrip && (
-              <Button variant="secondary" size="sm" onClick={() => scrollTo(`day-${today}`)}>
-                Today
-              </Button>
-            )}
-            {days.length > 1 && (
-              <Button
-                variant="secondary"
-                size="sm"
-                className="hidden sm:inline-flex"
-                onClick={() => scrollTo(`day-${days[0] ?? ""}`)}
-              >
-                Trip start
-              </Button>
-            )}
             {canEdit && (
               <TripRouteModeToggle mode={trip.defaultRouteMode} onChange={setDefaultRouteMode} />
             )}

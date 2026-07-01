@@ -1,3 +1,4 @@
+import { Users } from "lucide-react";
 import { MembersPanel } from "@/components/trips/members-panel";
 import { SectionHeading } from "./section-heading";
 
@@ -13,7 +14,7 @@ export function GroupSection() {
       tabIndex={-1}
       className="scroll-mt-4 outline-none"
     >
-      <SectionHeading id="group" title="Group" glyph="👥" />
+      <SectionHeading id="group" title="Group" icon={Users} />
       <MembersPanel />
     </section>
   );

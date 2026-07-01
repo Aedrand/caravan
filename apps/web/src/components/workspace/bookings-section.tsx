@@ -1,5 +1,13 @@
 import { type Activity, type ItemType, positionBetween, type TripSnapshot } from "@caravan/shared";
-import { MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import {
+  BedDouble,
+  type LucideIcon,
+  MoreHorizontal,
+  Pencil,
+  Plane,
+  Ticket,
+  Trash2,
+} from "lucide-react";
 import { useState } from "react";
 import { ActivityFormDialog } from "@/components/itinerary/activity-form-dialog";
 import { deriveDays, formatDayShort } from "@/components/itinerary/format";
@@ -39,7 +47,7 @@ interface BookingCategoryConfig {
   addLabel: string;
   /** The `defaultType` passed to `ActivityFormDialog` in create mode. */
   addType: ItemType;
-  glyph: string;
+  Icon: LucideIcon;
   /** Icon-chip background CSS custom-property (soft category tint). */
   softVar: string;
   /** Quiet line shown to editors when the category has no bookings. */
@@ -53,7 +61,7 @@ const BOOKING_CATEGORIES: BookingCategoryConfig[] = [
     label: "Transport",
     addLabel: "+ Flight",
     addType: "flight",
-    glyph: "✈️",
+    Icon: Plane,
     softVar: "var(--cat-transport-soft)",
     emptyLabel: "No flights yet",
     filter: (a) => a.type === "flight",
@@ -63,7 +71,7 @@ const BOOKING_CATEGORIES: BookingCategoryConfig[] = [
     label: "Lodging",
     addLabel: "+ Hotel",
     addType: "lodging",
-    glyph: "🏨",
+    Icon: BedDouble,
     softVar: "var(--cat-lodging-soft)",
     emptyLabel: "No hotels yet",
     filter: (a) => a.type === "lodging",
@@ -134,7 +142,7 @@ export function BookingsSection({ snapshot, canEdit }: BookingsSectionProps) {
       tabIndex={-1}
       className="scroll-mt-4 outline-none"
     >
-      <SectionHeading id="bookings" title="Bookings" glyph="🎫" />
+      <SectionHeading id="bookings" title="Bookings" icon={Ticket} />
 
       {sectionEmptyForViewer ? (
         <p className="px-1 text-muted-foreground text-sm">No bookings yet</p>
@@ -144,8 +152,11 @@ export function BookingsSection({ snapshot, canEdit }: BookingsSectionProps) {
             {/* Category sub-header (mockup `.cat-head`): glyph + muted uppercase
                 label + a trailing dotted rule, all from existing tokens. */}
             <div className="mt-4 mb-1 flex items-center gap-2">
-              <span aria-hidden className="text-sm">
-                {cat.glyph}
+              <span
+                aria-hidden
+                className="flex size-5 items-center justify-center text-muted-foreground"
+              >
+                <cat.Icon strokeWidth={2.25} className="size-4" />
               </span>
               <span className="font-display font-bold text-muted-foreground text-xs uppercase tracking-[0.12em]">
                 {cat.label}
@@ -163,7 +174,7 @@ export function BookingsSection({ snapshot, canEdit }: BookingsSectionProps) {
                     <li key={activity.id}>
                       <BookingCard
                         activity={activity}
-                        glyph={cat.glyph}
+                        icon={cat.Icon}
                         softVar={cat.softVar}
                         canEdit={canEdit}
                         onEdit={openEdit}
@@ -213,14 +224,14 @@ export function BookingsSection({ snapshot, canEdit }: BookingsSectionProps) {
  * an optional confirmation chip, the date range, and a ⋯ Edit/Delete menu. */
 function BookingCard({
   activity,
-  glyph,
+  icon: Icon,
   softVar,
   canEdit,
   onEdit,
   onDelete,
 }: {
   activity: Activity;
-  glyph: string;
+  icon: LucideIcon;
   /** Icon-chip background token (the category's soft tint). */
   softVar: string;
   canEdit: boolean;
@@ -232,10 +243,10 @@ function BookingCard({
     <div className="flex items-center gap-3 px-3 py-2.5">
       <span
         aria-hidden
-        className="flex size-8 shrink-0 items-center justify-center rounded-control border-2 border-border text-base"
+        className="flex size-8 shrink-0 items-center justify-center rounded-control border-2 border-border text-foreground"
         style={{ backgroundColor: softVar }}
       >
-        {glyph}
+        <Icon aria-hidden strokeWidth={2.25} className="size-4" />
       </span>
       <span
         className="min-w-0 truncate font-display font-bold text-foreground text-sm leading-snug"

@@ -937,7 +937,7 @@ function DayHeader({
           onClick={onToggle}
           onMouseEnter={onFocus}
           aria-expanded={open}
-          className="flex min-w-0 shrink items-center gap-1.5 rounded-control text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          className="flex min-w-0 shrink items-center gap-2 rounded-control text-left outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
           <ChevronDown
             aria-hidden
@@ -946,22 +946,22 @@ function DayHeader({
               !open && "-rotate-90",
             )}
           />
-          <h3 className="truncate font-display text-lg font-bold">
-            {formatDayLabel(iso)}
-            {n != null && (
-              <span className="ml-2 font-body text-sm font-medium text-muted-foreground">
-                Day {n}
-              </span>
-            )}
-          </h3>
+          {n != null && (
+            <span className="-rotate-2 shrink-0 rounded-stamp border-2 border-border bg-accent-soft px-2 py-0.5 font-display font-bold text-[11px] text-foreground uppercase tracking-wide shadow-pressed">
+              Day {n}
+            </span>
+          )}
+          <h3 className="truncate font-display text-xl font-bold">{formatDayLabel(iso)}</h3>
         </button>
-        <DaySubtitle subtitle={subtitle} canEdit={canEdit} onCommit={onSubtitleCommit} />
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {isToday && <TodayBadge />}
           {canEdit && <DayAddMenu onAdd={onAdd} />}
         </div>
       </div>
-      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs">
+      <div className="mt-1 pl-6">
+        <DaySubtitle subtitle={subtitle} canEdit={canEdit} onCommit={onSubtitleCommit} />
+      </div>
+      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 pl-6 text-xs">
         <AnchorChip
           anchor={anchor}
           canEdit={canEdit}
@@ -1294,7 +1294,6 @@ function DaySubtitle({
       >
         {subtitle ?? "Add a subtitle"}
       </span>
-      <Pencil aria-hidden className="size-3 shrink-0 text-muted-foreground" />
     </button>
   );
 }
