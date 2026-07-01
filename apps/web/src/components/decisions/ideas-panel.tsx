@@ -361,56 +361,58 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
         )}
       </div>
 
+      {/* Rendered outside the hasContent branch: on an empty trip the empty
+          state replaces the list container, and the draft input must still
+          appear or "New list" becomes a dead end. */}
+      {creatingList && (
+        <form className="cv-card flex items-center gap-2 p-3 sm:p-4" onSubmit={handleCreateList}>
+          <Input
+            autoFocus
+            value={listDraft}
+            maxLength={80}
+            aria-label="New list name"
+            placeholder="List name (e.g. Food, Day trips)"
+            className="h-9"
+            onChange={(e) => setListDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setListDraft("");
+                setCreatingList(false);
+              }
+            }}
+          />
+          <Button type="submit" size="sm" disabled={!listDraft.trim()}>
+            Add list
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setListDraft("");
+              setCreatingList(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </form>
+      )}
+
       {!hasContent ? (
-        <EmptyState
-          icon={Lightbulb}
-          title="No ideas yet"
-          description="Float a place or plan the group can vote on, and group them into lists — the favorites become days on the trip."
-          className="px-6 py-12"
-          headingLevel={3}
-        />
+        !creatingList && (
+          <EmptyState
+            icon={Lightbulb}
+            title="No ideas yet"
+            description="Float a place or plan the group can vote on, and group them into lists — the favorites become days on the trip."
+            className="px-6 py-12"
+            headingLevel={3}
+          />
+        )
       ) : (
         <>
           <p className="-mt-1 text-sm text-muted-foreground">
             Most-wanted first within each list. Vote freely; open an idea to drop it on a day.
           </p>
-
-          {creatingList && (
-            <form
-              className="cv-card flex items-center gap-2 p-3 sm:p-4"
-              onSubmit={handleCreateList}
-            >
-              <Input
-                autoFocus
-                value={listDraft}
-                maxLength={80}
-                aria-label="New list name"
-                placeholder="List name (e.g. Food, Day trips)"
-                className="h-9"
-                onChange={(e) => setListDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setListDraft("");
-                    setCreatingList(false);
-                  }
-                }}
-              />
-              <Button type="submit" size="sm" disabled={!listDraft.trim()}>
-                Add list
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setListDraft("");
-                  setCreatingList(false);
-                }}
-              >
-                Cancel
-              </Button>
-            </form>
-          )}
 
           {ideaLists.length === 0 ? (
             // No lists yet — show the pool flat (today's look), grouping optional.
