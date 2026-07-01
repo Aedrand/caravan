@@ -1,4 +1,4 @@
-# Handoff — current state (Trip Workspace v2 — Plan View v2 shipped)
+# Handoff — current state (Trip Workspace v2 complete — v2.8 chrome iteration on a branch)
 
 _Updated 2026-06-28 (Trip Workspace V2.1→V2.3 build session + a V2.3 polish / map-tuning review session). Supersedes `handoff-trip-workspace-c4.md` (now historical). This is the live "where we are / what's next / how to resume" note._
 
@@ -14,7 +14,21 @@ Caravan is **feature-complete for the original v1.0 scope** — M0/M1 + fan-out 
 
 **V2.7 — workspace shell SHIPPED & pushed (`8b111af`):** the tabbed trip workspace is now a single **continuous-scroll shell** — a 240px left **IndexRail** + scrolling canvas + sticky ambient map; the FocusedDay/MapSelection/Routing providers are lifted to wrap the whole frame; a swappable **`useScrollSpy`** (IntersectionObserver, root = the canvas div) syncs the rail to scroll position and drives the focused day. Sections render **Overview → Bookings → Itinerary → Ideas → Money → Group**. **Bookings is its own top-level section ABOVE Itinerary** (an owner change from the approved mockup — it was a strip atop Itinerary): full-width, grouped **Transport** (flights) / **Lodging** (hotels) via an extensible registry; the old itinerary strip is gone, the in-day anchor shims stay. The **Overview hero** carries trip identity + countdown, the compact planned-vs-actual `BudgetBar`, attention chips, an editable **group bulletin** (new `trips.bulletin` text col, **migration 0008**), and a recent-feed peek. Gates green (344 unit, e2e 5/5); the owner's running dev server auto-applied migration 0008 → **live on :5173 for visual review**.
 
-**Roadmap next:** **Trip Workspace v2 is COMPLETE** (V2.0–V2.7 all shipped & pushed) → **M6 — v1.0 hardening & release** over the v2-inclusive app.
+**Roadmap next:** **Trip Workspace v2 is COMPLETE** (V2.0–V2.7 all shipped & pushed); a **v2.8 workspace-chrome iteration** is now committed on branch `feat/workspace-v2.8-chrome` (not merged / not pushed — awaiting owner review; see next section). → then **M6 — v1.0 hardening & release** over the v2-inclusive app.
+
+## This session (2026-06-30/07-01 — Trip Workspace v2.8 chrome iteration, on a branch)
+
+Pulled the latest **v2.8** design from the claude.ai **Caravan Design System** project (via DesignSync) and applied the workspace-chrome iteration. Committed to branch **`feat/workspace-v2.8-chrome`** (`ba59d55`) — **not merged, not pushed** (awaiting owner review). 9 files, +108/−118 (a net declutter). Gates green: web + server typecheck, biome lint, `pnpm -r build`, **e2e 5/5**; visually verified on the Japan trip @ :5173.
+
+- **Baseline-rule section headers** — shared `SectionHeading` now takes a **Lucide `icon`** (stroke 2.25, 40px cream tile) + Bricolage-27 title on a full-width 2px ink baseline underline + optional right-aligned muted `meta`; no filled band, no eyebrow. All six sections converted from emoji: Overview=`Compass`, Bookings=`Ticket`, Itinerary=`Luggage`, Ideas=`Lightbulb`, Money=`Wallet`, Group=`Users`.
+- **Three-line, non-sticky day headers** (`itinerary-board.tsx` `DayHeader`) — line 1 = rotated `DAY n` accent-soft stamp + date (Bricolage 20) + actions; line 2 = the dotted-underline editable place subtitle on its own line; line 3 = the `N stops · ~$est` stats (with anchor chip + route toggle).
+- **Declutter** — removed the duplicate Today/Trip start from the Itinerary section header (they live once in the IndexRail foot — resolves the v2.7-review redundancy); removed the redundant Overview hero budget block (BudgetBar stays in Money only); removed the inline pencils on the bulletin **and** the day subtitle (the dotted-underline is the affordance).
+- **No emoji in chrome** — beyond the headings, swept the remaining chrome emoji: Overview attention chips (`💸💰📉🗳️📍` → `Banknote`/`TrendingDown`/`Vote`/`MapPin`), Bookings Transport/Lodging group glyphs (`✈️🏨` → `Plane`/`BedDouble`), and the bulletin pushpin (`📌`). Category **stop** glyphs were already Lucide (`categories.ts` — the owner's "mostly don't-regress" note held there, but the chrome above did need swapping).
+- **Bookings placement** — kept as its **own standalone top-level section** above Itinerary (owner decision this session), NOT folded back into the in-Itinerary strip the v2.8 `shell-scroll.html` reference shows. It just adopts the new header treatment.
+
+**v2.8 design source of truth:** the claude.ai **Caravan Design System** project (not mirrored into the repo) — `readme.md` (VISUAL FOUNDATIONS / ICONOGRAPHY carry the v2.8 rules), `workspace-shell/shell-scroll.html` (the locked shell), `workspace-shell/pattern-headers.html` (the header spec). The `v2.1-*` folders there are **retired exploration archives** (still emoji-laden — ignore). Pull with the `DesignSync` tool (`list_projects` → project `Caravan Design System` → `get_file`).
+
+**Dev-server gotcha (this session):** the owner's long-running Vite dev server started returning a persistent `EPERM: operation not permitted, open '.../apps/web/index.html'` (500) — a macOS TCC/permission glitch on the aged process (a fresh `node` read of the same file worked; Vite still served cached `src/*` modules). **Fix = restart `pnpm dev`.** If it recurs, restart the dev server rather than chasing a code cause.
 
 ## This session (2026-06-28 — Trip Workspace V2.1 → V2.3 shipped)
 
