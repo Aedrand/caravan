@@ -1,4 +1,5 @@
 import type { TripSnapshot } from "@caravan/shared";
+import { Wallet } from "lucide-react";
 import { ExpensesPanel } from "@/components/expenses/expenses-panel";
 import { SectionHeading } from "./section-heading";
 
@@ -16,7 +17,7 @@ export function MoneySection({ snapshot, canEdit }: { snapshot: TripSnapshot; ca
       tabIndex={-1}
       className="scroll-mt-4 outline-none"
     >
-      <SectionHeading id="money" title="Money" glyph="💰" />
+      <SectionHeading id="money" title="Money" icon={Wallet} />
       <ExpensesPanel
         tripId={trip.id}
         members={members}

@@ -239,12 +239,7 @@ function WorkspaceBody({
               onOpenFeed={onOpenFeed}
             />
             <BookingsSection snapshot={snapshot} canEdit={canEdit} />
-            <ItinerarySection
-              snapshot={snapshot}
-              canEdit={canEdit}
-              boardRef={boardRef}
-              scrollTo={scrollTo}
-            />
+            <ItinerarySection snapshot={snapshot} canEdit={canEdit} boardRef={boardRef} />
             <IdeasSection snapshot={snapshot} canEdit={canEdit} />
             <MoneySection snapshot={snapshot} canEdit={canEdit} />
             <GroupSection />

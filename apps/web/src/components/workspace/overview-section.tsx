@@ -6,10 +6,17 @@ import {
   type TripSnapshot,
 } from "@caravan/shared";
 import type { UseQueryResult } from "@tanstack/react-query";
-import { CalendarDays, Pencil } from "lucide-react";
+import {
+  Banknote,
+  CalendarDays,
+  Compass,
+  type LucideIcon,
+  MapPin,
+  TrendingDown,
+  Vote,
+} from "lucide-react";
 import { type ReactNode, useMemo, useRef, useState } from "react";
 import { AvatarStack } from "@/components/decisions/avatar-stack";
-import { BudgetBar } from "@/components/expenses/budget-bar";
 import { totalSpend } from "@/components/expenses/summary";
 import { daysBetween, todayIso } from "@/components/itinerary/format";
 import { formatTripDates } from "@/components/trips/format";
@@ -65,8 +72,8 @@ export function OverviewSection({
       className="scroll-mt-4 outline-none"
     >
       <div className="flex flex-col gap-4">
-        <SectionHeading id="overview" title="Overview" glyph="🧭" />
-        <HeroBand snapshot={snapshot} moneyQuery={moneyQuery} />
+        <SectionHeading id="overview" title="Overview" icon={Compass} />
+        <HeroBand snapshot={snapshot} />
         <AttentionChips snapshot={snapshot} moneyQuery={moneyQuery} scrollTo={scrollTo} />
         <GroupBulletin bulletin={snapshot.trip.bulletin} canEdit={canEdit} />
         <RecentFeedPeek feedQuery={feedQuery} members={snapshot.members} onOpenFeed={onOpenFeed} />
@@ -88,14 +95,8 @@ function CapLabel({ children }: { children: ReactNode }) {
 
 /* ---------- HeroBand: identity + countdown + budget ---------- */
 
-function HeroBand({
-  snapshot,
-  moneyQuery,
-}: {
-  snapshot: TripSnapshot;
-  moneyQuery: UseQueryResult<TripMoney, Error>;
-}) {
-  const { trip, members, activities } = snapshot;
+function HeroBand({ snapshot }: { snapshot: TripSnapshot }) {
+  const { trip, members } = snapshot;
 
   // Active members carry the avatar stack + the headcount, in join order so the
   // person-color assignment matches every other surface (feed, expenses, polls).
@@ -117,9 +118,6 @@ function HeroBand({
   ].filter((f): f is string => Boolean(f));
 
   const countdown = buildCountdown(trip.startDate, trip.endDate);
-
-  const planned = plannedMinor(activities);
-  const actual = totalSpend(moneyQuery.data?.expenses ?? []);
 
   return (
     <div className="flex flex-col gap-3">
@@ -143,23 +141,6 @@ function HeroBand({
           max={6}
         />
       </div>
-
-      {/* Planned-vs-actual budget (V2.6 BudgetBar, compact). Only meaningful with
-          a plan: BudgetBar itself returns null when planned === 0, so gate the
-          whole captioned block on it to avoid an empty card. */}
-      {planned > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <CapLabel>Budget · planned vs actual</CapLabel>
-          <div className="rounded-card border-2 border-border bg-card p-4 shadow-control">
-            <BudgetBar
-              plannedMinor={planned}
-              actualMinor={actual}
-              currency={trip.currency}
-              compact
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -187,7 +168,7 @@ type ChipTone = "owe" | "budget" | "polls" | "places";
 
 interface ChipData {
   tone: ChipTone;
-  glyph: string;
+  Icon: LucideIcon;
   lede: string;
   detail: string;
   cta: string;
@@ -237,7 +218,7 @@ function AttentionChips({
   if (myNet < 0) {
     chips.push({
       tone: "owe",
-      glyph: "💸",
+      Icon: Banknote,
       lede: `You owe ${formatMoney(-myNet, currency)}`,
       detail: "Settle up with the group",
       cta: "Settle →",
@@ -246,7 +227,7 @@ function AttentionChips({
   } else if (myNet > 0) {
     chips.push({
       tone: "owe",
-      glyph: "💰",
+      Icon: Banknote,
       lede: `You're owed ${formatMoney(myNet, currency)}`,
       detail: "Waiting to be settled",
       cta: "View →",
@@ -260,7 +241,7 @@ function AttentionChips({
     const over = actual > planned;
     chips.push({
       tone: "budget",
-      glyph: "📉",
+      Icon: TrendingDown,
       lede: over ? `${formatMoney(actual - planned, currency)} over budget` : "Approaching budget",
       detail: `Actual ${formatMoney(actual, currency)} vs planned ${formatMoney(planned, currency)}`,
       cta: "View →",
@@ -275,7 +256,7 @@ function AttentionChips({
   if (pendingPolls > 0) {
     chips.push({
       tone: "polls",
-      glyph: "🗳️",
+      Icon: Vote,
       lede: `${pendingPolls} ${pendingPolls === 1 ? "poll needs" : "polls need"} your vote`,
       detail: "Weigh in so the group can decide",
       cta: "Vote →",
@@ -288,7 +269,7 @@ function AttentionChips({
   if (unplotted > 0) {
     chips.push({
       tone: "places",
-      glyph: "📍",
+      Icon: MapPin,
       lede: `${unplotted} ${unplotted === 1 ? "place isn't" : "places aren't"} on the map yet`,
       detail: "Plot them so the day routes",
       cta: "Plot →",
@@ -330,10 +311,15 @@ function AttentionChip({ chip, onClick }: { chip: ChipData; onClick: () => void 
       />
       <span
         aria-hidden
-        className="flex size-9 shrink-0 items-center justify-center rounded-control border-2 border-border text-lg"
+        className="flex size-9 shrink-0 items-center justify-center rounded-control border-2 border-border"
         style={{ backgroundColor: tone.soft }}
       >
-        {chip.glyph}
+        <chip.Icon
+          aria-hidden
+          strokeWidth={2.25}
+          className="size-[18px]"
+          style={{ color: tone.accent }}
+        />
       </span>
       <span className="min-w-0 flex-1">
         <span className="block font-display font-bold text-[15px] text-foreground leading-tight">
@@ -385,7 +371,7 @@ function GroupBulletin({ bulletin, canEdit }: { bulletin: string | null; canEdit
   if (editing) {
     return (
       <div className="flex flex-col gap-1.5">
-        <CapLabel>📌 Group bulletin</CapLabel>
+        <CapLabel>Group bulletin</CapLabel>
         <Textarea
           autoFocus
           value={draft}
@@ -416,14 +402,13 @@ function GroupBulletin({ bulletin, canEdit }: { bulletin: string | null; canEdit
   return (
     <div className="flex flex-col gap-1.5">
       <div className="flex items-center justify-between gap-3">
-        <CapLabel>📌 Group bulletin</CapLabel>
+        <CapLabel>Group bulletin</CapLabel>
         {canEdit && (
           <button
             type="button"
             onClick={begin}
             className="inline-flex items-center gap-1 rounded-sm font-bold text-muted-foreground text-xs outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
           >
-            <Pencil aria-hidden className="size-3" />
             {bulletin === null ? "Add" : "Edit"}
           </button>
         )}
