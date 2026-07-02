@@ -3,9 +3,12 @@ import { expect, test } from "vitest";
 import {
   buildDayGroups,
   buildListGroups,
+  distanceKm,
+  FLIGHT_ENDPOINT_NEAR_KM,
   isPlotted,
   type MapPin,
   PIN_NUMBER_LAYOUT,
+  pinsForDayFocus,
   stopNumbersByDay,
   toFeatureCollection,
   toMapPins,
@@ -400,4 +403,76 @@ test("PIN_NUMBER_LAYOUT: native collision stays ON, tuned to actual overlaps onl
   expect(PIN_NUMBER_LAYOUT["text-padding"]).toBe(1);
   // Deterministic tie-break: earlier stops in a day win a collision.
   expect(PIN_NUMBER_LAYOUT["symbol-sort-key"]).toEqual(["get", "number"]);
+});
+
+// --- day-focus framing (far flight endpoints stay out of the frame) ---
+
+const KYOTO = { lat: 35.0, lng: 135.77 };
+const KIX = { lat: 34.43, lng: 135.24 };
+const SFO = { lat: 37.62, lng: -122.38 };
+
+test("toMapPins: flight pins carry their endpoint tag; ground pins carry none", () => {
+  const flight = activity({
+    id: fid("f"),
+    type: "flight",
+    date: "2026-10-01",
+    endDate: "2026-10-01",
+    lat: SFO.lat,
+    lng: SFO.lng,
+    arrLat: KIX.lat,
+    arrLng: KIX.lng,
+  });
+  const stop = activity({ id: fid("a"), date: "2026-10-01", lat: KYOTO.lat, lng: KYOTO.lng });
+  const pins = toMapPins([flight, stop], stopNumbersByDay([flight, stop]));
+  expect(pins.map((p) => p.flight)).toEqual(["departure", "arrival", undefined]);
+});
+
+test("distanceKm: KIX is near Kyoto, SFO is not", () => {
+  const kix = distanceKm(KYOTO.lat, KYOTO.lng, KIX.lat, KIX.lng);
+  const sfo = distanceKm(KYOTO.lat, KYOTO.lng, SFO.lat, SFO.lng);
+  expect(kix).toBeGreaterThan(50);
+  expect(kix).toBeLessThan(FLIGHT_ENDPOINT_NEAR_KM);
+  expect(sfo).toBeGreaterThan(8000);
+});
+
+test("pinsForDayFocus: outbound day frames ground stops + near arrival, drops the far departure", () => {
+  const dayPins = [
+    pin({ id: fid("1"), date: "2026-10-01", ...KYOTO }),
+    pin({ id: fid("2"), date: "2026-10-01", lat: 35.01, lng: 135.78 }),
+    pin({ id: fid("f"), date: "2026-10-01", ...SFO, flight: "departure" }),
+    pin({ id: fid("f"), date: "2026-10-01", ...KIX, flight: "arrival" }),
+  ];
+  const framed = pinsForDayFocus(dayPins);
+  expect(framed.map((p) => p.flight ?? "ground")).toEqual(["ground", "ground", "arrival"]);
+});
+
+test("pinsForDayFocus: return day keeps the near departure, drops the far arrival", () => {
+  const dayPins = [
+    pin({ id: fid("1"), date: "2026-10-04", ...KYOTO }),
+    pin({ id: fid("f"), date: "2026-10-04", ...KIX, flight: "departure" }),
+    pin({ id: fid("f"), date: "2026-10-04", ...SFO, flight: "arrival" }),
+  ];
+  const framed = pinsForDayFocus(dayPins);
+  expect(framed.map((p) => p.flight ?? "ground")).toEqual(["ground", "departure"]);
+});
+
+test("pinsForDayFocus: a pure travel day frames the arrival endpoint only", () => {
+  const dayPins = [
+    pin({ id: fid("f"), date: "2026-10-01", ...SFO, flight: "departure" }),
+    pin({ id: fid("f"), date: "2026-10-01", ...KIX, flight: "arrival" }),
+  ];
+  expect(pinsForDayFocus(dayPins)).toEqual([expect.objectContaining({ flight: "arrival" })]);
+});
+
+test("pinsForDayFocus: departure-only travel day falls back to everything", () => {
+  const dayPins = [pin({ id: fid("f"), date: "2026-10-01", ...SFO, flight: "departure" })];
+  expect(pinsForDayFocus(dayPins)).toEqual(dayPins);
+});
+
+test("pinsForDayFocus: a flight-free day is untouched", () => {
+  const dayPins = [
+    pin({ id: fid("1"), date: "2026-10-02", ...KYOTO }),
+    pin({ id: fid("2"), date: "2026-10-02", lat: 34.97, lng: 135.77 }),
+  ];
+  expect(pinsForDayFocus(dayPins)).toEqual(dayPins);
 });

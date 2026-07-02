@@ -95,6 +95,10 @@ export interface MapPin {
   /** Per-day stop number — present ONLY for numbered `activity` stops. Bookings
    *  (flight/lodging) are never numbered, so they omit it. */
   number?: number;
+  /** Which flight endpoint this pin is — present ONLY on flight pins. Ground
+   *  pins (stops, lodging, ideas) omit it. Drives day-focus framing: a
+   *  far-away endpoint must not zoom the day out to world scale. */
+  flight?: "departure" | "arrival";
 }
 
 /**
@@ -127,6 +131,7 @@ export function toMapPins(activities: Activity[], stopNumbers?: Map<string, numb
           lng: a.lng,
           date: a.date,
           listId: a.listId ?? null,
+          flight: "departure",
         });
       }
       if (a.arrLat != null && a.arrLng != null) {
@@ -138,6 +143,7 @@ export function toMapPins(activities: Activity[], stopNumbers?: Map<string, numb
           lng: a.arrLng,
           date: a.endDate,
           listId: a.listId ?? null,
+          flight: "arrival",
         });
       }
       continue;
@@ -158,6 +164,50 @@ export function toMapPins(activities: Activity[], stopNumbers?: Map<string, numb
     });
   }
   return pins;
+}
+
+/** Great-circle distance in km (haversine). Good enough for "is this airport
+ *  near this day's stops" — no geodesic precision needed. */
+export function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const rad = Math.PI / 180;
+  const dLat = (bLat - aLat) * rad;
+  const dLng = (bLng - aLng) * rad;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/** A flight endpoint within this distance of the day's ground pins still joins
+ *  the day-focus frame (a regional airport is part of the day; KIX↔Kyoto is
+ *  ~90 km). Beyond it, the endpoint is a different part of the world. */
+export const FLIGHT_ENDPOINT_NEAR_KM = 150;
+
+/**
+ * The pins a focused day should FRAME (not render — every pin stays on the
+ * map; this only picks what drives `fitBounds`). A day with a long-haul
+ * flight otherwise frames both endpoints and zooms out to world scale, which
+ * buries the day the user actually asked to see.
+ *
+ * - Ground pins (stops, lodging) always frame.
+ * - A flight endpoint frames only while it's within
+ *   {@link FLIGHT_ENDPOINT_NEAR_KM} of the ground pins' centroid — so the
+ *   local airport joins the frame on both the outbound day (arrival) and the
+ *   return day (departure), and the far endpoint never does.
+ * - A pure travel day (no ground pins) frames the arrival endpoint(s) — the
+ *   day ends where you land; fall back to everything if nothing arrived.
+ */
+export function pinsForDayFocus(dayPins: MapPin[]): MapPin[] {
+  const ground = dayPins.filter((p) => p.flight === undefined);
+  if (ground.length === 0) {
+    const arrivals = dayPins.filter((p) => p.flight === "arrival");
+    return arrivals.length > 0 ? arrivals : dayPins;
+  }
+  const cLat = ground.reduce((s, p) => s + p.lat, 0) / ground.length;
+  const cLng = ground.reduce((s, p) => s + p.lng, 0) / ground.length;
+  return dayPins.filter(
+    (p) =>
+      p.flight === undefined || distanceKm(cLat, cLng, p.lat, p.lng) <= FLIGHT_ENDPOINT_NEAR_KM,
+  );
 }
 
 /**

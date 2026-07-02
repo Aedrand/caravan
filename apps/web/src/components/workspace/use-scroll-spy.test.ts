@@ -219,4 +219,52 @@ describe("useScrollSpy", () => {
     fireIntersections({ money: true });
     expect(result.current.activeId).toBe("money");
   });
+
+  it("finishes a scroll that landed short (canvas reflowed mid-flight) with one corrective scroll", () => {
+    const { result } = renderScrollSpy();
+    const target = document.getElementById("day-2026-10-01");
+    if (!target) throw new Error("missing anchor");
+    // The optimistic activeId flip opened the map track, narrowing the canvas —
+    // the target now sits 500px below where the smooth scroll was aimed.
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({ top: 0 } as DOMRect);
+    const targetRect = vi
+      .spyOn(target, "getBoundingClientRect")
+      .mockReturnValue({ top: 500 } as DOMRect);
+    act(() => {
+      result.current.scrollTo("day-2026-10-01");
+    });
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(1);
+
+    // Settling short → one INSTANT corrective scroll; still pinned/suppressed.
+    dispatchScrollEnd();
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(2);
+    expect(scrollIntoViewMock).toHaveBeenLastCalledWith({ behavior: "auto", block: "start" });
+    expect(result.current.activeId).toBe("day-2026-10-01");
+    fireIntersections({ itinerary: true }); // mid-correction reports still ignored
+    expect(result.current.activeId).toBe("day-2026-10-01");
+
+    // The corrective scroll lands (± scroll-margin) → settle resyncs for real.
+    targetRect.mockReturnValue({ top: 16 } as DOMRect);
+    dispatchScrollEnd();
+    expect(result.current.activeId).toBe("itinerary");
+  });
+
+  it("corrects at most once per scrollTo — an unreachable target still settles", () => {
+    const { result } = renderScrollSpy();
+    const target = document.getElementById("money");
+    if (!target) throw new Error("missing anchor");
+    vi.spyOn(container, "getBoundingClientRect").mockReturnValue({ top: 0 } as DOMRect);
+    // Bottom-of-canvas target: no amount of scrolling brings it to the top.
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue({ top: 500 } as DOMRect);
+    act(() => {
+      result.current.scrollTo("money");
+    });
+    dispatchScrollEnd(); // correction fires once
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(2);
+
+    dispatchScrollEnd(); // still short, but already corrected → settle anyway
+    expect(scrollIntoViewMock).toHaveBeenCalledTimes(2);
+    fireIntersections({ overview: true });
+    expect(result.current.activeId).toBe("overview"); // suppression fully cleared
+  });
 });

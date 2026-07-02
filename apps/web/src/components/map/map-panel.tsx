@@ -15,6 +15,7 @@ import {
   type MapPin as MapPinFeature,
   PIN_NUMBER_LAYOUT,
   PIN_NUMBER_PAINT,
+  pinsForDayFocus,
   stopNumbersByDay,
   toFeatureCollection,
   toMapPins,
@@ -466,11 +467,13 @@ function MapView({
   // view), a single pin centers at a sensible zoom (via fitToPlotted). When
   // focusedDay is null (mobile Map tab, no provider) we leave the boot's fit-all
   // intact. (Scope = framing only; all pins stay visible/styled as today. A
-  // future pass could de-emphasize off-day pins.)
+  // future pass could de-emphasize off-day pins.) Far-away flight endpoints are
+  // excluded from the frame (pinsForDayFocus) — a long-haul departure pin
+  // otherwise stretches the bounds to world scale and buries the day.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready || !focusedDay) return;
-    const ofDay = pinsRef.current.filter((p) => p.date === focusedDay);
+    const ofDay = pinsForDayFocus(pinsRef.current.filter((p) => p.date === focusedDay));
     if (ofDay.length === 0) return;
     fitToPlotted(map, ofDay, 600);
   }, [focusedDay, ready]);

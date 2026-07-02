@@ -37,12 +37,15 @@ Surfaced while seeding + visually verifying the post-v2 polish pass on a fresh
 dev instance. The genuine bug found (New-list dead end on an empty trip) was
 fixed in the pass itself (`162ed98`); these remain open for owner triage.
 
-- [ ] **Day fit-bounds includes far-flung flight endpoints** — focusing a day
-  that contains a flight booking frames BOTH endpoint pins, so an SFO→KIX
-  arrival day zooms the map to world scale instead of the destination city
-  (MapLibre also spits opaque console errors at that zoom). Consider excluding
-  the *departure* endpoint (or any pin beyond some distance percentile) from
-  the day-focus bounds — the full route is still visible by zooming out.
+- [x] **Day fit-bounds includes far-flung flight endpoints** — ✅ fixed in the
+  pass after owner sign-off: `pinsForDayFocus` (geo-features) frames ground
+  pins + only flight endpoints within 150 km of them (outbound day keeps the
+  local arrival airport, return day keeps the local departure; a pure travel
+  day frames the arrival). Framing only — every pin still renders. The same
+  fix surfaced and cured a deeper settle bug: opening the map track mid-scroll
+  reflows the canvas so a scroll-to-day landed SHORT and the spy snapped back
+  to Bookings (closing the map) — `use-scroll-spy` now issues one instant
+  corrective scroll on settle when the target moved (unit-tested).
 - [ ] **Feed copy for idea-list events is vague** — list create/assign events
   render as "{user} made a change" while activity events say "added
   Kiyomizu-dera". Small feed-formatter gap: give `ideaList.*` mutations real

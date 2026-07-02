@@ -45,6 +45,18 @@ export function useScrollSpy({
   // same-position scroll where no scroll events fire at all).
   const suppressedRef = useRef(false);
   const suppressTimeoutRef = useRef<number | null>(null);
+  // The in-flight scroll target. A `scrollTo` can land SHORT: flipping
+  // `activeId` optimistically opens the ambient map track, which narrows the
+  // canvas and reflows every anchor downward while the smooth scroll is
+  // mid-flight — the browser aims at the pre-reflow position. On settle we
+  // measure the target and, once per scrollTo, finish the job with an instant
+  // corrective scroll (else the resync lands on whatever section the shortfall
+  // left in the band and, e.g., snaps the map straight back closed).
+  const targetRef = useRef<{ id: string; corrected: boolean } | null>(null);
+  // The settle logic lives in the effect (it needs `root`/`flush`); the
+  // fallback timeout in `scrollTo` reaches it through this ref so engines
+  // without `scrollend` get the same correction.
+  const settleRef = useRef<(() => void) | null>(null);
 
   // A stable primitive dependency so the effect re-subscribes only when the SET
   // of anchors changes (a date edit adds/removes a day), not on every render.
@@ -94,22 +106,45 @@ export function useScrollSpy({
       if (el) observer.observe(el);
     }
 
-    // Primary suppression clear: the moment the native smooth scroll settles,
-    // trust the observer again and resync `activeId` to its true state.
-    const clearSuppression = () => {
+    // Settle a programmatic scroll: the moment the native scroll finishes
+    // (`scrollend`, or the fallback timeout), either finish the job — one
+    // instant corrective scroll if the target moved mid-flight (see
+    // `targetRef`) — or trust the observer again and resync `activeId`.
+    const settle = () => {
       if (suppressTimeoutRef.current !== null) {
         window.clearTimeout(suppressTimeoutRef.current);
         suppressTimeoutRef.current = null;
       }
       if (!suppressedRef.current) return;
+      const target = targetRef.current;
+      if (target && !target.corrected) {
+        const el = document.getElementById(target.id);
+        if (el) {
+          // Landed correctly = the anchor sits at the canvas top (± its
+          // scroll-margin). Well beyond that means the layout shifted under
+          // the scroll — correct once, still suppressed.
+          const off = Math.abs(el.getBoundingClientRect().top - root.getBoundingClientRect().top);
+          if (off > 48) {
+            target.corrected = true;
+            // Instant corrective scrolls re-fire `scrollend`; the short timeout
+            // is the backup (and the only path when nothing needed to move).
+            suppressTimeoutRef.current = window.setTimeout(settle, 250);
+            el.scrollIntoView({ behavior: "auto", block: "start" });
+            return;
+          }
+        }
+      }
+      targetRef.current = null;
       suppressedRef.current = false;
       flush();
     };
-    root.addEventListener("scrollend", clearSuppression);
+    settleRef.current = settle;
+    root.addEventListener("scrollend", settle);
 
     return () => {
       observer.disconnect();
-      root.removeEventListener("scrollend", clearSuppression);
+      settleRef.current = null;
+      root.removeEventListener("scrollend", settle);
       if (rafRef.current !== null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;
@@ -131,15 +166,21 @@ export function useScrollSpy({
     // e.g. the ambient map) lands on the destination immediately instead of
     // walking through every anchor the smooth scroll sweeps past.
     suppressedRef.current = true;
+    targetRef.current = { id, corrected: false };
     setActiveId(id);
     if (suppressTimeoutRef.current !== null) {
       window.clearTimeout(suppressTimeoutRef.current);
     }
-    // Fallback clear — `scrollend` never fires on engines without it, nor when
+    // Fallback settle — `scrollend` never fires on engines without it, nor when
     // the target is already in view (no movement ⇒ no scroll events at all).
+    // Routed through `settle` so those paths still get the position correction.
     suppressTimeoutRef.current = window.setTimeout(() => {
-      suppressedRef.current = false;
       suppressTimeoutRef.current = null;
+      if (settleRef.current) settleRef.current();
+      else {
+        targetRef.current = null;
+        suppressedRef.current = false;
+      }
     }, 1000);
     const reduced =
       typeof window !== "undefined" &&
