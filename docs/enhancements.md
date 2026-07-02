@@ -7,6 +7,30 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
+## 2026-07-01 (evening) — Long-lived-tab resilience across server restarts (owner question → M6 candidate)
+
+**Context:** during the polish-pass review the owner's tab sat through several
+dev-server restarts and came back with a blank map; a hard refresh fixed it.
+Most of that breakage was dev-only (Vite HMR zombie state — production tabs
+serve static bundles), and the data layer already self-heals: the sync
+WebSocket retries in a loop and catch-up-on-reconnect is designed + e2e-tested
+(spec 04 convergence). But group-trip tabs stay open for days, and **self-host
+updates restart the server under open tabs**, so the realistic production gaps
+are worth a small hardening slice:
+
+- [ ] **Map canvas recovery** — (a) handle `webglcontextlost`/`restored` on
+  the MapLibre canvas (browsers reclaim GPU from long-backgrounded tabs;
+  MapLibre's own recovery is imperfect → blank canvas); (b) verify a WS
+  reconnect → snapshot refetch actually refreshes the mounted map (pins +
+  framing), and force a map re-init if not.
+- [ ] **Stale-bundle detection** — after a self-host update restarts the
+  server, open tabs keep running the old bundle indefinitely. A lightweight
+  asset-hash/version ping → "a new version is available — reload" banner.
+- [ ] (Nice-to-have) a subtle "connection lost / reconnected" indicator so
+  users understand a wobble rather than distrusting the data.
+
+_Not urgent — fold into **M6 v1.0 hardening** triage._
+
 ## 2026-07-01 (later) — Findings from the polish-pass walkthrough (orchestrator; OPEN, not commitments)
 
 Surfaced while seeding + visually verifying the post-v2 polish pass on a fresh
