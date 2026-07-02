@@ -212,10 +212,11 @@ export function pinsForDayFocus(dayPins: MapPin[]): MapPin[] {
 
 /**
  * GeoJSON for the clustered pin source. Properties carry `id` + `title` (popup) +
- * `category` (category ring tint) + `date` (day-color fill), and — only when
- * present — the per-day stop `number` for the numbered symbol layer (§C.6).
- * Build pins with {@link toMapPins}; a pin without a `number` (every booking,
- * plus any un-numbered row) renders as a tinted but un-numbered marker.
+ * `category` (category ring tint) + `date` / `listId` (the composed day/list
+ * fill), and — only when present — the per-day stop `number` for the numbered
+ * symbol layer (§C.6). Build pins with {@link toMapPins}; a pin without a
+ * `number` (every booking, plus any un-numbered row) renders as a tinted but
+ * un-numbered marker.
  */
 export function toFeatureCollection(pins: MapPin[]): FeatureCollection {
   return {
@@ -224,13 +225,21 @@ export function toFeatureCollection(pins: MapPin[]): FeatureCollection {
       // `category` rides on every pin so the map can ring-tint it by category —
       // the JS token bridge in pin-tint.ts reads the `--cat-*` tokens and feeds a
       // `match` keyed on this property (V2.3, demoted fill→stroke by the
-      // pins-by-day pass). `date` rides along too: the pin FILL is a day-color
-      // `match` on it, and a null/unmatched date simply falls through to the
-      // expression's fallback arm (the neutral idea-pin color) — no
-      // special-casing. Both are always present, unlike `number`, which is
-      // attached only for numbered stops so the symbol layer's
-      // `["has", "number"]` filter cleanly distinguishes them from bookings.
-      const base = { id: pin.id, title: pin.title, category: pin.category, date: pin.date };
+      // pins-by-day pass). `date` + `listId` ride along too: the pin FILL is a
+      // composed `match` (`pinFillExpression` in pin-tint.ts) — dated pins color
+      // by `date`, undated ones fall through to a nested `match` on `listId`
+      // (their idea list's color), and a null/unmatched listId lands on the
+      // neutral idea-pin color — no special-casing. All are always present,
+      // unlike `number`, which is attached only for numbered stops so the
+      // symbol layer's `["has", "number"]` filter cleanly distinguishes them
+      // from bookings.
+      const base = {
+        id: pin.id,
+        title: pin.title,
+        category: pin.category,
+        date: pin.date,
+        listId: pin.listId,
+      };
       return {
         type: "Feature",
         geometry: { type: "Point", coordinates: [pin.lng, pin.lat] },
@@ -277,12 +286,16 @@ export const PIN_NUMBER_PAINT: NonNullable<SymbolLayerSpecification["paint"]> = 
 /**
  * One toggle row in the map layers control (Days / Lists groups): a stable
  * `key` (ISO date, list id, or {@link UNLISTED_LIST_KEY}), a human `label`, and
- * how many pins it owns.
+ * how many pins it owns. `color` (a swatch dot matching the layer's pin fill)
+ * is decorated on by the caller — MapView looks each key up in the CANONICAL
+ * color order (the full trip-day / position-sorted-list sequence), never this
+ * row's own index, so the pure builders stay color-free.
  */
 export interface LayerGroup {
   key: string;
   label: string;
   count: number;
+  color?: string;
 }
 
 /**

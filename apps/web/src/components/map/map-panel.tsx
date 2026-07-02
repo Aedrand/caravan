@@ -3,7 +3,7 @@ import type { Point } from "geojson";
 import { MapPin, MapPinOff, TriangleAlert } from "lucide-react";
 import maplibregl from "maplibre-gl";
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react";
-import { formatDayShort } from "@/components/itinerary/format";
+import { deriveDays, formatDayShort } from "@/components/itinerary/format";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useMapConfig } from "@/lib/geo";
 import { cn } from "@/lib/utils";
@@ -23,8 +23,18 @@ import {
   unplottedWithPlace,
 } from "./geo-features";
 import { MapLayersControl } from "./map-layers-control";
-import { IDEA_PIN_COLOR, pinColorExpression, readPinTints } from "./pin-tint";
-import { buildRouteFeatureCollection, dayColorExpression } from "./route-features";
+import {
+  IDEA_PIN_COLOR,
+  listColorForIndex,
+  pinColorExpression,
+  pinFillExpression,
+  readPinTints,
+} from "./pin-tint";
+import {
+  buildRouteFeatureCollection,
+  dayColorExpression,
+  dayColorForIndex,
+} from "./route-features";
 import { useMapSelection } from "./selection";
 
 /**
@@ -83,6 +93,16 @@ export function MapPanel({
       ),
     [snapshot.ideaLists],
   );
+  // THE canonical day-color order: the full trip-day sequence from `deriveDays`
+  // — the same call (and therefore the same ordinals) the itinerary board and
+  // the index rail render from. Keyed off ALL trip days, not just the days that
+  // own pins: if a middle day has no pins, a pins-only ordering would shift
+  // every later day's ordinal and the map would disagree with the rail's stamp
+  // colors. Route lines and pin fills both paint from this one list.
+  const orderedDates = useMemo(
+    () => deriveDays(snapshot.trip.startDate, snapshot.trip.endDate, activities),
+    [snapshot.trip.startDate, snapshot.trip.endDate, activities],
+  );
 
   if (activities.length === 0) {
     if (!fill) return null;
@@ -123,13 +143,26 @@ export function MapPanel({
 
   if (fill)
     return (
-      <MapView pins={pins} unplotted={unplotted} dayRoutes={dayRoutes} ideaLists={ideaLists} fill />
+      <MapView
+        pins={pins}
+        unplotted={unplotted}
+        dayRoutes={dayRoutes}
+        ideaLists={ideaLists}
+        orderedDates={orderedDates}
+        fill
+      />
     );
 
   return (
     <section className="flex flex-col gap-3">
       <MapHeading count={pins.length} />
-      <MapView pins={pins} unplotted={unplotted} dayRoutes={dayRoutes} ideaLists={ideaLists} />
+      <MapView
+        pins={pins}
+        unplotted={unplotted}
+        dayRoutes={dayRoutes}
+        ideaLists={ideaLists}
+        orderedDates={orderedDates}
+      />
     </section>
   );
 }
@@ -153,6 +186,7 @@ function MapView({
   unplotted,
   dayRoutes = EMPTY_DAY_ROUTES,
   ideaLists,
+  orderedDates,
   fill = false,
 }: {
   // The FULL render-pin set (a flight is already fanned out into its departure +
@@ -161,8 +195,13 @@ function MapView({
   unplotted: Activity[];
   /** Per-day drawn routes (V2.5), keyed by ISO date. */
   dayRoutes?: Map<string, RouteResult>;
-  /** Idea lists in display order — the per-list layer toggles for undated pins. */
+  /** Idea lists in display order — the per-list layer toggles + list-color
+   * ordinals for undated pins. */
   ideaLists: IdeaList[];
+  /** The CANONICAL day-color order (full `deriveDays` trip-day sequence) —
+   * shared with the itinerary rail so a day's ordinal, and therefore its hue,
+   * is identical on both surfaces. Drives route-line AND pin-fill paint. */
+  orderedDates: string[];
   fill?: boolean;
 }) {
   const mapConfig = useMapConfig();
@@ -208,12 +247,33 @@ function MapView({
   // and bookings carry none), so day-filtering and numbering are read off the pin.
   const fc = useMemo(() => toFeatureCollection(visiblePins), [visiblePins]);
 
-  // Day ordinals for the day-color `match` (route lines AND pin fills). Keyed
-  // off each day's ORDINAL over the trip's dated days — derived from the
-  // (stable) dated pin groups, not from which routes have resolved — so a day's
-  // ribbon/pins keep a stable hue as routes stream in. Every routed day has ≥2
-  // plotted stops → ≥2 pins → a dated group, so this covers them all.
-  const orderedDates = useMemo(() => dayGroups.map((g) => g.key), [dayGroups]);
+  // List ordinals for the list-color `match` arm of the pin fill — the
+  // position-sorted display order (the same order IdeasPanel and the index rail
+  // render), so a list's ordinal, and therefore its hue, matches its section dot.
+  const orderedListIds = useMemo(() => ideaLists.map((l) => l.id), [ideaLists]);
+  // Canonical color lookups for the layers-control swatches. A group row's
+  // swatch must come from the key's position in the CANONICAL order (the full
+  // trip-day / list sequence driving the paint expressions), never the group's
+  // own index — the Days group lists only days WITH pins, so its row index can
+  // drift from the day's true ordinal. A day-key miss (e.g. a flight arrival on
+  // an out-of-range endDate) renders IDEA_PIN_COLOR, matching the pin's actual
+  // fallback fill.
+  const dayColorByDate = useMemo(
+    () => new Map(orderedDates.map((iso, i) => [iso, dayColorForIndex(i)] as const)),
+    [orderedDates],
+  );
+  const listColorById = useMemo(
+    () => new Map(orderedListIds.map((id, i) => [id, listColorForIndex(i)] as const)),
+    [orderedListIds],
+  );
+  const dayGroupRows = useMemo(
+    () => dayGroups.map((g) => ({ ...g, color: dayColorByDate.get(g.key) ?? IDEA_PIN_COLOR })),
+    [dayGroups, dayColorByDate],
+  );
+  const listGroupRows = useMemo(
+    () => listGroups.map((g) => ({ ...g, color: listColorById.get(g.key) ?? IDEA_PIN_COLOR })),
+    [listGroups, listColorById],
+  );
   // Honor the SAME per-day toggle as the pins: a hidden day drops its line at the
   // data level (the toggle stores the day's ISO key, which is the route's date).
   const routeFc = useMemo(
@@ -246,6 +306,8 @@ function MapView({
   routeFcRef.current = routeFc;
   const orderedDatesRef = useRef(orderedDates);
   orderedDatesRef.current = orderedDates;
+  const orderedListIdsRef = useRef(orderedListIds);
+  orderedListIdsRef.current = orderedListIds;
 
   // Boot the map once we have a style URL. Deliberately NOT keyed on activities:
   // rebuilding the map on every edit would be wasteful and jarring.
@@ -320,12 +382,14 @@ function MapView({
         type: "circle",
         source: SOURCE_ID,
         paint: {
-          // FILL = the pin's DAY color: the same `match` on `date` (and the same
-          // hue ramp) the route lines use, so pin ↔ ribbon read as one system.
-          // Undated (Ideas-pool) pins have `date: null` → the fallback arm →
-          // the neutral IDEA_PIN_COLOR. Repainted by the orderedDates effect
-          // below when days shift ordinals.
-          "circle-color": dayColorExpression(orderedDatesRef.current, IDEA_PIN_COLOR),
+          // FILL = the composed day/list color: dated pins match on `date` (the
+          // same hue ramp AND the same canonical day order the route lines and
+          // the rail stamps use, so pin ↔ ribbon ↔ stamp read as one system);
+          // undated (Ideas-pool) pins fall through to a nested match on
+          // `listId` → their idea list's cool-ramp color, with Unlisted landing
+          // on the neutral IDEA_PIN_COLOR. Repainted by the orderedDates/
+          // orderedListIds effect below when ordinals shift.
+          "circle-color": pinFillExpression(orderedDatesRef.current, orderedListIdsRef.current),
           // A touch larger than the v1 radius (8) so the stop number reads on the
           // marker; still comfortably below the cluster min radius (16) so the
           // pin/cluster hierarchy holds.
@@ -420,9 +484,10 @@ function MapView({
     src?.setData(routeFc);
   }, [routeFc, ready]);
 
-  // Re-apply the day-color match when the ordered date set changes (a day added/
-  // removed shifts ordinals → hues) — both the route lines and the pin fills key
-  // on the same ordinals, so they repaint together and never drift apart.
+  // Re-apply the color matches when the canonical orders change (a day or list
+  // added/removed shifts ordinals → hues) — the route lines and the pin fills
+  // key on the same day ordinals, so they repaint together and never drift
+  // apart (from each other, or from the rail's stamps/dots).
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
@@ -430,13 +495,9 @@ function MapView({
       map.setPaintProperty(ROUTE_LINE_LAYER_ID, "line-color", dayColorExpression(orderedDates));
     }
     if (map.getLayer("pins")) {
-      map.setPaintProperty(
-        "pins",
-        "circle-color",
-        dayColorExpression(orderedDates, IDEA_PIN_COLOR),
-      );
+      map.setPaintProperty("pins", "circle-color", pinFillExpression(orderedDates, orderedListIds));
     }
-  }, [orderedDates, ready]);
+  }, [orderedDates, orderedListIds, ready]);
 
   // Selection → fly to the pin and show a popup (bidirectional highlight, half 2).
   useEffect(() => {
@@ -531,8 +592,8 @@ function MapView({
             `fc` memo above) — never a layer filter — so clusters recompute
             correctly. Renders nothing when there's nothing to toggle. */}
         <MapLayersControl
-          dayGroups={dayGroups}
-          listGroups={listGroups}
+          dayGroups={dayGroupRows}
+          listGroups={listGroupRows}
           hiddenDays={hiddenDays}
           hiddenLists={hiddenLists}
           onToggleDay={toggleDay}

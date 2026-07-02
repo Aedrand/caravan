@@ -60,6 +60,7 @@ import {
 import { ExpenseFormDialog } from "@/components/expenses/expense-form-dialog";
 import { useFocusedDay } from "@/components/map/focused-day";
 import { PlaceAutocomplete } from "@/components/map/place-autocomplete";
+import { dayColorForIndex } from "@/components/map/route-features";
 import { useMapSelection } from "@/components/map/selection";
 import { type DayRouteState, useDayRoutes } from "@/components/routing/day-routes";
 import { Button } from "@/components/ui/button";
@@ -385,11 +386,15 @@ export function ItineraryBoard({
               day MUST still keep a zero-height `<div id={`day-${iso}`}>` stub
               mounted so the scrollspy + index rail can observe/scroll to it. */}
           <div className="flex flex-col gap-1.5">
-            {days.map((iso) => (
+            {days.map((iso, dayIndex) => (
               <DayBlock
                 key={iso}
                 iso={iso}
                 n={dayNumber(iso, trip.startDate)}
+                // Canonical day color: `days` IS the deriveDays order (the same
+                // ordinals the map paints from), so the index maps straight to
+                // the day's hue — stamps, header tick, pins, ribbon all agree.
+                dayColor={dayColorForIndex(dayIndex)}
                 items={byDate.get(iso) ?? []}
                 isToday={iso === today}
                 open={isOpen(iso)}
@@ -446,6 +451,11 @@ export function ItineraryBoard({
                     computeStopNumbers(byDate.get(activeActivity.date) ?? []).get(
                       activeActivity.id,
                     ) ?? null
+                  }
+                  dayColor={
+                    activeActivity.date
+                      ? dayColorForIndex(days.indexOf(activeActivity.date))
+                      : undefined
                   }
                   isFirst
                   isLast
@@ -555,6 +565,7 @@ function mergeDayRows(items: Activity[], derived: DerivedEntry[]): DisplayRow[] 
 function DayBlock({
   iso,
   n,
+  dayColor,
   items,
   isToday,
   open,
@@ -594,6 +605,9 @@ function DayBlock({
 }: {
   iso: string;
   n: number | null;
+  /** This day's canonical color (`dayColorForIndex` over the deriveDays order)
+   * — fills the plotted stop stamps and the header tick, matching the map. */
+  dayColor: string;
   items: Activity[];
   isToday: boolean;
   open: boolean;
@@ -755,6 +769,7 @@ function DayBlock({
         <DayHeader
           n={n}
           iso={iso}
+          dayColor={dayColor}
           isToday={isToday}
           stopCount={stopCount}
           costTotalMinor={costTotalMinor}
@@ -813,6 +828,7 @@ function DayBlock({
                     key={activity.id}
                     activity={activity}
                     number={stopNumbers.get(activity.id) ?? null}
+                    dayColor={dayColor}
                     isFirst={isFirst}
                     isLast={isLast}
                     canEdit={canEdit}
@@ -888,6 +904,7 @@ function TodayBadge({ className }: { className?: string }) {
 function DayHeader({
   n,
   iso,
+  dayColor,
   isToday,
   stopCount,
   costTotalMinor,
@@ -910,6 +927,9 @@ function DayHeader({
 }: {
   n: number | null;
   iso: string;
+  /** This day's canonical color — the small header tick tying it to its map
+   * pins/ribbon and rail stamps. */
+  dayColor: string;
   isToday: boolean;
   stopCount: number;
   costTotalMinor: number;
@@ -953,6 +973,14 @@ function DayHeader({
             </span>
           )}
           <h3 className="truncate font-display text-xl font-bold">{formatDayLabel(iso)}</h3>
+          {/* The day's color tick — a small swatch tying this header to its map
+              pins/ribbon and the stamps below. Deliberately NOT a re-tint of
+              the cream DAY n stamp; inline style since the ramp is runtime hex. */}
+          <span
+            aria-hidden
+            className="size-2.5 shrink-0 rounded-sm"
+            style={{ background: dayColor }}
+          />
         </button>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {isToday && <TodayBadge />}

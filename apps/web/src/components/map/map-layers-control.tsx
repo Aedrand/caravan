@@ -161,7 +161,7 @@ function LayerToggleGroup({
         )}
       </div>
       <div className="flex flex-wrap gap-1">
-        {groups.map(({ key, label, count }) => {
+        {groups.map(({ key, label, count, color }) => {
           const visible = !hidden.has(key);
           return (
             <button
@@ -176,6 +176,16 @@ function LayerToggleGroup({
                   : "border-transparent text-muted-foreground opacity-55 hover:text-foreground",
               )}
             >
+              {/* Swatch = this layer's pin color (canonical day/list ordinal,
+                  decorated on by MapView) — inline style, since the ramps are
+                  runtime hex that Tailwind can't know. */}
+              {color && (
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ background: color }}
+                />
+              )}
               {label}
               <span className="text-[10px] tabular-nums opacity-70">{count}</span>
             </button>

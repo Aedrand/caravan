@@ -1,5 +1,6 @@
 import { ACTIVITY_CATEGORIES, type ActivityCategory } from "@caravan/shared";
 import type { ExpressionSpecification } from "maplibre-gl";
+import { dayColorExpression } from "./route-features";
 
 /**
  * JS token bridge for category-tinted map pins (Trip Workspace v2).
@@ -35,11 +36,91 @@ const CATEGORY_TINT_TOKEN: Record<ActivityCategory, string> = {
  */
 export const PIN_FALLBACK_COLOR = "#c05621";
 
-/** Fill for undated (Ideas-pool) pins — neutral, deliberately outside the day
- *  hue ramp AND distinct from DAY_ROUTE_FALLBACK_COLOR (that one means "shouldn't
- *  happen"; this one is a normal, expected state). Literal hex — paint can't read
- *  CSS vars. */
+/** Fill for undated (Ideas-pool) pins that belong to NO idea list ("Unlisted")
+ *  — neutral, deliberately outside both hue ramps AND distinct from
+ *  DAY_ROUTE_FALLBACK_COLOR (that one means "shouldn't happen"; this one is a
+ *  normal, expected state). Literal hex — paint can't read CSS vars. */
 export const IDEA_PIN_COLOR = "#57606f";
+
+/**
+ * Idea-list pin colors (pin-color sync pass). Eight hues in a muted, COOL
+ * register — plum, slate blue, teal-gray, mauve, steel, moss, dusty indigo,
+ * cool taupe — deliberately a different temperature family from the warm
+ * "travel poster" day ramp ({@link DAY_ROUTE_PALETTE} in route-features.ts), so
+ * an undated idea pin can never be mistaken for a dated day pin. All mid-to-dark
+ * (white text/dots stay legible on every entry). RAW hex on purpose: MapLibre
+ * paint CANNOT read CSS custom properties, so — exactly like the day ramp —
+ * these live as literals, not `--var` tokens.
+ */
+export const LIST_PIN_PALETTE: string[] = [
+  "#6d597f", // dusty plum
+  "#56698f", // slate blue
+  "#5b7478", // teal-gray
+  "#8a5f74", // mauve
+  "#5c7186", // steel
+  "#5f7355", // moss
+  "#5a5f8d", // dusty indigo
+  "#776f66", // cool taupe
+];
+
+/**
+ * Stable color for the idea list at ordinal `index` (0-based over the trip's
+ * position-sorted lists — the same order IdeasPanel renders), wrapping the
+ * palette with modulo so a trip with more than 8 lists reuses hues. Mirrors
+ * `dayColorForIndex` in route-features.ts: any non-finite / negative /
+ * fractional index degrades to the first color rather than an out-of-range read.
+ */
+export function listColorForIndex(index: number): string {
+  if (!Number.isInteger(index) || index < 0) return LIST_PIN_PALETTE[0] ?? IDEA_PIN_COLOR;
+  return LIST_PIN_PALETTE[index % LIST_PIN_PALETTE.length] ?? IDEA_PIN_COLOR;
+}
+
+/**
+ * Build the list-color paint expression: a `match` on each feature's `listId`
+ * property → its {@link listColorForIndex} color, falling back to
+ * `fallbackColor` (default {@link IDEA_PIN_COLOR}) — an Unlisted pin's
+ * `listId: null` never matches a branch, so it lands on the fallback arm by
+ * design, no special-casing. Same idiom as `dayColorExpression`
+ * (route-features.ts), including the empty-branches guard: a `match` with no
+ * label/output pair is malformed (throws at addLayer/setPaintProperty time), so
+ * with no lists we return a constant `["to-color", fallback]` instead.
+ */
+export function listColorExpression(
+  orderedListIds: string[],
+  fallbackColor: string = IDEA_PIN_COLOR,
+): ExpressionSpecification {
+  if (orderedListIds.length === 0) {
+    return ["to-color", fallbackColor] as unknown as ExpressionSpecification;
+  }
+  const branches: string[] = [];
+  for (let i = 0; i < orderedListIds.length; i++) {
+    const listId = orderedListIds[i];
+    if (listId === undefined) continue;
+    branches.push(listId, listColorForIndex(i));
+  }
+  return [
+    "match",
+    ["get", "listId"],
+    ...branches,
+    fallbackColor,
+  ] as unknown as ExpressionSpecification;
+}
+
+/**
+ * The pins layer's composed `circle-color` fill: dated pins color by DAY (the
+ * same `match` on `date`, over the same canonical trip-day order, that tints the
+ * route lines), and undated (Ideas-pool) pins fall through to a nested `match`
+ * on `listId` → their idea list's cool-ramp color, with truly unlisted/unknown
+ * pins landing on the neutral {@link IDEA_PIN_COLOR}. Pure composition of the
+ * two single-key expressions, so each stays independently testable; both guards
+ * hold — a zero-branch `match` is never produced at either level.
+ */
+export function pinFillExpression(
+  orderedDates: string[],
+  orderedListIds: string[],
+): ExpressionSpecification {
+  return dayColorExpression(orderedDates, listColorExpression(orderedListIds));
+}
 
 /**
  * Read the resolved category tints off the themed root element. `<html>` carries

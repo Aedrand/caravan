@@ -28,6 +28,7 @@ import { Lightbulb, ListChecks, MapPin, Plus, StickyNote } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useMemo, useState } from "react";
 import { ActivityFormDialog } from "@/components/itinerary/activity-form-dialog";
 import { deriveDays } from "@/components/itinerary/format";
+import { IDEA_PIN_COLOR, listColorForIndex } from "@/components/map/pin-tint";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -440,7 +441,7 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
                   items={ideaLists.map((l) => l.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {ideaLists.map((list) => {
+                  {ideaLists.map((list, listIndex) => {
                     const sorted = sortByVotes(byList.get(list.id) ?? []);
                     return (
                       <SortableIdeaListSection
@@ -449,6 +450,10 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
                         id={`list-${list.id}`}
                         name={list.name}
                         count={sorted.length}
+                        // Position-sorted index — the same ordinal the map's
+                        // list `match` and the index rail's dot are built from,
+                        // so this section's dot always matches its pins.
+                        color={listColorForIndex(listIndex)}
                         canEdit={canEdit}
                         isDropTarget={activeDrag?.type === "idea" && dropTargetKey === list.id}
                         onRename={(name) => void renameList(list.id, name).catch(() => {})}
@@ -467,6 +472,7 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
                 {(unlistedSorted.length > 0 || activeDrag?.type === "idea") && (
                   <DroppableUnlistedSection
                     count={unlistedSorted.length}
+                    color={IDEA_PIN_COLOR}
                     canEdit={canEdit}
                     isDropTarget={dropTargetKey === UNLISTED_DROP_ID}
                     onAddIdea={canEdit ? () => openCreate("activity", null) : undefined}

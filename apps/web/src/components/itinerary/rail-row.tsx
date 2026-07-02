@@ -54,6 +54,10 @@ export interface RailRowProps {
   activity: Activity;
   /** 1-based per-day stop number from `computeStopNumbers`; null for note/checklist. */
   number: number | null;
+  /** This day's canonical color (`dayColorForIndex` over the `deriveDays`
+   * order) — fills a PLOTTED stop's number stamp so it mirrors its map pin
+   * (same number, same color). Absent (e.g. tests) → the pre-sync soft tint. */
+  dayColor?: string;
   /** Position in the day's full row list — drives the spine connector ends. */
   isFirst: boolean;
   isLast: boolean;
@@ -181,11 +185,11 @@ export function SpineColumn({
 }
 
 /** The row's gutter content: a number stamp for stops, else a typed mark. */
-function Spine({ activity, number, isFirst, isLast }: Ctx) {
+function Spine({ activity, number, dayColor, isFirst, isLast }: Ctx) {
   return (
     <SpineColumn isFirst={isFirst} isLast={isLast}>
       {activity.type === "activity" ? (
-        <NumberStamp activity={activity} n={number} />
+        <NumberStamp activity={activity} n={number} dayColor={dayColor} />
       ) : (
         <SpineMark type={activity.type} />
       )}
@@ -194,18 +198,33 @@ function Spine({ activity, number, isFirst, isLast }: Ctx) {
 }
 
 /** The order-driven square number stamp — filled when plotted, hollow (dashed)
- * when unplotted, so a missing map pin reads as "not located yet" (§C.2/§C.6). */
-function NumberStamp({ activity, n }: { activity: Activity; n: number | null }) {
+ * when unplotted, so a missing map pin reads as "not located yet" (§C.2/§C.6).
+ * A plotted stamp fills with its DAY's canonical color under a white number,
+ * exactly mirroring its map pin (same number, same hue — pin-color sync pass);
+ * the 2px ink border keeps it reading as a stamp on the light rail. */
+function NumberStamp({
+  activity,
+  n,
+  dayColor,
+}: {
+  activity: Activity;
+  n: number | null;
+  dayColor?: string;
+}) {
   const plotted = isPlotted(activity);
   const meta = CATEGORY_META[activity.category];
+  const filled = plotted && dayColor !== undefined;
   return (
     <span
       aria-hidden
       className={cn(
-        "relative z-10 flex size-7 items-center justify-center rounded-stamp font-display text-sm font-bold text-foreground",
+        "relative z-10 flex size-7 items-center justify-center rounded-stamp font-display text-sm font-bold",
+        filled ? "border-2 border-border text-white" : "text-foreground",
         plotted ? "shadow-pressed" : "border-2 border-dashed border-[var(--ink-faint)]",
       )}
-      style={{ backgroundColor: plotted ? meta.soft : "var(--paper-bright)" }}
+      style={{
+        backgroundColor: filled ? dayColor : plotted ? meta.soft : "var(--paper-bright)",
+      }}
     >
       {n ?? ""}
     </span>

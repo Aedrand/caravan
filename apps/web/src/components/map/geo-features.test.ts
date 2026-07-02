@@ -307,6 +307,14 @@ test("toFeatureCollection: emits `date` on every feature (null for undated)", ()
   expect(fc.features[1]?.properties).toHaveProperty("date", null);
 });
 
+test("toFeatureCollection: emits `listId` on every feature (null when unlisted)", () => {
+  const fc = toFeatureCollection([pin({ listId: fid("9") }), pin({ id: fid("2"), listId: null })]);
+  // The composed pin fill's nested list `match` keys on this property; the
+  // Unlisted pin's present-but-null listId falls through to the neutral gray.
+  expect(fc.features[0]?.properties?.listId).toBe(fid("9"));
+  expect(fc.features[1]?.properties).toHaveProperty("listId", null);
+});
+
 // ---------------------------------------------------------------------------
 // buildDayGroups / buildListGroups (map layers control)
 // ---------------------------------------------------------------------------

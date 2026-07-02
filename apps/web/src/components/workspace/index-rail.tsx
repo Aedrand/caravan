@@ -3,6 +3,8 @@ import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { dayNumber, formatDayShort } from "@/components/itinerary/format";
 import { useFocusedDay } from "@/components/map/focused-day";
+import { listColorForIndex } from "@/components/map/pin-tint";
+import { dayColorForIndex } from "@/components/map/route-features";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -100,7 +102,7 @@ export function IndexRail({
       </div>
       {itineraryExpanded && days.length > 0 && (
         <div className="mt-0.5 mb-1 flex flex-col gap-0.5">
-          {days.map((iso) => {
+          {days.map((iso, dayIndex) => {
             const n = dayNumber(iso, startDate);
             const dayActive = activeId === `day-${iso}`;
             const dim = emptyDays.has(iso) && !dayActive;
@@ -118,12 +120,14 @@ export function IndexRail({
                   dim && "opacity-55",
                 )}
               >
+                {/* Day-color dot: `days` is the full deriveDays sequence (the
+                    canonical color order), so the row index IS the day's
+                    ordinal — this dot always matches the itinerary stamps and
+                    the map's pins/ribbon for this date. */}
                 <span
                   aria-hidden
-                  className={cn(
-                    "size-2 shrink-0 rounded-full border-2",
-                    dayActive ? "border-border bg-primary" : "border-[var(--ink-faint)]",
-                  )}
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ background: dayColorForIndex(dayIndex) }}
                 />
                 <span className="truncate">{n != null ? `Day ${n}` : formatDayShort(iso)}</span>
                 {n != null && (
@@ -165,7 +169,7 @@ export function IndexRail({
       {ideasExpanded && ideaLists.length > 0 && (
         <div className="mt-0.5 mb-1 flex flex-col gap-0.5">
           {/* The derived "Unlisted" bucket is deliberately not a jump target. */}
-          {ideaLists.map((list) => {
+          {ideaLists.map((list, listIndex) => {
             const listActive = activeId === `list-${list.id}`;
             return (
               <button
@@ -180,12 +184,13 @@ export function IndexRail({
                     : "border-l-[var(--ink-faint)] text-muted-foreground hover:text-foreground",
                 )}
               >
+                {/* List-color dot: `ideaLists` is position-sorted (the same
+                    order IdeasPanel renders and the map's list `match` is built
+                    from), so the row index IS the list's color ordinal. */}
                 <span
                   aria-hidden
-                  className={cn(
-                    "size-2 shrink-0 rounded-full border-2",
-                    listActive ? "border-border bg-primary" : "border-[var(--ink-faint)]",
-                  )}
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ background: listColorForIndex(listIndex) }}
                 />
                 <span className="truncate">{list.name}</span>
               </button>
