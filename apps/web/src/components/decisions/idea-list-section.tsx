@@ -41,8 +41,10 @@ export const UNLISTED_DROP_ID = "__unlisted__";
  * rendered cards as `children`; this owns only the header chrome + collapse.
  */
 export function IdeaListSection({
+  id,
   name,
   count,
+  color,
   canEdit,
   unlisted = false,
   dragHandle,
@@ -52,8 +54,14 @@ export function IdeaListSection({
   onAddIdea,
   children,
 }: {
+  /** Scroll-spy anchor id (`list-${listId}`) — makes this a rail jump target. */
+  id?: string;
   name: string;
   count: number;
+  /** This list's pin color (`listColorForIndex` over the position-sorted
+   * order; the neutral gray for Unlisted) — a small header dot tying the
+   * section to its map pins and index-rail row. */
+  color?: string;
   canEdit: boolean;
   /** The derived "no list" bucket — read-only header (no rename/delete/handle). */
   unlisted?: boolean;
@@ -83,8 +91,13 @@ export function IdeaListSection({
 
   return (
     <section
+      id={id}
+      // Anchored sections take programmatic focus after a rail jump (a11y —
+      // mirrors the workspace section/day anchors).
+      tabIndex={id ? -1 : undefined}
       className={cn(
         "cv-card overflow-hidden transition-[box-shadow,background-color]",
+        id && "scroll-mt-4 outline-none",
         isDropTarget && "bg-accent/20 ring-2 ring-[var(--accent-strong)]",
       )}
       aria-label={`Idea list: ${name}`}
@@ -125,6 +138,14 @@ export function IdeaListSection({
           </form>
         ) : (
           <div className="flex min-w-0 flex-1 items-center gap-2">
+            {/* The list's pin-color dot — inline style, the ramp is runtime hex. */}
+            {color && (
+              <span
+                aria-hidden
+                className="size-2.5 shrink-0 rounded-full"
+                style={{ background: color }}
+              />
+            )}
             <h3 className="truncate font-display text-lg font-bold">{name}</h3>
             <span className="shrink-0 rounded-pill border bg-accent-soft px-2 py-0.5 text-xs font-semibold text-muted-foreground">
               {count}
@@ -186,8 +207,12 @@ export function SortableIdeaListSection({
   ...props
 }: {
   list: IdeaList;
+  /** Scroll-spy anchor id, threaded through to the section root. */
+  id?: string;
   name: string;
   count: number;
+  /** This list's pin color — threaded through to the header dot. */
+  color?: string;
   canEdit: boolean;
   /** An idea card is hovering this section during a cross-list drag. */
   isDropTarget?: boolean;
@@ -242,6 +267,8 @@ export function DroppableUnlistedSection({
   ...props
 }: {
   count: number;
+  /** The neutral Unlisted pin gray (IDEA_PIN_COLOR), from the panel. */
+  color?: string;
   canEdit: boolean;
   isDropTarget?: boolean;
   onAddIdea?: () => void;

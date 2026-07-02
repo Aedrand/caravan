@@ -8,17 +8,22 @@ import {
 import type { UseQueryResult } from "@tanstack/react-query";
 import {
   Banknote,
+  Bold,
   CalendarDays,
   Compass,
+  Italic,
+  List,
+  ListOrdered,
   type LucideIcon,
   MapPin,
   TrendingDown,
   Vote,
 } from "lucide-react";
-import { type ReactNode, useMemo, useRef, useState } from "react";
+import { type FocusEvent, type ReactNode, useMemo, useRef, useState } from "react";
 import { AvatarStack } from "@/components/decisions/avatar-stack";
 import { totalSpend } from "@/components/expenses/summary";
 import { daysBetween, todayIso } from "@/components/itinerary/format";
+import { BulletinMarkdown } from "@/components/trips/bulletin-markdown-view";
 import { formatTripDates } from "@/components/trips/format";
 import { Textarea } from "@/components/ui/textarea";
 import { SectionHeading } from "@/components/workspace/section-heading";
@@ -345,6 +350,8 @@ function GroupBulletin({ bulletin, canEdit }: { bulletin: string | null; canEdit
   const [draft, setDraft] = useState("");
   // Enter commits, then blur fires as the textarea unmounts — settle exactly once.
   const doneRef = useRef(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   function begin() {
     if (!canEdit) return;
@@ -365,14 +372,85 @@ function GroupBulletin({ bulletin, canEdit }: { bulletin: string | null; canEdit
     }
   }
 
+  /** Splice a toolbar edit into the draft, then restore focus + selection. */
+  function applyDraft(next: string, selStart: number, selEnd: number) {
+    if (next.length > 5000) return; // the textarea's maxLength, kept honest
+    setDraft(next);
+    requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(selStart, selEnd);
+    });
+  }
+
+  /** Wrap the selection in a marker pair — or drop an empty pair, caret inside. */
+  function wrapSelection(marker: string) {
+    const el = textareaRef.current;
+    if (!el) return;
+    const { selectionStart: start, selectionEnd: end } = el;
+    const next = `${draft.slice(0, start)}${marker}${draft.slice(start, end)}${marker}${draft.slice(end)}`;
+    applyDraft(next, start + marker.length, end + marker.length);
+  }
+
+  /** Prefix every line the selection touches ("- " bullets, "1. " numbered). */
+  function prefixLines(prefix: (line: number) => string) {
+    const el = textareaRef.current;
+    if (!el) return;
+    const { selectionStart: start, selectionEnd: end } = el;
+    const lineStart = start === 0 ? 0 : draft.lastIndexOf("\n", start - 1) + 1;
+    const region = draft
+      .slice(lineStart, end)
+      .split("\n")
+      .map((line, n) => prefix(n) + line)
+      .join("\n");
+    const next = draft.slice(0, lineStart) + region + draft.slice(end);
+    applyDraft(next, start + prefix(0).length, end + (region.length - (end - lineStart)));
+  }
+
+  const tools: { Icon: LucideIcon; label: string; run: () => void }[] = [
+    { Icon: Bold, label: "Bold", run: () => wrapSelection("**") },
+    { Icon: Italic, label: "Italic", run: () => wrapSelection("*") },
+    { Icon: List, label: "Bulleted list", run: () => prefixLines(() => "- ") },
+    { Icon: ListOrdered, label: "Numbered list", run: () => prefixLines((n) => `${n + 1}. `) },
+  ];
+
+  // Moving focus between the textarea and the formatting toolbar shouldn't
+  // commit the draft — only focus leaving the editor as a whole saves (the
+  // same "blur saves" semantics the bare textarea always had).
+  function onEditorBlur(e: FocusEvent) {
+    if (editorRef.current?.contains(e.relatedTarget as Node | null)) return;
+    finish(true);
+  }
+
   // Nothing to show and nothing to add → omit the block entirely.
   if (bulletin === null && !canEdit && !editing) return null;
 
   if (editing) {
     return (
-      <div className="flex flex-col gap-1.5">
-        <CapLabel>Group bulletin</CapLabel>
+      <div ref={editorRef} className="flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-3">
+          <CapLabel>Group bulletin</CapLabel>
+          <div className="flex items-center gap-1">
+            {tools.map(({ Icon, label, run }) => (
+              <button
+                key={label}
+                type="button"
+                aria-label={label}
+                title={label}
+                // Keep the textarea focused (and its selection alive) on click.
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={run}
+                onBlur={onEditorBlur}
+                className="inline-flex size-7 items-center justify-center rounded-control border-2 border-border bg-card text-muted-foreground shadow-control outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              >
+                <Icon aria-hidden strokeWidth={2.25} className="size-3.5" />
+              </button>
+            ))}
+          </div>
+        </div>
         <Textarea
+          ref={textareaRef}
           autoFocus
           value={draft}
           maxLength={5000}
@@ -381,7 +459,7 @@ function GroupBulletin({ bulletin, canEdit }: { bulletin: string | null; canEdit
           placeholder="Add a note for the group…"
           className="rounded-card bg-card shadow-control"
           onChange={(e) => setDraft(e.target.value)}
-          onBlur={() => finish(true)}
+          onBlur={onEditorBlur}
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
               e.preventDefault();
@@ -428,15 +506,11 @@ function GroupBulletin({ bulletin, canEdit }: { bulletin: string | null; canEdit
           onClick={begin}
           className="rounded-card border-2 border-border bg-card px-4 py-3 text-left shadow-control outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
-          <p className="whitespace-pre-wrap break-words text-foreground text-sm leading-relaxed">
-            {bulletin}
-          </p>
+          <BulletinMarkdown text={bulletin} />
         </button>
       ) : (
         <div className="rounded-card border-2 border-border bg-card px-4 py-3 shadow-control">
-          <p className="whitespace-pre-wrap break-words text-foreground text-sm leading-relaxed">
-            {bulletin}
-          </p>
+          <BulletinMarkdown text={bulletin} />
         </div>
       )}
     </div>

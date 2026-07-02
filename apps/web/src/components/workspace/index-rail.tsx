@@ -1,20 +1,27 @@
 import type { TripMoney } from "@caravan/shared";
 import { ChevronDown } from "lucide-react";
+import { useState } from "react";
 import { dayNumber, formatDayShort } from "@/components/itinerary/format";
 import { useFocusedDay } from "@/components/map/focused-day";
+import { listColorForIndex } from "@/components/map/pin-tint";
+import { dayColorForIndex } from "@/components/map/route-features";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
  * The V2.7 left index rail (§4). A sticky desktop-only table of contents for the
  * one-canvas workspace: scrollspy drives the active markers, clicking an item
- * smooth-scrolls the canvas, and Itinerary expands to per-day jump buttons. The
- * day click also sets the shared focused day so the ambient map reframes. Mobile
- * uses the BottomNav instead, so this is `hidden lg:flex`.
+ * smooth-scrolls the canvas, and Itinerary/Ideas expand to per-day / per-list
+ * jump buttons. Both sub-lists are true manual collapses (chevron icon-button,
+ * default expanded, plain per-mount state) — clicking the section label always
+ * re-expands and jumps. The day click also sets the shared focused day so the
+ * ambient map reframes. Mobile uses the BottomNav instead, so `hidden lg:flex`.
  */
 export interface IndexRailProps {
   days: string[];
   emptyDays: Set<string>;
+  /** Idea lists in display (position) order — the Ideas sub-list jump targets. */
+  ideaLists: { id: string; name: string }[];
   activeId: string | null;
   bookingCount: number;
   moneyData: TripMoney | undefined;
@@ -29,6 +36,7 @@ export interface IndexRailProps {
 export function IndexRail({
   days,
   emptyDays,
+  ideaLists,
   activeId,
   bookingCount,
   moneyData,
@@ -38,7 +46,10 @@ export function IndexRail({
 }: IndexRailProps) {
   const { setFocusedDay } = useFocusedDay();
   const itineraryActive = activeId === "itinerary" || (activeId?.startsWith("day-") ?? false);
+  const ideasActive = activeId === "ideas" || (activeId?.startsWith("list-") ?? false);
   const moneyCount = moneyData?.expenses.length ?? 0;
+  const [itineraryExpanded, setItineraryExpanded] = useState(true);
+  const [ideasExpanded, setIdeasExpanded] = useState(true);
 
   const jumpToDay = (iso: string) => {
     setFocusedDay(iso);
@@ -67,23 +78,31 @@ export function IndexRail({
         onClick={() => scrollTo("bookings")}
       />
 
-      <NavItem
-        label="Itinerary"
-        active={itineraryActive}
-        onClick={() => scrollTo("itinerary")}
-        trailing={
-          <ChevronDown
-            aria-hidden
-            className={cn(
-              "ml-auto size-4 shrink-0 text-muted-foreground transition-transform",
-              !itineraryActive && "-rotate-90",
-            )}
+      {/* The label button keeps the exact accessible name "Itinerary" (e2e
+          anchor); the chevron is a SEPARATE icon-button that only toggles. */}
+      <div className="flex items-center gap-0.5">
+        <div className="min-w-0 flex-1">
+          <NavItem
+            label="Itinerary"
+            active={itineraryActive}
+            onClick={() => {
+              setItineraryExpanded(true);
+              scrollTo("itinerary");
+            }}
           />
-        }
-      />
-      {itineraryActive && days.length > 0 && (
+        </div>
+        {days.length > 0 && (
+          <ExpandToggle
+            expanded={itineraryExpanded}
+            onToggle={() => setItineraryExpanded((v) => !v)}
+            collapseLabel="Collapse days"
+            expandLabel="Expand days"
+          />
+        )}
+      </div>
+      {itineraryExpanded && days.length > 0 && (
         <div className="mt-0.5 mb-1 flex flex-col gap-0.5">
-          {days.map((iso) => {
+          {days.map((iso, dayIndex) => {
             const n = dayNumber(iso, startDate);
             const dayActive = activeId === `day-${iso}`;
             const dim = emptyDays.has(iso) && !dayActive;
@@ -101,12 +120,14 @@ export function IndexRail({
                   dim && "opacity-55",
                 )}
               >
+                {/* Day-color dot: `days` is the full deriveDays sequence (the
+                    canonical color order), so the row index IS the day's
+                    ordinal — this dot always matches the itinerary stamps and
+                    the map's pins/ribbon for this date. */}
                 <span
                   aria-hidden
-                  className={cn(
-                    "size-2 shrink-0 rounded-full border-2",
-                    dayActive ? "border-border bg-primary" : "border-[var(--ink-faint)]",
-                  )}
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ background: dayColorForIndex(dayIndex) }}
                 />
                 <span className="truncate">{n != null ? `Day ${n}` : formatDayShort(iso)}</span>
                 {n != null && (
@@ -125,11 +146,59 @@ export function IndexRail({
         </div>
       )}
 
-      <NavItem
-        label="Ideas & Lists"
-        active={activeId === "ideas"}
-        onClick={() => scrollTo("ideas")}
-      />
+      <div className="flex items-center gap-0.5">
+        <div className="min-w-0 flex-1">
+          <NavItem
+            label="Ideas & Lists"
+            active={ideasActive}
+            onClick={() => {
+              setIdeasExpanded(true);
+              scrollTo("ideas");
+            }}
+          />
+        </div>
+        {ideaLists.length > 0 && (
+          <ExpandToggle
+            expanded={ideasExpanded}
+            onToggle={() => setIdeasExpanded((v) => !v)}
+            collapseLabel="Collapse lists"
+            expandLabel="Expand lists"
+          />
+        )}
+      </div>
+      {ideasExpanded && ideaLists.length > 0 && (
+        <div className="mt-0.5 mb-1 flex flex-col gap-0.5">
+          {/* The derived "Unlisted" bucket is deliberately not a jump target. */}
+          {ideaLists.map((list, listIndex) => {
+            const listActive = activeId === `list-${list.id}`;
+            return (
+              <button
+                key={list.id}
+                type="button"
+                onClick={() => scrollTo(`list-${list.id}`)}
+                aria-current={listActive ? "true" : undefined}
+                className={cn(
+                  "ml-2.5 flex items-center gap-2 rounded-r-control border-2 border-transparent border-l-2 py-1.5 pr-2.5 pl-3.5 text-left font-semibold text-[13px] outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                  listActive
+                    ? "ml-2 border-border bg-card font-bold text-foreground shadow-control"
+                    : "border-l-[var(--ink-faint)] text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {/* List-color dot: `ideaLists` is position-sorted (the same
+                    order IdeasPanel renders and the map's list `match` is built
+                    from), so the row index IS the list's color ordinal. */}
+                <span
+                  aria-hidden
+                  className="size-2 shrink-0 rounded-full"
+                  style={{ background: listColorForIndex(listIndex) }}
+                />
+                <span className="truncate">{list.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <NavItem
         label="Money"
         active={activeId === "money"}
@@ -159,17 +228,47 @@ export function IndexRail({
   );
 }
 
+/**
+ * The chevron icon-button beside a collapsible section's NavItem. A separate
+ * control (never part of the label button) so the section's accessible name
+ * stays exactly its title — e2e queries `{ name: "Itinerary", exact: true }`.
+ */
+function ExpandToggle({
+  expanded,
+  onToggle,
+  collapseLabel,
+  expandLabel,
+}: {
+  expanded: boolean;
+  onToggle: () => void;
+  collapseLabel: string;
+  expandLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-expanded={expanded}
+      aria-label={expanded ? collapseLabel : expandLabel}
+      className="flex size-7 shrink-0 items-center justify-center rounded-control text-muted-foreground outline-none hover:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
+    >
+      <ChevronDown
+        aria-hidden
+        className={cn("size-4 transition-transform", !expanded && "-rotate-90")}
+      />
+    </button>
+  );
+}
+
 function NavItem({
   label,
   active,
   badge,
-  trailing,
   onClick,
 }: {
   label: string;
   active: boolean;
   badge?: number;
-  trailing?: React.ReactNode;
   onClick: () => void;
 }) {
   return (
@@ -198,7 +297,6 @@ function NavItem({
           {badge}
         </span>
       )}
-      {trailing}
     </button>
   );
 }

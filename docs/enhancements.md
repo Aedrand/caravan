@@ -7,7 +7,105 @@ with existing plan tasks so promotion is a merge, not a surprise.
 
 ---
 
-## 2026-06-29 — Bookings section: more booking types beyond flight + lodging (owner)
+## 2026-07-01 (evening) — Long-lived-tab resilience across server restarts (owner question → M6 candidate)
+
+**Context:** during the polish-pass review the owner's tab sat through several
+dev-server restarts and came back with a blank map; a hard refresh fixed it.
+Most of that breakage was dev-only (Vite HMR zombie state — production tabs
+serve static bundles), and the data layer already self-heals: the sync
+WebSocket retries in a loop and catch-up-on-reconnect is designed + e2e-tested
+(spec 04 convergence). But group-trip tabs stay open for days, and **self-host
+updates restart the server under open tabs**, so the realistic production gaps
+are worth a small hardening slice:
+
+- [ ] **Map canvas recovery** — (a) handle `webglcontextlost`/`restored` on
+  the MapLibre canvas (browsers reclaim GPU from long-backgrounded tabs;
+  MapLibre's own recovery is imperfect → blank canvas); (b) verify a WS
+  reconnect → snapshot refetch actually refreshes the mounted map (pins +
+  framing), and force a map re-init if not.
+- [ ] **Stale-bundle detection** — after a self-host update restarts the
+  server, open tabs keep running the old bundle indefinitely. A lightweight
+  asset-hash/version ping → "a new version is available — reload" banner.
+- [ ] (Nice-to-have) a subtle "connection lost / reconnected" indicator so
+  users understand a wobble rather than distrusting the data.
+
+_Not urgent — fold into **M6 v1.0 hardening** triage._
+
+## 2026-07-01 (later) — Findings from the polish-pass walkthrough (orchestrator; OPEN, not commitments)
+
+Surfaced while seeding + visually verifying the post-v2 polish pass on a fresh
+dev instance. The genuine bug found (New-list dead end on an empty trip) was
+fixed in the pass itself (`162ed98`); these remain open for owner triage.
+
+- [x] **Day fit-bounds includes far-flung flight endpoints** — ✅ fixed in the
+  pass after owner sign-off: `pinsForDayFocus` (geo-features) frames ground
+  pins + only flight endpoints within 150 km of them (outbound day keeps the
+  local arrival airport, return day keeps the local departure; a pure travel
+  day frames the arrival). Framing only — every pin still renders. The same
+  fix surfaced and cured a deeper settle bug: opening the map track mid-scroll
+  reflows the canvas so a scroll-to-day landed SHORT and the spy snapped back
+  to Bookings (closing the map) — `use-scroll-spy` now issues one instant
+  corrective scroll on settle when the target moved (unit-tested).
+- [ ] **Feed copy for idea-list events is vague** — list create/assign events
+  render as "{user} made a change" while activity events say "added
+  Kiyomizu-dera". Small feed-formatter gap: give `ideaList.*` mutations real
+  copy ("created list Food", "moved Ramen tasting to Food").
+- [ ] **Place autocomplete doesn't select-all on focus** — retyping a query
+  appends to the previous text unless the user manually selects it first.
+  One-line `onFocus` select (or clear-on-reopen) in `PlaceAutocomplete`.
+
+## 2026-07-01 — Post-v2 polish notes (owner)
+
+Raw notes from a hands-on pass after the v2.8 chrome merge (PR #3). Unlike most
+inbox entries, these were **promoted immediately**: the owner scoped all nine —
+plus MAP-PIN-DAY-COLOR, FLIGHT-COST-FIELD, and TRIP-SETTINGS-DIALOG from the
+existing queue — into an active enhancements pass the same day (branch off
+`817cded`).
+
+> **✅ ALL NINE SHIPPED same day** (`5166663` + fix `162ed98`, PR pending) —
+> together with the three queue items. Gates green (402 unit / e2e 5/5),
+> visually verified on a seeded dev instance. Follow-up findings from the
+> walkthrough are logged OPEN in the entry above.
+
+**Map**
+
+- [x] **Map-layers popup layout** — the layers popup takes up too much map
+  space. Make it collapsible or better integrated; reclaiming map area is the
+  core problem.
+- [x] **Resizable map partition** — let the user drag the divider between the
+  left scroll canvas and the map to resize how much screen the map takes.
+- [x] **Pin/number clipping** — when pins sit very close together their numbers
+  clip over each other and neither is readable. One pin fully covering another
+  is acceptable (unavoidable); merged half-readable numbers are not.
+- [x] **Walk/drive toggle restyle** — the current segmented-toggle styling is
+  visually indistinguishable from a well-known competitor's; restyle it into
+  something unique to Caravan's own brand identity. (Per repo convention the
+  competitor is deliberately not named.)
+
+**Ideas + map**
+
+- [x] **Ideas on the map** — associate an idea with a location and show it on
+  the map; the map should be present on the Ideas section; idea **lists become
+  map layers the same way days are**.
+
+**Workspace shell**
+
+- [x] **Collapsible rail sections** — the left index rail can't collapse
+  Itinerary (days always stay expanded); enable collapse for Itinerary, Ideas,
+  and any section that expands into a larger list.
+- [x] **Scroll-through map-focus bug** — clicking a section header below
+  Itinerary scrolls *through* the itinerary, which pops the map out and rapidly
+  auto-focuses day by day in passing. Skip the auto-focus (and pop-out churn)
+  when the user is merely passing over a section rather than working in it.
+- [x] **Section spacing** — a bit more space before each section header so the
+  section boundary reads more clearly.
+
+**Overview**
+
+- [x] **Rich-text bulletin** — the group bulletin should support rich text
+  (bullets, emphasis, structure), not just plain text.
+
+
 
 **Context:** V2.7 promotes **Bookings** from a strip into its own top-level workspace
 section, internally grouped by category (**Transport** / **Lodging**). For V2.7 the
@@ -76,10 +174,13 @@ _Not a commitment — a flagged consideration for when self-hosting hardening ge
 
 Surfaced while building V2.4/V2.5 autonomously; flagged for owner review (not commitments).
 
-- [ ] **MAP-PIN-DAY-COLOR** — V2.5 ships **day-colored route lines** while **pins keep their category tint** (V2.3). Now that routes are day-colored, decide whether to also color **pins by day** (the owner's earlier "color pins by day" ask): replace category coloring outright, or keep category as a secondary cue (glyph/icon in the pin) with day as the fill. `pin-tint.ts`'s `pinColorExpression` is already swappable — a ~20-line change once decided. _Best reviewed by looking at the map with route lines in context._
+- [x] **MAP-PIN-DAY-COLOR** — ✅ shipped 2026-07-01 (`5166663`): day-color fill from the route-line ramp; category tint kept as a stroke ring; neutral fill for undated idea pins.
+  Original note:  — V2.5 ships **day-colored route lines** while **pins keep their category tint** (V2.3). Now that routes are day-colored, decide whether to also color **pins by day** (the owner's earlier "color pins by day" ask): replace category coloring outright, or keep category as a secondary cue (glyph/icon in the pin) with day as the fill. `pin-tint.ts`'s `pinColorExpression` is already swappable — a ~20-line change once decided. _Best reviewed by looking at the map with route lines in context._
 - [ ] **ROUTING-PERF-LAZY-LOAD** — a day route is fetched per day; a 30-day trip fires up to ~30 `/api/route` calls on first load (capped by the server 24h `route_cache` + the rate limiter; self-host Valhalla has no concern). If the public FOSSGIS instance throttles bursts, lazy-load each day's route on scroll (`IntersectionObserver` gating `useRouteForDay`'s `enabled`) — a single-file change in the `RoutingProvider`/`DayRouteSubscriber`.
-- [ ] **TRIP-SETTINGS-DIALOG** — there is no trip settings/edit dialog (currency is set at creation; the only post-create `trip.update` is the inline rename). The new **trip-default route mode** toggle was placed in the Plan toolbar as a result; relocate it (and surface currency, etc.) when a real trip-settings dialog lands.
-- [ ] **FLIGHT-COST-FIELD** — the V2.4 flight booking form has no cost field (the spec's flight field list omitted it; `estimatedCostMinor` is schema-supported on any type). Add it if flight cost should roll into the day/trip budget.
+- [x] **TRIP-SETTINGS-DIALOG** — ✅ shipped 2026-07-01 (`5166663`): name/destination/dates/currency (relabel-only warning)/default travel mode; route-mode toggle relocated out of the toolbar.
+  Original note:  — there is no trip settings/edit dialog (currency is set at creation; the only post-create `trip.update` is the inline rename). The new **trip-default route mode** toggle was placed in the Plan toolbar as a result; relocate it (and surface currency, etc.) when a real trip-settings dialog lands.
+- [x] **FLIGHT-COST-FIELD** — ✅ shipped 2026-07-01 (`5166663`): Est. cost on the flight form; budget selector already type-agnostic.
+  Original note:  — the V2.4 flight booking form has no cost field (the spec's flight field list omitted it; `estimatedCostMinor` is schema-supported on any type). Add it if flight cost should roll into the day/trip budget.
 
 ## 2026-06-28 (later) — Trip Workspace v2 review-session notes (owner)
 
@@ -87,7 +188,8 @@ Captured live during a hands-on review of the V2.3 build — not yet triaged.
 
 **Map**
 
-- [ ] **Color map pins by the day they belong to, not the activity category.**
+- [x] **Color map pins by the day they belong to, not the activity category.**
+  ✅ Shipped 2026-07-01 (`5166663`) via MAP-PIN-DAY-COLOR — day fill + category ring.
   V2.3 polish shipped category-tint pins (food/sights/… color), but the owner
   wants color to encode **which day** a pin is, so a glance at the map
   immediately groups pins by day. Pairs naturally with the V2.5 day route lines

@@ -60,6 +60,7 @@ import {
 import { ExpenseFormDialog } from "@/components/expenses/expense-form-dialog";
 import { useFocusedDay } from "@/components/map/focused-day";
 import { PlaceAutocomplete } from "@/components/map/place-autocomplete";
+import { dayColorForIndex } from "@/components/map/route-features";
 import { useMapSelection } from "@/components/map/selection";
 import { type DayRouteState, useDayRoutes } from "@/components/routing/day-routes";
 import { Button } from "@/components/ui/button";
@@ -82,6 +83,7 @@ import { DerivedEntryRow } from "./derived-entry-row";
 import { dayNumber, deriveDays, formatDayLabel, todayIso } from "./format";
 import { computeStopNumbers } from "./numbering";
 import { RailRow } from "./rail-row";
+import { RouteModeSegmented } from "./route-mode-toggle";
 import { SortableRailRow } from "./sortable-activity-card";
 import { TravelLegRow } from "./travel-leg-row";
 
@@ -384,11 +386,15 @@ export function ItineraryBoard({
               day MUST still keep a zero-height `<div id={`day-${iso}`}>` stub
               mounted so the scrollspy + index rail can observe/scroll to it. */}
           <div className="flex flex-col gap-1.5">
-            {days.map((iso) => (
+            {days.map((iso, dayIndex) => (
               <DayBlock
                 key={iso}
                 iso={iso}
                 n={dayNumber(iso, trip.startDate)}
+                // Canonical day color: `days` IS the deriveDays order (the same
+                // ordinals the map paints from), so the index maps straight to
+                // the day's hue — stamps, header tick, pins, ribbon all agree.
+                dayColor={dayColorForIndex(dayIndex)}
                 items={byDate.get(iso) ?? []}
                 isToday={iso === today}
                 open={isOpen(iso)}
@@ -445,6 +451,11 @@ export function ItineraryBoard({
                     computeStopNumbers(byDate.get(activeActivity.date) ?? []).get(
                       activeActivity.id,
                     ) ?? null
+                  }
+                  dayColor={
+                    activeActivity.date
+                      ? dayColorForIndex(days.indexOf(activeActivity.date))
+                      : undefined
                   }
                   isFirst
                   isLast
@@ -554,6 +565,7 @@ function mergeDayRows(items: Activity[], derived: DerivedEntry[]): DisplayRow[] 
 function DayBlock({
   iso,
   n,
+  dayColor,
   items,
   isToday,
   open,
@@ -593,6 +605,9 @@ function DayBlock({
 }: {
   iso: string;
   n: number | null;
+  /** This day's canonical color (`dayColorForIndex` over the deriveDays order)
+   * — fills the plotted stop stamps and the header tick, matching the map. */
+  dayColor: string;
   items: Activity[];
   isToday: boolean;
   open: boolean;
@@ -754,6 +769,7 @@ function DayBlock({
         <DayHeader
           n={n}
           iso={iso}
+          dayColor={dayColor}
           isToday={isToday}
           stopCount={stopCount}
           costTotalMinor={costTotalMinor}
@@ -812,6 +828,7 @@ function DayBlock({
                     key={activity.id}
                     activity={activity}
                     number={stopNumbers.get(activity.id) ?? null}
+                    dayColor={dayColor}
                     isFirst={isFirst}
                     isLast={isLast}
                     canEdit={canEdit}
@@ -887,6 +904,7 @@ function TodayBadge({ className }: { className?: string }) {
 function DayHeader({
   n,
   iso,
+  dayColor,
   isToday,
   stopCount,
   costTotalMinor,
@@ -909,6 +927,9 @@ function DayHeader({
 }: {
   n: number | null;
   iso: string;
+  /** This day's canonical color — the small header tick tying it to its map
+   * pins/ribbon and rail stamps. */
+  dayColor: string;
   isToday: boolean;
   stopCount: number;
   costTotalMinor: number;
@@ -952,6 +973,14 @@ function DayHeader({
             </span>
           )}
           <h3 className="truncate font-display text-xl font-bold">{formatDayLabel(iso)}</h3>
+          {/* The day's color tick — a small swatch tying this header to its map
+              pins/ribbon and the stamps below. Deliberately NOT a re-tint of
+              the cream DAY n stamp; inline style since the ramp is runtime hex. */}
+          <span
+            aria-hidden
+            className="size-2.5 shrink-0 rounded-sm"
+            style={{ background: dayColor }}
+          />
         </button>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {isToday && <TodayBadge />}
@@ -1130,34 +1159,7 @@ function DayRouteModeToggle({
 
   return (
     <span className="flex items-center gap-1">
-      <span
-        role="toolbar"
-        aria-label="Travel mode for this day's route"
-        className="flex items-center rounded-pill border bg-card p-0.5"
-      >
-        {(["walking", "driving"] as const).map((m) => {
-          const Icon = m === "driving" ? Car : Footprints;
-          const active = effective === m;
-          return (
-            <button
-              key={m}
-              type="button"
-              onClick={() => onSet(m)}
-              aria-pressed={active}
-              aria-label={m === "walking" ? "Walk this day" : "Drive this day"}
-              title={m === "walking" ? "Walk" : "Drive"}
-              className={cn(
-                "flex items-center rounded-pill px-1.5 py-0.5 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                active
-                  ? "bg-accent-soft text-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <Icon aria-hidden className="size-3.5" strokeWidth={2.25} />
-            </button>
-          );
-        })}
-      </span>
+      <RouteModeSegmented value={effective} onChange={onSet} />
       {isDefault ? (
         <span className="text-[11px] text-muted-foreground">(trip default)</span>
       ) : (
@@ -1171,52 +1173,6 @@ function DayRouteModeToggle({
           <X aria-hidden className="size-3" />
         </button>
       )}
-    </span>
-  );
-}
-
-/**
- * The trip-wide default routing mode (V2.5) — a compact walk/drive segmented
- * control. Days inherit this unless they pin an override (see
- * `DayRouteModeToggle`). Editor-only; writes `trip.defaultRouteMode`. Exported so
- * the V2.7 ItinerarySection can host it in the section heading (the board no
- * longer renders its own toolbar).
- */
-export function TripRouteModeToggle({
-  mode,
-  onChange,
-}: {
-  mode: RouteMode;
-  onChange: (mode: RouteMode) => void;
-}) {
-  return (
-    <span
-      role="toolbar"
-      aria-label="Default travel mode for routes"
-      className="hidden shrink-0 items-center rounded-control border bg-card p-0.5 shadow-control sm:flex"
-    >
-      {(["walking", "driving"] as const).map((m) => {
-        const Icon = m === "driving" ? Car : Footprints;
-        const active = mode === m;
-        return (
-          <button
-            key={m}
-            type="button"
-            onClick={() => onChange(m)}
-            aria-pressed={active}
-            aria-label={
-              m === "walking" ? "Default travel mode: walking" : "Default travel mode: driving"
-            }
-            title={m === "walking" ? "Routes default to walking" : "Routes default to driving"}
-            className={cn(
-              "flex items-center rounded-control px-2 py-1 outline-none transition-colors focus-visible:ring-[3px] focus-visible:ring-ring/50",
-              active ? "bg-accent text-foreground" : "text-muted-foreground hover:text-foreground",
-            )}
-          >
-            <Icon aria-hidden className="size-4" strokeWidth={2.25} />
-          </button>
-        );
-      })}
     </span>
   );
 }

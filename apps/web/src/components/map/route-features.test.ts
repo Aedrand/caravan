@@ -70,6 +70,50 @@ test("dayColorExpression handles empty dates without a malformed match", () => {
   expect(expr).toContain(DAY_ROUTE_FALLBACK_COLOR);
 });
 
+test("dayColorExpression defaults its fallback to the route grey", () => {
+  const expr = dayColorExpression(["2026-05-01"]) as unknown as unknown[];
+  expect(expr[expr.length - 1]).toBe(DAY_ROUTE_FALLBACK_COLOR);
+});
+
+test("dayColorExpression threads a custom fallback into the match arm", () => {
+  // The pin fill passes IDEA_PIN_COLOR here so undated pins (date: null → no
+  // branch matched) land on the neutral idea color, not the route grey.
+  const expr = dayColorExpression(["2026-05-01", "2026-05-02"], "#123456") as unknown as unknown[];
+  expect(expr[0]).toBe("match");
+  expect(expr[expr.length - 1]).toBe("#123456");
+  expect(expr).not.toContain(DAY_ROUTE_FALLBACK_COLOR);
+});
+
+test("dayColorExpression empty-dates guard honors a custom fallback", () => {
+  const expr = dayColorExpression([], "#123456") as unknown as unknown[];
+  expect(expr[0]).toBe("to-color");
+  expect(expr).toContain("#123456");
+  expect(expr).not.toContain(DAY_ROUTE_FALLBACK_COLOR);
+});
+
+test("dayColorExpression threads a NESTED expression fallback into the match arm", () => {
+  // The composed pin fill nests a list-color `match` as the fallback: an
+  // undated pin (date: null → no day branch) falls through to the list match.
+  const nested = ["match", ["get", "listId"], "list-1", "#abcdef", "#123456"];
+  const expr = dayColorExpression(
+    ["2026-05-01"],
+    nested as unknown as Parameters<typeof dayColorExpression>[1],
+  ) as unknown as unknown[];
+  expect(expr[0]).toBe("match");
+  expect(expr[expr.length - 1]).toBe(nested); // the whole nested match, as-is
+});
+
+test("dayColorExpression empty-dates guard returns a nested expression as-is", () => {
+  // A zero-branch match must never be produced at any level: with no dates the
+  // (already well-formed) nested fallback IS the expression.
+  const nested = ["match", ["get", "listId"], "list-1", "#abcdef", "#123456"];
+  const expr = dayColorExpression(
+    [],
+    nested as unknown as Parameters<typeof dayColorExpression>[1],
+  );
+  expect(expr).toBe(nested);
+});
+
 test("buildRouteFeatureCollection emits one LineString per visible day", () => {
   const routes = new Map<string, RouteResult>([
     ["2026-05-01", route(LINE)],

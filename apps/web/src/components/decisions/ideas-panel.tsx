@@ -28,6 +28,7 @@ import { Lightbulb, ListChecks, MapPin, Plus, StickyNote } from "lucide-react";
 import { type FormEvent, type ReactNode, useCallback, useMemo, useState } from "react";
 import { ActivityFormDialog } from "@/components/itinerary/activity-form-dialog";
 import { deriveDays } from "@/components/itinerary/format";
+import { IDEA_PIN_COLOR, listColorForIndex } from "@/components/map/pin-tint";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -361,56 +362,58 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
         )}
       </div>
 
+      {/* Rendered outside the hasContent branch: on an empty trip the empty
+          state replaces the list container, and the draft input must still
+          appear or "New list" becomes a dead end. */}
+      {creatingList && (
+        <form className="cv-card flex items-center gap-2 p-3 sm:p-4" onSubmit={handleCreateList}>
+          <Input
+            autoFocus
+            value={listDraft}
+            maxLength={80}
+            aria-label="New list name"
+            placeholder="List name (e.g. Food, Day trips)"
+            className="h-9"
+            onChange={(e) => setListDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setListDraft("");
+                setCreatingList(false);
+              }
+            }}
+          />
+          <Button type="submit" size="sm" disabled={!listDraft.trim()}>
+            Add list
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setListDraft("");
+              setCreatingList(false);
+            }}
+          >
+            Cancel
+          </Button>
+        </form>
+      )}
+
       {!hasContent ? (
-        <EmptyState
-          icon={Lightbulb}
-          title="No ideas yet"
-          description="Float a place or plan the group can vote on, and group them into lists — the favorites become days on the trip."
-          className="px-6 py-12"
-          headingLevel={3}
-        />
+        !creatingList && (
+          <EmptyState
+            icon={Lightbulb}
+            title="No ideas yet"
+            description="Float a place or plan the group can vote on, and group them into lists — the favorites become days on the trip."
+            className="px-6 py-12"
+            headingLevel={3}
+          />
+        )
       ) : (
         <>
           <p className="-mt-1 text-sm text-muted-foreground">
             Most-wanted first within each list. Vote freely; open an idea to drop it on a day.
           </p>
-
-          {creatingList && (
-            <form
-              className="cv-card flex items-center gap-2 p-3 sm:p-4"
-              onSubmit={handleCreateList}
-            >
-              <Input
-                autoFocus
-                value={listDraft}
-                maxLength={80}
-                aria-label="New list name"
-                placeholder="List name (e.g. Food, Day trips)"
-                className="h-9"
-                onChange={(e) => setListDraft(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Escape") {
-                    setListDraft("");
-                    setCreatingList(false);
-                  }
-                }}
-              />
-              <Button type="submit" size="sm" disabled={!listDraft.trim()}>
-                Add list
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setListDraft("");
-                  setCreatingList(false);
-                }}
-              >
-                Cancel
-              </Button>
-            </form>
-          )}
 
           {ideaLists.length === 0 ? (
             // No lists yet — show the pool flat (today's look), grouping optional.
@@ -438,14 +441,19 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
                   items={ideaLists.map((l) => l.id)}
                   strategy={verticalListSortingStrategy}
                 >
-                  {ideaLists.map((list) => {
+                  {ideaLists.map((list, listIndex) => {
                     const sorted = sortByVotes(byList.get(list.id) ?? []);
                     return (
                       <SortableIdeaListSection
                         key={list.id}
                         list={list}
+                        id={`list-${list.id}`}
                         name={list.name}
                         count={sorted.length}
+                        // Position-sorted index — the same ordinal the map's
+                        // list `match` and the index rail's dot are built from,
+                        // so this section's dot always matches its pins.
+                        color={listColorForIndex(listIndex)}
                         canEdit={canEdit}
                         isDropTarget={activeDrag?.type === "idea" && dropTargetKey === list.id}
                         onRename={(name) => void renameList(list.id, name).catch(() => {})}
@@ -464,6 +472,7 @@ export function IdeasPanel({ snapshot, canEdit }: { snapshot: TripSnapshot; canE
                 {(unlistedSorted.length > 0 || activeDrag?.type === "idea") && (
                   <DroppableUnlistedSection
                     count={unlistedSorted.length}
+                    color={IDEA_PIN_COLOR}
                     canEdit={canEdit}
                     isDropTarget={dropTargetKey === UNLISTED_DROP_ID}
                     onAddIdea={canEdit ? () => openCreate("activity", null) : undefined}

@@ -14,6 +14,7 @@ import {
   Pencil,
   Plus,
   Route as RouteIcon,
+  Settings,
   Trash2,
   Users,
   Vote,
@@ -31,6 +32,7 @@ import { FeedPanel } from "@/components/trips/feed-panel";
 import { formatTripDates } from "@/components/trips/format";
 import { PresenceStrip } from "@/components/trips/presence-strip";
 import { ThemeToggle } from "@/components/trips/theme-toggle";
+import { TripSettingsDialog } from "@/components/trips/trip-settings-dialog";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -47,10 +49,18 @@ import { IndexRail } from "@/components/workspace/index-rail";
 import { ItinerarySection } from "@/components/workspace/itinerary-section";
 import { MoneySection } from "@/components/workspace/money-section";
 import { OverviewSection } from "@/components/workspace/overview-section";
+import { MapResizeHandle } from "@/components/workspace/resize-handle";
+import { useResizableMapWidth } from "@/components/workspace/use-resizable-map-width";
 import { useScrollSpy } from "@/components/workspace/use-scroll-spy";
 import { authClient } from "@/lib/auth-client";
 import { useMoney } from "@/lib/expenses/use-money";
-import { useConnectionStatus, useFeed, useMarkSeen, useUnreadCount } from "@/lib/sync";
+import {
+  useConnectionStatus,
+  useFeed,
+  useIdeaLists,
+  useMarkSeen,
+  useUnreadCount,
+} from "@/lib/sync";
 import type { TripSnapshot } from "@/lib/sync/shared";
 import { cn } from "@/lib/utils";
 
@@ -89,12 +99,14 @@ export interface TripWorkspaceProps {
 export function TripWorkspace(props: TripWorkspaceProps) {
   const { snapshot, archived, isOwner, pending, onToggleArchive, canEdit } = props;
   const [feedOpen, setFeedOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const boardRef = useRef<ItineraryBoardHandle | null>(null);
   const onOpenFeed = () => setFeedOpen(true);
+  const onOpenSettings = () => setSettingsOpen(true);
 
   return (
     <div className="relative flex h-dvh w-full flex-col overflow-hidden bg-background">
-      <TopBar {...props} onOpenFeed={onOpenFeed} />
+      <TopBar {...props} onOpenFeed={onOpenFeed} onOpenSettings={onOpenSettings} />
 
       {archived && (
         <div className="flex flex-wrap items-center justify-between gap-3 border-amber-600/30 border-b bg-amber-500/10 px-4 py-2 text-amber-900 text-sm">
@@ -130,6 +142,13 @@ export function TripWorkspace(props: TripWorkspaceProps) {
         onClose={() => setFeedOpen(false)}
         tripId={snapshot.trip.id}
         members={snapshot.members}
+      />
+
+      <TripSettingsDialog
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        snapshot={snapshot}
+        canEdit={canEdit}
       />
     </div>
   );
@@ -174,9 +193,13 @@ function WorkspaceBody({
     () => activities.filter((a) => a.type === "flight" || a.type === "lodging").length,
     [activities],
   );
+  // Idea lists (position-sorted) — the same source + ordering IdeasPanel renders
+  // from, so the rail's jump targets and the DOM stay in lockstep.
+  const { ideaLists } = useIdeaLists();
 
   // Anchor ids in document order — sections, with the day anchors interleaved
-  // inside the Itinerary block (gotcha: must match the rendered DOM order).
+  // inside the Itinerary block and the idea-list anchors inside Ideas (gotcha:
+  // must match the rendered DOM order exactly or scroll-spy misbehaves).
   const anchorIds = useMemo(
     () => [
       "overview",
@@ -184,10 +207,11 @@ function WorkspaceBody({
       "itinerary",
       ...days.map((iso) => `day-${iso}`),
       "ideas",
+      ...ideaLists.map((l) => `list-${l.id}`),
       "money",
       "group",
     ],
-    [days],
+    [days, ideaLists],
   );
   const { activeId, scrollTo } = useScrollSpy({ containerRef: canvasRef, anchorIds });
 
@@ -198,9 +222,17 @@ function WorkspaceBody({
     if (activeId?.startsWith("day-")) setFocusedDay(activeId.slice(4));
   }, [activeId, setFocusedDay]);
 
-  // The ambient map is "released" (collapsed) outside the Itinerary — only the
-  // Itinerary (and its days) keep it open (the itinerary-only rule).
-  const showMap = activeId === "itinerary" || (activeId?.startsWith("day-") ?? false);
+  // The ambient map is "released" (collapsed) outside the place-anchored
+  // sections — the Itinerary (and its days) and Ideas (and its lists) keep it
+  // open; browsing Ideas doesn't move the focused day, so the frame just holds.
+  const showMap =
+    activeId === "itinerary" ||
+    (activeId?.startsWith("day-") ?? false) ||
+    activeId === "ideas" ||
+    (activeId?.startsWith("list-") ?? false);
+
+  // User-resizable canvas/map partition (desktop) — persisted to localStorage.
+  const { width: mapWidth, resizing: mapResizing, nudge, dragHandlers } = useResizableMapWidth();
 
   // Shared money/feed reads (React Query dedupes with the panels' own calls).
   const moneyQuery = useMoney(trip.id);
@@ -212,6 +244,7 @@ function WorkspaceBody({
         <IndexRail
           days={days}
           emptyDays={emptyDays}
+          ideaLists={ideaLists}
           activeId={activeId}
           bookingCount={bookingCount}
           moneyData={moneyQuery.data}
@@ -225,7 +258,7 @@ function WorkspaceBody({
         <main ref={canvasRef} className="relative min-w-0 flex-1 overflow-y-auto">
           <div
             className={cn(
-              "mx-auto flex w-full flex-col gap-4 px-5 pt-6 pb-24 sm:px-7 lg:pb-8",
+              "mx-auto flex w-full flex-col gap-12 px-5 pt-6 pb-24 sm:gap-16 sm:px-7 lg:pb-8",
               // Map-released (full-width) sections go wider per the mockup `.col.wide`.
               showMap ? "max-w-[680px]" : "max-w-[900px]",
             )}
@@ -246,7 +279,13 @@ function WorkspaceBody({
           </div>
         </main>
 
-        <AmbientMapTrack snapshot={snapshot} showMap={showMap} />
+        {showMap && <MapResizeHandle width={mapWidth} nudge={nudge} dragHandlers={dragHandlers} />}
+        <AmbientMapTrack
+          snapshot={snapshot}
+          showMap={showMap}
+          width={mapWidth}
+          resizing={mapResizing}
+        />
       </div>
 
       {/* Mobile add FAB — the sole add path at narrow widths (the desktop
@@ -274,19 +313,34 @@ function WorkspaceBody({
 /**
  * The desktop ambient map column (gotcha #1). Always mounted: when "released" it
  * collapses the OUTER width to 0 and clips a fixed-width inner, so MapLibre never
- * resizes (no cold-start re-init) — only the reveal animates. `hidden lg:block`,
- * since mobile uses the full-screen overlay instead.
+ * unmounts (no cold-start re-init) — only the reveal animates. The inner width is
+ * now user-set (MapResizeHandle → `useResizableMapWidth`); mid-drag the width
+ * transition suspends so the map tracks the pointer 1:1 (MapLibre's own
+ * ResizeObserver absorbs the live resize). `hidden lg:block`, since mobile uses
+ * the full-screen overlay instead.
  */
-function AmbientMapTrack({ snapshot, showMap }: { snapshot: TripSnapshot; showMap: boolean }) {
+function AmbientMapTrack({
+  snapshot,
+  showMap,
+  width,
+  resizing,
+}: {
+  snapshot: TripSnapshot;
+  showMap: boolean;
+  width: number;
+  resizing: boolean;
+}) {
   return (
     <aside
       aria-label="Map"
+      style={{ width: showMap ? width : 0 }}
       className={cn(
-        "hidden shrink-0 overflow-hidden transition-[width] duration-200 motion-reduce:transition-none lg:block",
-        showMap ? "w-[460px] border-l" : "w-0",
+        "hidden shrink-0 overflow-hidden lg:block",
+        !resizing && "transition-[width] duration-200 motion-reduce:transition-none",
+        showMap && "border-l",
       )}
     >
-      <div className="h-full w-[460px] py-[18px] pr-[18px] pl-1.5">
+      <div style={{ width }} className="h-full py-[18px] pr-[18px] pl-1.5">
         <Suspense fallback={null}>
           <AmbientMapPanel snapshot={snapshot} />
         </Suspense>
@@ -415,7 +469,8 @@ function TopBar({
   duplicating,
   onRequestDelete,
   onOpenFeed,
-}: TripWorkspaceProps & { onOpenFeed: () => void }) {
+  onOpenSettings,
+}: TripWorkspaceProps & { onOpenFeed: () => void; onOpenSettings: () => void }) {
   const { trip } = snapshot;
   const unread = useUnreadCount(trip.id);
   return (
@@ -470,6 +525,11 @@ function TopBar({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            {/* Always visible — viewers get a read-only settings rendering. */}
+            <DropdownMenuItem onSelect={onOpenSettings}>
+              <Settings aria-hidden />
+              Settings
+            </DropdownMenuItem>
             <DropdownMenuItem disabled={duplicating} onSelect={onDuplicate}>
               <Copy aria-hidden />
               {duplicating ? "Duplicating…" : "Duplicate"}

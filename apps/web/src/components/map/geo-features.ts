@@ -1,5 +1,8 @@
 import type { Activity, ActivityCategory } from "@caravan/shared";
 import type { FeatureCollection } from "geojson";
+// Type-only import — erased at compile time, so this file stays runtime-free of
+// maplibre (same idiom as route-features.ts's ExpressionSpecification import).
+import type { SymbolLayerSpecification } from "maplibre-gl";
 // Relative (not the `@/` alias) so this stays resolvable in the vitest run
 // regardless of alias wiring — the rest of the test suite imports relatively
 // too. We IMPORT the shared numbering helper; we never reach into it.
@@ -86,9 +89,16 @@ export interface MapPin {
   lng: number;
   /** The day this pin sits on (drives the per-day filter); `null` = Ideas pool. */
   date: string | null;
+  /** Which idea list this pin belongs to; null = Unlisted or dated. Drives the
+   *  per-list layer toggle for undated (Ideas-pool) pins. */
+  listId: string | null;
   /** Per-day stop number — present ONLY for numbered `activity` stops. Bookings
    *  (flight/lodging) are never numbered, so they omit it. */
   number?: number;
+  /** Which flight endpoint this pin is — present ONLY on flight pins. Ground
+   *  pins (stops, lodging, ideas) omit it. Drives day-focus framing: a
+   *  far-away endpoint must not zoom the day out to world scale. */
+  flight?: "departure" | "arrival";
 }
 
 /**
@@ -120,6 +130,8 @@ export function toMapPins(activities: Activity[], stopNumbers?: Map<string, numb
           lat: a.lat,
           lng: a.lng,
           date: a.date,
+          listId: a.listId ?? null,
+          flight: "departure",
         });
       }
       if (a.arrLat != null && a.arrLng != null) {
@@ -130,6 +142,8 @@ export function toMapPins(activities: Activity[], stopNumbers?: Map<string, numb
           lat: a.arrLat,
           lng: a.arrLng,
           date: a.endDate,
+          listId: a.listId ?? null,
+          flight: "arrival",
         });
       }
       continue;
@@ -145,29 +159,87 @@ export function toMapPins(activities: Activity[], stopNumbers?: Map<string, numb
       lat: a.lat,
       lng: a.lng,
       date: a.date,
+      listId: a.listId ?? null,
       ...(number == null ? {} : { number }),
     });
   }
   return pins;
 }
 
+/** Great-circle distance in km (haversine). Good enough for "is this airport
+ *  near this day's stops" — no geodesic precision needed. */
+export function distanceKm(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const rad = Math.PI / 180;
+  const dLat = (bLat - aLat) * rad;
+  const dLng = (bLng - aLng) * rad;
+  const h =
+    Math.sin(dLat / 2) ** 2 + Math.cos(aLat * rad) * Math.cos(bLat * rad) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371 * Math.asin(Math.sqrt(h));
+}
+
+/** A flight endpoint within this distance of the day's ground pins still joins
+ *  the day-focus frame (a regional airport is part of the day; KIX↔Kyoto is
+ *  ~90 km). Beyond it, the endpoint is a different part of the world. */
+export const FLIGHT_ENDPOINT_NEAR_KM = 150;
+
+/**
+ * The pins a focused day should FRAME (not render — every pin stays on the
+ * map; this only picks what drives `fitBounds`). A day with a long-haul
+ * flight otherwise frames both endpoints and zooms out to world scale, which
+ * buries the day the user actually asked to see.
+ *
+ * - Ground pins (stops, lodging) always frame.
+ * - A flight endpoint frames only while it's within
+ *   {@link FLIGHT_ENDPOINT_NEAR_KM} of the ground pins' centroid — so the
+ *   local airport joins the frame on both the outbound day (arrival) and the
+ *   return day (departure), and the far endpoint never does.
+ * - A pure travel day (no ground pins) frames the arrival endpoint(s) — the
+ *   day ends where you land; fall back to everything if nothing arrived.
+ */
+export function pinsForDayFocus(dayPins: MapPin[]): MapPin[] {
+  const ground = dayPins.filter((p) => p.flight === undefined);
+  if (ground.length === 0) {
+    const arrivals = dayPins.filter((p) => p.flight === "arrival");
+    return arrivals.length > 0 ? arrivals : dayPins;
+  }
+  const cLat = ground.reduce((s, p) => s + p.lat, 0) / ground.length;
+  const cLng = ground.reduce((s, p) => s + p.lng, 0) / ground.length;
+  return dayPins.filter(
+    (p) =>
+      p.flight === undefined || distanceKm(cLat, cLng, p.lat, p.lng) <= FLIGHT_ENDPOINT_NEAR_KM,
+  );
+}
+
 /**
  * GeoJSON for the clustered pin source. Properties carry `id` + `title` (popup) +
- * `category` (pin tint), and — only when present — the per-day stop `number` for
- * the numbered symbol layer (§C.6). Build pins with {@link toMapPins}; a pin
- * without a `number` (every booking, plus any un-numbered row) renders as a
- * category-tinted but un-numbered marker.
+ * `category` (category ring tint) + `date` / `listId` (the composed day/list
+ * fill), and — only when present — the per-day stop `number` for the numbered
+ * symbol layer (§C.6). Build pins with {@link toMapPins}; a pin without a
+ * `number` (every booking, plus any un-numbered row) renders as a tinted but
+ * un-numbered marker.
  */
 export function toFeatureCollection(pins: MapPin[]): FeatureCollection {
   return {
     type: "FeatureCollection",
     features: pins.map((pin) => {
-      // `category` rides on every pin so the map can tint it by category — the JS
-      // token bridge in map-panel reads the `--cat-*` tokens and feeds a `match`
-      // keyed on this property (V2.3 pin tint). It's always present, unlike
-      // `number`, which is attached only for numbered stops so the symbol layer's
-      // `["has", "number"]` filter cleanly distinguishes them from bookings.
-      const base = { id: pin.id, title: pin.title, category: pin.category };
+      // `category` rides on every pin so the map can ring-tint it by category —
+      // the JS token bridge in pin-tint.ts reads the `--cat-*` tokens and feeds a
+      // `match` keyed on this property (V2.3, demoted fill→stroke by the
+      // pins-by-day pass). `date` + `listId` ride along too: the pin FILL is a
+      // composed `match` (`pinFillExpression` in pin-tint.ts) — dated pins color
+      // by `date`, undated ones fall through to a nested `match` on `listId`
+      // (their idea list's color), and a null/unmatched listId lands on the
+      // neutral idea-pin color — no special-casing. All are always present,
+      // unlike `number`, which is attached only for numbered stops so the
+      // symbol layer's `["has", "number"]` filter cleanly distinguishes them
+      // from bookings.
+      const base = {
+        id: pin.id,
+        title: pin.title,
+        category: pin.category,
+        date: pin.date,
+        listId: pin.listId,
+      };
       return {
         type: "Feature",
         geometry: { type: "Point", coordinates: [pin.lng, pin.lat] },
@@ -175,4 +247,99 @@ export function toFeatureCollection(pins: MapPin[]): FeatureCollection {
       };
     }),
   };
+}
+
+/**
+ * Layout for the "pin-numbers" symbol layer, extracted so a unit test can guard
+ * the collision tuning. Native symbol collision is ON (V2.8 map pass): when pins
+ * crowd, the LOWER-numbered label wins and the loser's number is culled CLEANLY
+ * (its circle stays visible/clickable) — strictly better than the previous
+ * "always show" (`text-allow-overlap: true`), which let half-overlapping numbers
+ * merge into unreadable glyph soup. `text-padding: 1` keeps the collision box
+ * tight so only ACTUAL overlaps cull a label, not near-misses.
+ */
+export const PIN_NUMBER_LAYOUT: NonNullable<SymbolLayerSpecification["layout"]> = {
+  "text-field": ["to-string", ["get", "number"]],
+  "text-size": 12,
+  "text-allow-overlap": false,
+  "text-ignore-placement": false,
+  // Conservative: only ACTUAL overlaps cull a label, not near-misses.
+  "text-padding": 1,
+  // Deterministic tie-break — earlier stops in a day win a collision.
+  "symbol-sort-key": ["get", "number"],
+};
+
+/**
+ * Paint for the "pin-numbers" symbol layer. The circle under the number is
+ * day-color filled, so the white number keeps a translucent dark halo to stay
+ * legible on the lighter day hues (e.g. goldenrod). Literal palette values —
+ * paint can't read CSS vars, and white+dark-halo reads on every fill in both
+ * color themes.
+ */
+export const PIN_NUMBER_PAINT: NonNullable<SymbolLayerSpecification["paint"]> = {
+  "text-color": "#fffbf1",
+  "text-halo-color": "rgba(40,30,18,0.55)",
+  "text-halo-width": 1.3,
+  "text-halo-blur": 0.3,
+};
+
+/**
+ * One toggle row in the map layers control (Days / Lists groups): a stable
+ * `key` (ISO date, list id, or {@link UNLISTED_LIST_KEY}), a human `label`, and
+ * how many pins it owns. `color` (a swatch dot matching the layer's pin fill)
+ * is decorated on by the caller — MapView looks each key up in the CANONICAL
+ * color order (the full trip-day / position-sorted-list sequence), never this
+ * row's own index, so the pure builders stay color-free.
+ */
+export interface LayerGroup {
+  key: string;
+  label: string;
+  count: number;
+  color?: string;
+}
+
+/**
+ * Day groups for the layers control: unique dated days ascending, each with its
+ * pin count. Undated (Ideas-pool) pins never enter here — they're grouped by
+ * idea list via {@link buildListGroups} instead. `formatLabel` renders the ISO
+ * key for display (kept injected so this stays a pure, date-lib-free builder).
+ */
+export function buildDayGroups(pins: MapPin[], formatLabel: (iso: string) => string): LayerGroup[] {
+  const counts = new Map<string, number>();
+  for (const p of pins) {
+    if (p.date === null) continue;
+    counts.set(p.date, (counts.get(p.date) ?? 0) + 1);
+  }
+  return [...counts.keys()]
+    .sort()
+    .map((key) => ({ key, label: formatLabel(key), count: counts.get(key) ?? 0 }));
+}
+
+/** Group key for undated pins that belong to no idea list ("Unlisted"). The
+ *  empty string can't collide with a real list id (ids are 32-char). */
+export const UNLISTED_LIST_KEY = "";
+
+/**
+ * Idea-list groups for the layers control: one row per idea list that actually
+ * owns ≥1 undated pin, in the caller's `ideaLists` order (sorted by `position`
+ * upstream — display order), then an "Unlisted" row last if any undated pin has
+ * no list. Dated pins never enter here (they belong to day groups); a list with
+ * zero pinned ideas is omitted (nothing on the map to toggle).
+ */
+export function buildListGroups(
+  pins: MapPin[],
+  ideaLists: { id: string; name: string }[],
+): LayerGroup[] {
+  const counts = new Map<string, number>();
+  for (const p of pins) {
+    if (p.date !== null) continue;
+    const key = p.listId ?? UNLISTED_LIST_KEY;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const rows = ideaLists
+    .filter((l) => counts.has(l.id))
+    .map((l) => ({ key: l.id, label: l.name, count: counts.get(l.id) as number }));
+  const unlisted = counts.get(UNLISTED_LIST_KEY);
+  if (unlisted) rows.push({ key: UNLISTED_LIST_KEY, label: "Unlisted", count: unlisted });
+  return rows;
 }

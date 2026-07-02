@@ -55,21 +55,32 @@ export function dayColorForIndex(index: number): string {
 }
 
 /**
- * Build the route `line-color` paint: a `match` on each line's `date` property →
- * its {@link dayColorForIndex} color, falling back to {@link DAY_ROUTE_FALLBACK_COLOR}.
+ * Build a day-color paint expression: a `match` on each feature's `date`
+ * property → its {@link dayColorForIndex} color, falling back to
+ * `fallbackColor`. Shared by the route lines (default fallback = the
+ * "shouldn't happen" grey) and the pin fill, whose fallback is a NESTED
+ * expression (`listColorExpression` in pin-tint.ts) — an undated pin's
+ * `date: null` never matches a branch, so it lands on the fallback arm by
+ * design and gets colored by its idea list instead, no special-casing.
  *
  * Mirrors `pinColorExpression` in pin-tint.ts — a spread-built `match`
  * (`[op, input, label1, out1, …, fallback]`) bridged through `unknown` because
- * the flat `string[]` can't narrow to MapLibre's recursive literal-tuple
+ * the flat element array can't narrow to MapLibre's recursive literal-tuple
  * `ExpressionSpecification` (the runtime shape is a valid match).
  *
- * Empty-dates guard: a `match` with no label/output pair is malformed, so with no
- * dates we return a constant `["to-color", fallback]` expression instead — a
- * well-formed expression that always yields the fallback grey.
+ * Empty-dates guard: a `match` with no label/output pair is malformed (throws
+ * at addLayer/setPaintProperty time), so with no dates we return the fallback
+ * alone — the nested expression as-is (already well-formed; its own empty guard
+ * means a zero-branch match is never produced at any level), or a constant
+ * `["to-color", fallback]` for a plain color string.
  */
-export function dayColorExpression(orderedDates: string[]): ExpressionSpecification {
+export function dayColorExpression(
+  orderedDates: string[],
+  fallbackColor: string | ExpressionSpecification = DAY_ROUTE_FALLBACK_COLOR,
+): ExpressionSpecification {
   if (orderedDates.length === 0) {
-    return ["to-color", DAY_ROUTE_FALLBACK_COLOR] as unknown as ExpressionSpecification;
+    if (typeof fallbackColor !== "string") return fallbackColor;
+    return ["to-color", fallbackColor] as unknown as ExpressionSpecification;
   }
   const branches: string[] = [];
   for (let i = 0; i < orderedDates.length; i++) {
@@ -81,7 +92,7 @@ export function dayColorExpression(orderedDates: string[]): ExpressionSpecificat
     "match",
     ["get", "date"],
     ...branches,
-    DAY_ROUTE_FALLBACK_COLOR,
+    fallbackColor,
   ] as unknown as ExpressionSpecification;
 }
 
