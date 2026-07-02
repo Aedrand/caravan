@@ -236,7 +236,7 @@ function TripSettingsForm({
           Default travel mode
         </span>
         <div>
-          <RouteModeSegmented value={routeMode} onChange={setRouteMode} showLabels />
+          <RouteModeSegmented value={routeMode} onChange={setRouteMode} />
         </div>
         <p className="text-muted-foreground text-xs">Individual days can still override this.</p>
       </div>
